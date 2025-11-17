@@ -1,0 +1,86 @@
+{
+  "name": "opencoreemr/oce-module-sinch-conversations",
+  "description": "OpenEMR Sinch Conversations integration module for HIPAA-compliant patient messaging, by OpenCoreEMR Inc",
+  "license": "GPL-3.0-or-later",
+  "type": "openemr-module",
+  "keywords": [
+    "openemr",
+    "module",
+    "messaging",
+    "conversations",
+    "sms",
+    "sinch",
+    "healthcare",
+    "hipaa"
+  ],
+  "authors": [
+    {
+      "name": "Michael A. Smith",
+      "email": "michael@opencoreemr.com",
+      "homepage": "https://opencoreemr.com",
+      "role": "Developer"
+    }
+  ],
+  "homepage": "https://opencoreemr.com",
+  "support": {
+    "email": "support@opencoreemr.com",
+    "issues": "https://github.com/opencoreemr/oce-module-sinch-conversations/issues",
+    "source": "https://github.com/opencoreemr/oce-module-sinch-conversations"
+  },
+  "require": {
+    "php": ">=8.2",
+    "ext-curl": "*",
+    "ext-filter": "*",
+    "ext-json": "*",
+    "guzzlehttp/guzzle": "^7.0",
+    "openemr/oe-module-installer-plugin": "^0.1.5",
+    "symfony/event-dispatcher": "^6.0 || ^7.0",
+    "symfony/http-foundation": "^6.0 || ^7.0",
+    "twig/twig": "^3.0"
+  },
+  "require-dev": {
+    "ergebnis/composer-normalize": "^2.44",
+    "maglnet/composer-require-checker": "^4.0",
+    "phpstan/phpstan": "^2.1",
+    "rector/rector": "^2.0",
+    "squizlabs/php_codesniffer": "^4.0"
+  },
+  "minimum-stability": "stable",
+  "prefer-stable": true,
+  "autoload": {
+    "psr-4": {
+      "OpenCoreEMR\\Modules\\SinchConversations\\": "src/Module/",
+      "OpenCoreEMR\\Sinch\\Conversation\\": "src/Sinch/Conversation/"
+    }
+  },
+  "config": {
+    "allow-plugins": {
+      "ergebnis/composer-normalize": true,
+      "openemr/oe-module-installer-plugin": true
+    }
+  },
+  "extra": {
+    "oe-module-name": "oce-module-sinch-conversations"
+  },
+  "scripts": {
+    "post-install-cmd": [
+      "echo 'OpenCoreEMR Sinch Conversations Module installed successfully!'",
+      "echo 'Please go to Administration > Modules > Manage Modules to register and enable the module.'"
+    ],
+    "post-update-cmd": [
+      "echo 'OpenCoreEMR Sinch Conversations Module updated successfully!'"
+    ],
+    "code-quality": [
+      "@phpcs",
+      "@phpstan",
+      "@rector"
+    ],
+    "php-lint": "git ls-files -z '*.php' | xargs -0 -n1 php -l",
+    "phpcbf": "phpcbf",
+    "phpcs": "phpcs",
+    "phpstan": "phpstan --memory-limit=1g analyse",
+    "rector": "rector process --dry-run",
+    "rector-fix": "rector process",
+    "require-checker": "composer-require-checker check --config-file=.composer-require-checker.json"
+  }
+}

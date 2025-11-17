@@ -1,0 +1,30 @@
+parameters:
+    level: 8
+    paths:
+        - src
+        - public
+        - openemr.bootstrap.php
+        - version.php
+
+    # PHP version
+    phpVersion: 80200
+
+    # Ignore errors in vendor
+    excludePaths:
+        - vendor
+
+    # Additional checks
+    checkMissingCallableSignature: true
+    checkUninitializedProperties: true
+    checkTooWideReturnTypesInProtectedAndPublicMethods: true
+
+    # Report always true conditions
+    reportAlwaysTrueInLastCondition: true
+
+    # Ignore missing OpenEMR classes during static analysis
+    ignoreErrors:
+        - '#Function (xl|xlt|xla|xlj|text|attr|sqlStatement|sqlQuery|sqlFetchArray) not found#'
+        - '#unknown class OpenEMR\\#'
+        - '#Instantiated class OpenEMR\\#'
+        - '#invalid type OpenEMR\\#'
+        - '#Property .+ is never read, only written#'

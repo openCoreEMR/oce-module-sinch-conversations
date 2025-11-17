@@ -1,0 +1,68 @@
+name: Release Please
+
+on:
+  push:
+    branches:
+    - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+
+    - name: Run Release Please
+      id: release
+      uses: googleapis/release-please-action@v4
+      with:
+          # This assumes you're using a personal access token stored as a secret
+          # If you want to use the default GITHUB_TOKEN, you can remove this line
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    # Convert lightweight tag to annotated tag
+    #
+    # Why this is needed:
+    # - Release-please creates releases via GitHub's release API, which creates lightweight tags
+    # - We require annotated tags because:
+    #   * git describe ignores lightweight tags by default (requires --tags flag)
+    #   * Lightweight tags are not copied into forks
+    #   * Annotated tags have proper metadata (creation date, tagger info, message)
+    #
+    # Why we do this after release creation:
+    # - We can't create the annotated tag before release-please runs because we don't know
+    #   the version number until release-please determines it from conventional commits
+    # - The GitHub release API will use an existing tag if present (per the target_commitish
+    #   parameter docs: "Unused if the Git tag already exists"), but release-please doesn't
+    #   provide a way to hook into the process between version determination and release creation
+    # - Using skip-github-release has known issues and breaks release-please's workflow
+    #   (see: https://github.com/googleapis/release-please/issues/1561)
+    #
+    # Race condition considerations:
+    # - There is a small window (milliseconds) between when the lightweight tag is created
+    #   and when we convert it to annotated where someone could fetch the lightweight tag
+    # - In practice, this risk is acceptable because:
+    #   * Most users interact with releases, not tags directly
+    #   * The window is extremely brief
+    #   * By the time manual tag fetches occur, the annotated version exists
+    #   * The GitHub release points to the correct commit regardless of tag type
+    #
+    # Alternative approaches considered:
+    # - skip-github-release: Breaks release-please (Issue #1561)
+    # - Manual tag creation first: Impossible without knowing version number
+    # - Different release tooling: Would require migrating away from release-please
+    - name: Convert to annotated tag
+      if: ${{ steps.release.outputs.release_created }}
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git fetch --tags
+        TAG_NAME="${{ steps.release.outputs.tag_name }}"
+        git tag -a -f -m "Release ${TAG_NAME}" "${TAG_NAME}" "${TAG_NAME}^{commit}"
+        git push -f origin "${TAG_NAME}"
