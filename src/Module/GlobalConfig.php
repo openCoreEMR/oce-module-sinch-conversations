@@ -41,14 +41,29 @@ class GlobalConfig
         return $this->globals->getString(self::CONFIG_OPTION_PROJECT_ID, '');
     }
 
+    public function getSinchProjectId(): string
+    {
+        return $this->getProjectId();
+    }
+
     public function getAppId(): string
     {
         return $this->globals->getString(self::CONFIG_OPTION_APP_ID, '');
     }
 
+    public function getSinchAppId(): string
+    {
+        return $this->getAppId();
+    }
+
     public function getApiKey(): string
     {
         return $this->globals->getString(self::CONFIG_OPTION_API_KEY, '');
+    }
+
+    public function getSinchApiKey(): string
+    {
+        return $this->getApiKey();
     }
 
     public function getApiSecret(): string
@@ -65,6 +80,11 @@ class GlobalConfig
     public function getRegion(): string
     {
         return $this->globals->getString(self::CONFIG_OPTION_REGION, 'us');
+    }
+
+    public function getSinchRegion(): string
+    {
+        return $this->getRegion();
     }
 
     public function getDefaultChannel(): string

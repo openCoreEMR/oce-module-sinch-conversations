@@ -204,4 +204,103 @@ class Bootstrap
             }
         );
     }
+
+    /**
+     * Get Conversation API Client instance
+     */
+    public function getConversationApiClient(): \OpenCoreEMR\Sinch\Conversation\Client\ConversationApiClient
+    {
+        return new \OpenCoreEMR\Sinch\Conversation\Client\ConversationApiClient($this->globalsConfig);
+    }
+
+    /**
+     * Get Message Polling Service
+     */
+    public function getMessagePollingService(): Service\MessagePollingService
+    {
+        return new Service\MessagePollingService(
+            $this->globalsConfig,
+            $this->getConversationApiClient()
+        );
+    }
+
+    /**
+     * Get Message Service
+     */
+    public function getMessageService(): Service\MessageService
+    {
+        return new Service\MessageService(
+            $this->globalsConfig,
+            $this->getConversationApiClient()
+        );
+    }
+
+    /**
+     * Get Template Service
+     */
+    public function getTemplateService(): Service\TemplateService
+    {
+        return new Service\TemplateService($this->globalsConfig);
+    }
+
+    /**
+     * Get Consent Service
+     */
+    public function getConsentService(): Service\ConsentService
+    {
+        return new Service\ConsentService(
+            $this->globalsConfig,
+            $this->getTemplateService(),
+            $this->getMessageService()
+        );
+    }
+
+    /**
+     * Get Keyword Handler Service
+     */
+    public function getKeywordHandlerService(): Service\KeywordHandlerService
+    {
+        return new Service\KeywordHandlerService(
+            $this->globalsConfig,
+            $this->getConsentService(),
+            $this->getTemplateService()
+        );
+    }
+
+    /**
+     * Get Inbox Controller
+     */
+    public function getInboxController(): Controller\InboxController
+    {
+        return new Controller\InboxController(
+            $this->globalsConfig,
+            $this->getMessagePollingService(),
+            $this->twig
+        );
+    }
+
+    /**
+     * Get Conversation Controller
+     */
+    public function getConversationController(): Controller\ConversationController
+    {
+        return new Controller\ConversationController(
+            $this->globalsConfig,
+            $this->getMessagePollingService(),
+            $this->getMessageService(),
+            $this->twig
+        );
+    }
+
+    /**
+     * Get Settings Controller
+     */
+    public function getSettingsController(): Controller\SettingsController
+    {
+        return new Controller\SettingsController(
+            $this->globalsConfig,
+            $this->getConversationApiClient(),
+            $this->twig
+        );
+    }
 }
