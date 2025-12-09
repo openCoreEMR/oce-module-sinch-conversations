@@ -340,6 +340,135 @@ docker compose port openemr 80
 
 **All local changes are immediately reflected** - no rebuild needed! See [`docker/README.md`](./docker/README.md) for details.
 
+#### Common Docker Commands
+
+```bash
+# View live logs from OpenEMR container
+docker compose logs -f openemr
+
+# View MySQL logs
+docker compose logs -f mysql
+
+# Check container status
+docker compose ps
+
+# Execute commands in running OpenEMR container
+docker compose exec openemr bash
+docker compose exec openemr php -v
+
+# Access MariaDB database
+docker compose exec mysql mariadb -h mysql -uroot -proot openemr
+
+# Stop environment (keeps data)
+docker compose down
+
+# Stop and remove all data (fresh start)
+docker compose down -v
+
+# Restart a specific service
+docker compose restart openemr
+
+# View phpMyAdmin (get port first)
+docker compose port phpmyadmin 80
+# Visit http://localhost:PORT
+```
+
+**Note:** We use `docker compose exec` to run commands in already-running containers:
+- Fast execution (no container startup overhead)
+- No entrypoint conflicts
+- Works with running services
+
+#### Troubleshooting Docker Issues
+
+**Container won't start:**
+```bash
+# Check logs for errors
+docker compose logs openemr
+
+# Remove everything and start fresh
+docker compose down -v
+docker compose up -d --wait
+```
+
+**OpenEMR installer keeps running:**
+```bash
+# The installer creates a sites/default/sqlconf.php file
+# If this file exists, installer is complete
+docker compose exec openemr ls -la /var/www/localhost/htdocs/openemr/sites/default/sqlconf.php
+```
+
+**Changes not showing up:**
+```bash
+# PHP changes should be instant (OPCACHE_OFF=1)
+# If not, restart Apache:
+docker compose restart openemr
+```
+
+**Database issues:**
+```bash
+# Access database directly
+docker compose exec mysql mariadb -uroot -proot openemr
+
+# View module tables
+docker compose exec mysql mariadb -uroot -proot -e "SHOW TABLES LIKE 'oce_sinch%'" openemr
+
+# Export database
+docker compose exec mysql mariadb-dump -uroot -proot openemr > backup.sql
+
+# Import database
+docker compose exec -T mysql mariadb -uroot -proot openemr < backup.sql
+```
+
+**Port conflicts:**
+```bash
+# If port 80 is already in use, Docker will assign a random port
+# Find the assigned port:
+docker compose port openemr 80
+
+# Or specify a custom port in compose.yml:
+# ports:
+#   - "8080:80"  # Use localhost:8080
+```
+
+#### Module Development in Docker
+
+**Installing module in OpenEMR:**
+1. Access OpenEMR at `http://localhost:PORT`
+2. Login as admin/pass
+3. Navigate to **Administration > Modules > Manage Modules**
+4. Find "oce-module-sinch-conversations" and click **Register**
+5. Click **Install** then **Enable**
+
+**Testing module changes:**
+- Edit any PHP/Twig file in your local directory
+- Refresh browser - changes appear immediately
+- No container rebuild needed!
+
+**Running tests inside container:**
+```bash
+# Access container shell
+docker compose exec openemr bash
+
+# Inside container, navigate to module directory
+cd /var/www/localhost/htdocs/openemr/interface/modules/custom_modules/oce-module-sinch-conversations
+
+# Run pre-commit checks (includes syntax check, PHPCS, PHPStan, etc.)
+pre-commit run -a
+
+# Run individual checks if needed
+composer phpcs    # Code style
+composer phpstan  # Static analysis
+```
+
+**Debugging:**
+```bash
+# View Apache error logs
+docker compose logs -f openemr | grep -i error
+
+# View PHP errors from log files
+docker compose exec openemr tail -f /var/log/apache2/error.log
+```
+
 ### PHI-Free Development
 
 **60-70% of this module can be developed without any PHI:**

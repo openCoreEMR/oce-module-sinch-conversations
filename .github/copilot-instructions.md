@@ -587,6 +587,76 @@ Before considering work complete:
 
 ---
 
+## Docker Development Environment
+
+This module includes a Docker Compose setup for local development. When suggesting Docker-related commands:
+
+### Common Docker Commands
+
+```bash
+# Start environment
+docker compose up -d --wait
+
+# View logs
+docker compose logs -f openemr
+
+# Check status
+docker compose ps
+
+# Get assigned port
+docker compose port openemr 80
+
+# Execute commands in running containers
+docker compose exec openemr bash
+docker compose exec openemr php -v
+
+# Access MariaDB
+docker compose exec mysql mariadb -uroot -proot openemr
+
+# Stop (keep data)
+docker compose down
+
+# Stop and remove data
+docker compose down -v
+```
+
+**Use `docker compose exec` for commands:**
+- Runs in already-running containers
+- Fast execution (no startup overhead)
+- No entrypoint conflicts
+
+### Environment Details
+
+**Services:**
+- `openemr` - PHP 8.2, Apache, Alpine Linux
+- `mysql` - MariaDB 11.4
+- `phpmyadmin` - Database admin UI
+
+**Credentials:**
+- OpenEMR: admin / pass
+- MySQL: root / root
+
+**Key Paths:**
+- Module: `/var/www/localhost/htdocs/openemr/interface/modules/custom_modules/oce-module-sinch-conversations`
+- OpenEMR: `/var/www/localhost/htdocs/openemr`
+
+**Development Notes:**
+- Local file changes are instant (bind mounts)
+- No rebuild needed for code changes
+- OPCACHE disabled for development
+
+### Troubleshooting
+
+When suggesting fixes for Docker issues:
+- Check logs first: `docker compose logs openemr`
+- Verify health: `docker compose ps`
+- Fresh start: `docker compose down -v && docker compose up -d --wait`
+- Find ports: `docker compose port openemr 80`
+- Run commands: `docker compose exec openemr bash`
+- MariaDB access: `docker compose exec mysql mariadb -uroot -proot openemr`
+
+---
+
 ## Copilot-Specific Tips
 
 When suggesting code completions:
@@ -600,3 +670,8 @@ When suggesting code completions:
 8. **Exception handling** - Use custom module exceptions, not die/exit
 9. **Template rendering** - Suggest Twig templates, not inline HTML
 10. **Type casting** - Cast request values: `(string)$request->request->get('field', '')`
+11. **Docker awareness** - When suggesting Docker commands, use `docker compose exec`
+12. **Database access** - Use QueryUtils for all database operations, never direct SQL functions
+13. **MariaDB from Docker** - Use `mariadb` command (not `mysql`)
+14. **Use git commands** - Use `git ls-files`, `git grep` instead of `find`, `grep` for file operations
+15. **Use pre-commit/composer** - Never suggest manual syntax checks; use `pre-commit run -a` or `composer check`

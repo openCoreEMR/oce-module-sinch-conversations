@@ -59,6 +59,13 @@ The container has `OPCACHE_OFF=1` so PHP code changes are instant.
 # View logs
 docker compose logs -f openemr
 
+# Execute commands in OpenEMR container
+docker compose exec openemr bash
+docker compose exec openemr php -v
+
+# Access MariaDB database
+docker compose exec mysql mariadb -uroot -proot openemr
+
 # Stop environment
 docker compose down
 
@@ -71,6 +78,12 @@ docker compose restart openemr
 # Rebuild OpenEMR dependencies after updating OpenEMR version
 cd vendor/openemr/openemr && composer install --no-dev && npm install --legacy-peer-deps && npm run build && cd ../../..
 ```
+
+**Note:** We use `docker compose exec` to run commands in already-running containers:
+- Fast execution (no container startup overhead)
+- No entrypoint conflicts
+- Commands run in existing container environment
+- Use `mariadb` command for database access (not `mysql`)
 
 ## File Locations
 
