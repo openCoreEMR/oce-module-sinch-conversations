@@ -314,6 +314,32 @@ See [`POLLING-ARCHITECTURE.md`](./POLLING-ARCHITECTURE.md) for detailed implemen
 
 ## Development
 
+### Docker Development Environment
+
+Quick setup for local module development:
+
+```bash
+# 1. Clone and install dependencies
+git clone https://github.com/opencoreemr/oce-module-sinch-conversations.git
+cd oce-module-sinch-conversations
+composer install
+
+# 2. Pre-build OpenEMR (optional but recommended - saves 5-10 min)
+cd vendor/openemr/openemr
+composer install --no-dev
+npm install --legacy-peer-deps && npm run build
+cd ../../..
+
+# 3. Start Docker environment
+docker compose up -d --wait
+
+# 4. Get the port and open in browser
+docker compose port openemr 80
+# Visit http://localhost:PORT and login with admin/pass
+```
+
+**All local changes are immediately reflected** - no rebuild needed! See [`docker/README.md`](./docker/README.md) for details.
+
 ### PHI-Free Development
 
 **60-70% of this module can be developed without any PHI:**

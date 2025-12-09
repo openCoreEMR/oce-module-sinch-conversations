@@ -1,0 +1,101 @@
+# OpenEMR Docker Environment for Module Testing
+# Uses a simplified entrypoint that just runs the installer and starts Apache
+# (avoids the slow chown operations in the standard openemr.sh entrypoint)
+#
+# IMPORTANT: Pre-build OpenEMR dependencies locally for faster startup:
+#   cd vendor/openemr/openemr
+#   composer install --no-dev
+#   npm install --legacy-peer-deps && npm run build
+#   cd ../../..
+#
+# Usage:
+#   1. composer install (installs module + downloads OpenEMR source)
+#   2. Pre-build OpenEMR (see above - optional but recommended)
+#   3. docker compose up -d --wait
+#   4. docker compose port openemr 80  (get assigned port)
+#   5. Login: admin / pass
+#   6. Admin > Modules > Manage Modules > Enable module
+
+services:
+  mysql:
+    restart: unless-stopped
+    image: mariadb:11.4
+    command:
+    - mariadbd
+    - --character-set-server=utf8mb4
+    ports:
+    - 3306
+    volumes:
+    - databasevolume:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    healthcheck:
+      test: [CMD, healthcheck.sh, --connect, --innodb_initialized]
+      start_period: 30s
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  openemr:
+    restart: unless-stopped
+    image: openemr/openemr:flex
+    entrypoint: [/custom-entrypoint.sh]
+    ports:
+    - 80
+    - 443
+    volumes:
+      # Custom entrypoint scripts (installer + apache, no complex setup)
+    - ./docker/entrypoint.sh:/custom-entrypoint.sh:ro
+    - ./docker/entrypoint.php:/custom-entrypoint.php:ro
+      # Mount OpenEMR directly to runtime location (pre-built with composer/npm)
+    - ./vendor/openemr/openemr:/var/www/localhost/htdocs/openemr:rw
+      # Mount our module into the custom_modules directory
+    - .:/var/www/localhost/htdocs/openemr/interface/modules/custom_modules/oce-module-sinch-conversations:rw
+      # Persistent volume for logs only (sites uses bind mount for dev)
+    - logvolume:/var/log
+    environment:
+      # MySQL connection settings
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_ROOT_USER: root
+      MYSQL_ROOT_PASS: root
+      MYSQL_USER: openemr
+      MYSQL_PASS: openemr
+      MYSQL_DATABASE: openemr
+      # OpenEMR admin user settings
+      OE_USER: admin
+      OE_PASS: pass
+      # Enable REST APIs for testing
+      OPENEMR_SETTING_rest_api: 1
+      OPENEMR_SETTING_rest_fhir_api: 1
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, curl, -f, http://localhost/interface/login/login.php]
+      start_period: 300s
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  phpmyadmin:
+    restart: unless-stopped
+    image: phpmyadmin
+    ports:
+    - 80
+    environment:
+      PMA_HOSTS: mysql
+    healthcheck:
+      test: [CMD, curl, -f, http://localhost/]
+      start_period: 10s
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+volumes:
+  databasevolume: {}
+  sitesvolume: {}
+  logvolume: {}

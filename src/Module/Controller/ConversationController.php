@@ -15,6 +15,7 @@ namespace OpenCoreEMR\Modules\SinchConversations\Controller;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Service\MessagePollingService;
 use OpenCoreEMR\Modules\SinchConversations\Service\MessageService;
+use OpenCoreEMR\Modules\SinchConversations\SessionAccessor;
 use OpenCoreEMR\Sinch\Conversation\Exception\AccessDeniedException;
 use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
 use OpenEMR\Common\Csrf\CsrfUtils;
@@ -33,6 +34,7 @@ class ConversationController
         private readonly GlobalConfig $config,
         private readonly MessagePollingService $pollingService,
         private readonly MessageService $messageService,
+        private readonly SessionAccessor $session,
         private readonly Environment $twig
     ) {
         $this->logger = new SystemLogger();
@@ -63,7 +65,7 @@ class ConversationController
      */
     private function showThread(Request $request): Response
     {
-        $conversationId = (string)$request->query->get('conversation_id', '');
+        $conversationId = (string) $request->query->get('conversation_id', '');
 
         if (empty($conversationId)) {
             throw new ValidationException("Conversation ID is required");
@@ -116,8 +118,8 @@ class ConversationController
             throw new AccessDeniedException("CSRF token verification failed");
         }
 
-        $conversationId = (string)$request->request->get('conversation_id', '');
-        $messageBody = (string)$request->request->get('message', '');
+        $conversationId = (string) $request->request->get('conversation_id', '');
+        $messageBody = (string) $request->request->get('message', '');
 
         if (empty($conversationId) || empty($messageBody)) {
             throw new ValidationException("Conversation ID and message are required");
@@ -139,15 +141,15 @@ class ConversationController
 
         try {
             $this->messageService->sendToPatient(
-                (int)$conversation['patient_id'],
+                (int) $conversation['patient_id'],
                 $patient['phone_cell'],
                 $messageBody
             );
 
-            $_SESSION['conversation_message'] = "Message sent successfully";
+            $this->session->setFlash('conversation_message', "Message sent successfully");
         } catch (\Throwable $e) {
             $this->logger->error("Failed to send reply: " . $e->getMessage());
-            $_SESSION['conversation_message'] = "Error sending message: " . $e->getMessage();
+            $this->session->setFlash('conversation_message', "Error sending message: " . $e->getMessage());
         }
 
         return $this->redirect($request, $conversationId);

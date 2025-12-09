@@ -1,0 +1,36 @@
+# Docker development artifacts
+.git
+.gitignore
+.github
+.local
+.pre-commit-config.yaml
+.phpcs.xml
+.composer-require-checker.json
+phpstan.neon
+rector.php
+compose.yml
+.dockerignore
+docker/
+
+# IDE and editor files
+.idea
+.vscode
+*.swp
+*.swo
+
+# Test files
+tests
+
+# Documentation
+README.md
+CHANGELOG.md
+.docs/
+
+# CI/CD
+.release-please-manifest.json
+release-please-config.json
+
+# Keep these - needed at runtime:
+# !vendor/          (composer dependencies - NEEDED)
+# !node_modules/    (npm dependencies - NEEDED if used)
+# !public/assets/   (built assets - NEEDED)

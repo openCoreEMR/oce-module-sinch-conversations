@@ -21,10 +21,7 @@ parameters:
     # Report always true conditions
     reportAlwaysTrueInLastCondition: true
 
-    # Ignore missing OpenEMR classes during static analysis
+    # Ignore errors for unused properties and legacy OpenEMR functions
     ignoreErrors:
-        - '#Function (xl|xlt|xla|xlj|text|attr|sqlStatement|sqlQuery|sqlFetchArray) not found#'
-        - '#unknown class OpenEMR\\#'
-        - '#Instantiated class OpenEMR\\#'
-        - '#invalid type OpenEMR\\#'
+        - '#Function (xl|xlt|xla|xlj|text|attr) not found#'
         - '#Property .+ is never read, only written#'

@@ -13,6 +13,7 @@
 namespace OpenCoreEMR\Modules\SinchConversations\Controller;
 
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
+use OpenCoreEMR\Modules\SinchConversations\SessionAccessor;
 use OpenCoreEMR\Sinch\Conversation\Client\ConversationApiClient;
 use OpenCoreEMR\Sinch\Conversation\Exception\AccessDeniedException;
 use OpenEMR\Common\Csrf\CsrfUtils;
@@ -30,6 +31,7 @@ class SettingsController
     public function __construct(
         private readonly GlobalConfig $config,
         private readonly ConversationApiClient $apiClient,
+        private readonly SessionAccessor $session,
         private readonly Environment $twig
     ) {
         $this->logger = new SystemLogger();
@@ -72,11 +74,9 @@ class SettingsController
 
         $content = $this->twig->render('settings/config.html.twig', [
             'settings' => $settings,
-            'success_message' => $_SESSION['settings_message'] ?? null,
+            'success_message' => $this->session->getFlash('settings_message'),
             'csrf_token' => CsrfUtils::collectCsrfToken(),
         ]);
-
-        unset($_SESSION['settings_message']);
 
         $response = new Response($content);
         $response->headers->set('X-Frame-Options', 'SAMEORIGIN');
@@ -99,7 +99,7 @@ class SettingsController
             throw new AccessDeniedException("CSRF token verification failed");
         }
 
-        $_SESSION['settings_message'] = "Settings saved successfully";
+        $this->session->setFlash('settings_message', "Settings saved successfully");
 
         return $this->redirect($request);
     }

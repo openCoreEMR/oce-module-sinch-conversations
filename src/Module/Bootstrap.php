@@ -25,6 +25,7 @@ class Bootstrap
     public const MODULE_NAME = "oce-module-sinch-conversations";
 
     private readonly GlobalConfig $globalsConfig;
+    private readonly SessionAccessor $session;
     private readonly \Twig\Environment $twig;
     private readonly SystemLogger $logger;
 
@@ -34,6 +35,7 @@ class Bootstrap
         private readonly GlobalsAccessor $globals = new GlobalsAccessor()
     ) {
         $this->globalsConfig = new GlobalConfig($this->globals);
+        $this->session = new SessionAccessor();
 
         $templatePath = \dirname(__DIR__) . DIRECTORY_SEPARATOR . "templates" . DIRECTORY_SEPARATOR;
         $twig = new TwigContainer($templatePath, $this->kernel);
@@ -62,7 +64,6 @@ class Bootstrap
             GlobalsInitializedEvent::EVENT_HANDLE,
             function (GlobalsInitializedEvent $event): void {
                 $event->getGlobalsService()->createSection(
-                    'OpenCoreEMR Sinch Conversations Module',
                     'Conversations'
                 );
 
@@ -128,13 +129,9 @@ class Bootstrap
 
                 $setting = new GlobalSetting(
                     xlt('Sinch API Region'),
-                    'select',
+                    'text',
                     'us',
-                    xlt('Select your Sinch API region'),
-                    [
-                        'us' => xl('United States'),
-                        'eu' => xl('Europe'),
-                    ]
+                    xlt('Enter your Sinch API region (us or eu)')
                 );
                 $event->getGlobalsService()->appendToSection(
                     'Conversations',
@@ -144,14 +141,9 @@ class Bootstrap
 
                 $setting = new GlobalSetting(
                     xlt('Default Channel'),
-                    'select',
+                    'text',
                     'SMS',
-                    xlt('Default messaging channel'),
-                    [
-                        'SMS' => xl('SMS'),
-                        'WHATSAPP' => xl('WhatsApp'),
-                        'RCS' => xl('RCS'),
-                    ]
+                    xlt('Default messaging channel (SMS, WHATSAPP, or RCS)')
                 );
                 $event->getGlobalsService()->appendToSection(
                     'Conversations',
@@ -193,14 +185,25 @@ class Bootstrap
             function (MenuEvent $event): void {
                 $menu = $event->getMenu();
 
-                $menuItem = [
-                    'url' => '/interface/modules/custom_modules/' . self::MODULE_NAME . '/public/index.php',
-                    'label' => xl('Conversations'),
-                    'requirement' => 0,
-                    'global_req' => GlobalConfig::CONFIG_OPTION_ENABLED,
-                ];
+                $menuItem = new \stdClass();
+                $menuItem->requirement = 0;
+                $menuItem->target = 'mod';
+                $menuItem->menu_id = 'oce_sinch_conversations';
+                $menuItem->label = xl('Conversations');
+                $menuItem->url = '/interface/modules/custom_modules/' . self::MODULE_NAME . '/public/index.php';
+                $menuItem->children = [];
+                $menuItem->acl_req = [];
+                $menuItem->global_req = [GlobalConfig::CONFIG_OPTION_ENABLED];
 
-                $menu->addMenuItemToSection('modules', 'oce_sinch_conversations', $menuItem);
+                // Add to the modules section
+                foreach ($menu as $section) {
+                    if ($section->menu_id === 'modimg') {
+                        $section->children[] = $menuItem;
+                        break;
+                    }
+                }
+
+                $event->setMenu($menu);
             }
         );
     }
@@ -275,6 +278,7 @@ class Bootstrap
         return new Controller\InboxController(
             $this->globalsConfig,
             $this->getMessagePollingService(),
+            $this->session,
             $this->twig
         );
     }
@@ -288,6 +292,7 @@ class Bootstrap
             $this->globalsConfig,
             $this->getMessagePollingService(),
             $this->getMessageService(),
+            $this->session,
             $this->twig
         );
     }
@@ -300,6 +305,7 @@ class Bootstrap
         return new Controller\SettingsController(
             $this->globalsConfig,
             $this->getConversationApiClient(),
+            $this->session,
             $this->twig
         );
     }

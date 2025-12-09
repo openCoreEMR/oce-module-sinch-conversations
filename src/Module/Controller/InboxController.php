@@ -14,6 +14,7 @@ namespace OpenCoreEMR\Modules\SinchConversations\Controller;
 
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Service\MessagePollingService;
+use OpenCoreEMR\Modules\SinchConversations\SessionAccessor;
 use OpenCoreEMR\Sinch\Conversation\Exception\AccessDeniedException;
 use OpenEMR\Common\Csrf\CsrfUtils;
 use OpenEMR\Common\Database\QueryUtils;
@@ -30,6 +31,7 @@ class InboxController
     public function __construct(
         private readonly GlobalConfig $config,
         private readonly MessagePollingService $pollingService,
+        private readonly SessionAccessor $session,
         private readonly Environment $twig
     ) {
         $this->logger = new SystemLogger();
@@ -80,11 +82,9 @@ class InboxController
 
         $content = $this->twig->render('inbox/list.html.twig', [
             'conversations' => $conversations,
-            'success_message' => $_SESSION['inbox_message'] ?? null,
+            'success_message' => $this->session->getFlash('inbox_message'),
             'csrf_token' => CsrfUtils::collectCsrfToken(),
         ]);
-
-        unset($_SESSION['inbox_message']);
 
         $response = new Response($content);
         $response->headers->set('X-Frame-Options', 'SAMEORIGIN');
@@ -106,12 +106,13 @@ class InboxController
         try {
             $newMessageCount = $this->pollingService->pollAllConversations();
 
-            $_SESSION['inbox_message'] = $newMessageCount > 0
-            ? "Found {$newMessageCount} new message(s)"
-            : "No new messages";
+            $this->session->setFlash(
+                'inbox_message',
+                $newMessageCount > 0 ? "Found {$newMessageCount} new message(s)" : "No new messages"
+            );
         } catch (\Throwable $e) {
             $this->logger->error("Failed to refresh messages: " . $e->getMessage());
-            $_SESSION['inbox_message'] = "Error refreshing messages: " . $e->getMessage();
+            $this->session->setFlash('inbox_message', "Error refreshing messages: " . $e->getMessage());
         }
 
         return $this->redirect($request);
