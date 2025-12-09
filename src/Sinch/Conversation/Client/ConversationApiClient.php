@@ -240,6 +240,38 @@ class ConversationApiClient
     }
 
     /**
+     * Test API connection by making a lightweight request
+     *
+     * @return bool True if connection successful
+     * @throws ApiException
+     */
+    public function testConnection(): bool
+    {
+        $projectId = $this->config->getSinchProjectId();
+
+        if (empty($projectId)) {
+            throw new ApiException("Project ID is not configured");
+        }
+
+        try {
+            // Make a lightweight request to verify credentials
+            $response = $this->httpClient->get(
+                "/v1/projects/{$projectId}/messages",
+                [
+                    'headers' => $this->getHeaders(),
+                    'query' => ['page_size' => 1],
+                ]
+            );
+
+            $statusCode = $response->getStatusCode();
+            return $statusCode >= 200 && $statusCode < 300;
+        } catch (GuzzleException $e) {
+            $this->logger->error("Sinch API connection test failed: " . $e->getMessage());
+            throw new ApiException("Connection test failed: " . $e->getMessage());
+        }
+    }
+
+    /**
      * Get authorization headers
      *
      * @return array<string, string>

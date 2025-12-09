@@ -446,6 +446,40 @@ Templates should use OpenEMR's translation and sanitization filters:
 - `attr` - Sanitize for HTML attributes
 - `xlj` - Translate and JSON-encode for JavaScript
 
+### Twig Global Variables (Available in All Templates)
+- `{{ webroot }}` - OpenEMR web root path (e.g., "/openemr")
+- `{{ assets_dir }}` - Static assets directory
+- `{{ srcdir }}` - Source directory
+- `{{ rootdir }}` - Root directory
+- `{{ assetVersion }}` - Asset cache version
+- `{{ session }}` - Session data
+
+### Static Assets - CRITICAL RULES
+
+**❌ NEVER use CDN links:**
+- ~~`https://cdn.jsdelivr.net/npm/bootstrap@5.x/...`~~
+- ~~`https://cdnjs.cloudflare.com/...`~~
+- ~~`https://unpkg.com/...`~~
+- ~~`https://maxcdn.bootstrapcdn.com/...`~~
+
+**✅ ALWAYS use OpenEMR's built-in assets:**
+```twig
+{# Bootstrap CSS #}
+<link rel="stylesheet" href="{{ webroot }}/public/assets/bootstrap/dist/css/bootstrap.min.css">
+
+{# Bootstrap JS #}
+<script src="{{ webroot }}/public/assets/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+
+{# jQuery (if needed) #}
+<script src="{{ webroot }}/public/assets/jquery/dist/jquery.min.js"></script>
+```
+
+**Why no CDNs?**
+- Security: No external dependencies
+- Privacy: No tracking or data leakage
+- Reliability: Works offline and in air-gapped environments
+- Consistency: Matches OpenEMR's Bootstrap version
+
 ### Twig Templates - Important Notes
 
 **For Dialog/Iframe Templates:**
@@ -1058,6 +1092,7 @@ Before considering work complete:
 - [ ] Redirects remove `action` parameter to prevent loops
 - [ ] Responses for tabs/iframes set `X-Frame-Options: SAMEORIGIN`
 - [ ] Dialog templates don't use `openemr_header_setup()`
+- [ ] No CDN links - use `{{ webroot }}/public/assets/...` for all static assets
 - [ ] All pre-commit checks passing
 - [ ] PHPDoc comments with proper type hints
 - [ ] Symfony HTTP Foundation components used throughout

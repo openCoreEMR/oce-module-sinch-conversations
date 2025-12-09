@@ -4,90 +4,233 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ 'Sinch Conversations Settings'|xlt }}</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="{{ webroot }}/public/assets/bootstrap/dist/css/bootstrap.min.css">
     <style>
-        body { padding: 20px; background: #f8f9fa; }
+        body {
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        .settings-container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .form-label {
+            font-weight: 600;
+            color: #495057;
+        }
+        .help-text {
+            font-size: 0.875rem;
+            color: #6c757d;
+            margin-top: 0.25rem;
+        }
+        .section-header {
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #dee2e6;
+        }
+        .section-header:first-of-type {
+            margin-top: 0;
+        }
+        .test-connection-btn {
+            margin-top: 1rem;
+        }
+        .alert {
+            margin-bottom: 1.5rem;
+        }
+        .password-field {
+            font-family: monospace;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h2 class="mb-4">{{ 'Sinch Conversations Settings'|xlt }}</h2>
+    <div class="settings-container">
+        <h1 class="mb-4">{{ 'Sinch Conversations Settings'|xlt }}</h1>
 
         {% if success_message %}
             <div class="alert alert-success alert-dismissible fade show" role="alert">
                 {{ success_message|text }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
             </div>
         {% endif %}
 
-        <div class="card mb-4">
-            <div class="card-body">
-                <h5 class="card-title">{{ 'API Configuration'|xlt }}</h5>
-                <p class="text-muted">{{ 'Configure settings in Administration > Globals > Conversations'|xlt }}</p>
-
-                <div class="mb-3">
-                    <label class="form-label">{{ 'Sinch Project ID'|xlt }}</label>
-                    <input type="text" class="form-control" value="{{ settings.project_id|attr }}" disabled>
-                </div>
-
-                <div class="mb-3">
-                    <label class="form-label">{{ 'Sinch App ID'|xlt }}</label>
-                    <input type="text" class="form-control" value="{{ settings.app_id|attr }}" disabled>
-                </div>
-
-                <div class="mb-3">
-                    <label class="form-label">{{ 'API Region'|xlt }}</label>
-                    <input type="text" class="form-control" value="{{ settings.region|attr }}" disabled>
-                </div>
-
-                <div class="mb-3">
-                    <label class="form-label">{{ 'Default Channel'|xlt }}</label>
-                    <input type="text" class="form-control" value="{{ settings.default_channel|attr }}" disabled>
-                </div>
-
-                <div class="mb-3">
-                    <label class="form-label">{{ 'Clinic Name'|xlt }}</label>
-                    <input type="text" class="form-control" value="{{ settings.clinic_name|attr }}" disabled>
-                </div>
-
-                <div class="mb-3">
-                    <label class="form-label">{{ 'Clinic Phone'|xlt }}</label>
-                    <input type="text" class="form-control" value="{{ settings.clinic_phone|attr }}" disabled>
-                </div>
-            </div>
+        <div class="alert alert-info" role="alert">
+            <strong>{{ 'Note:'|xlt }}</strong>
+            {{ 'You can also configure these settings via Administration > Globals > Conversations'|xlt }}
         </div>
 
-        <div class="card">
-            <div class="card-body">
-                <h5 class="card-title">{{ 'API Connection Test'|xlt }}</h5>
-                <p>{{ 'Test your Sinch API configuration to ensure connectivity.'|xlt }}</p>
-                <button type="button" class="btn btn-primary" onclick="testConnection()">
-                    {{ 'Test Connection'|xlt }}
-                </button>
-                <div id="testResult" class="mt-3"></div>
+        <form method="post" action="?action=save">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token|attr }}">
+
+            {# Sinch API Configuration #}
+            <div class="section-header">
+                <h3>{{ 'Sinch API Configuration'|xlt }}</h3>
+                <p class="help-text">
+                    {{ 'Get your API credentials from the Sinch Dashboard at https://dashboard.sinch.com'|xlt }}
+                </p>
             </div>
+
+            <div class="mb-3">
+                <label for="project_id" class="form-label">{{ 'Project ID'|xlt }} <span class="text-danger">*</span></label>
+                <input
+                    type="text"
+                    class="form-control"
+                    id="project_id"
+                    name="project_id"
+                    value="{{ settings.project_id|attr }}"
+                    required
+                >
+                <div class="help-text">{{ 'Your Sinch project ID from the Sinch dashboard'|xlt }}</div>
+            </div>
+
+            <div class="mb-3">
+                <label for="app_id" class="form-label">{{ 'App ID'|xlt }} <span class="text-danger">*</span></label>
+                <input
+                    type="text"
+                    class="form-control"
+                    id="app_id"
+                    name="app_id"
+                    value="{{ settings.app_id|attr }}"
+                    required
+                >
+                <div class="help-text">{{ 'Your Sinch app ID for the Conversations API'|xlt }}</div>
+            </div>
+
+            <div class="mb-3">
+                <label for="api_key" class="form-label">{{ 'API Key'|xlt }} <span class="text-danger">*</span></label>
+                <input
+                    type="text"
+                    class="form-control password-field"
+                    id="api_key"
+                    name="api_key"
+                    value="{{ settings.api_key|attr }}"
+                    required
+                >
+                <div class="help-text">{{ 'Your Sinch API key (Access Key ID)'|xlt }}</div>
+            </div>
+
+            <div class="mb-3">
+                <label for="api_secret" class="form-label">{{ 'API Secret'|xlt }}</label>
+                <input
+                    type="password"
+                    class="form-control password-field"
+                    id="api_secret"
+                    name="api_secret"
+                    placeholder="{{ 'Leave blank to keep existing secret'|xlt }}"
+                >
+                <div class="help-text">
+                    {{ 'Your Sinch API secret (Access Key Secret). Leave blank to keep the existing secret.'|xlt }}
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label for="region" class="form-label">{{ 'API Region'|xlt }} <span class="text-danger">*</span></label>
+                <select class="form-select" id="region" name="region" required>
+                    <option value="us" {% if settings.region == 'us' %}selected{% endif %}>
+                        {{ 'United States (us)'|xlt }}
+                    </option>
+                    <option value="eu" {% if settings.region == 'eu' %}selected{% endif %}>
+                        {{ 'Europe (eu)'|xlt }}
+                    </option>
+                </select>
+                <div class="help-text">{{ 'Select the region where your Sinch project is hosted'|xlt }}</div>
+            </div>
+
+            {# Messaging Configuration #}
+            <div class="section-header">
+                <h3>{{ 'Messaging Configuration'|xlt }}</h3>
+            </div>
+
+            <div class="mb-3">
+                <label for="default_channel" class="form-label">{{ 'Default Channel'|xlt }} <span class="text-danger">*</span></label>
+                <select class="form-select" id="default_channel" name="default_channel" required>
+                    <option value="SMS" {% if settings.default_channel == 'SMS' %}selected{% endif %}>
+                        {{ 'SMS'|xlt }}
+                    </option>
+                    <option value="WHATSAPP" {% if settings.default_channel == 'WHATSAPP' %}selected{% endif %}>
+                        {{ 'WhatsApp'|xlt }}
+                    </option>
+                    <option value="RCS" {% if settings.default_channel == 'RCS' %}selected{% endif %}>
+                        {{ 'RCS'|xlt }}
+                    </option>
+                </select>
+                <div class="help-text">{{ 'Default messaging channel for new conversations'|xlt }}</div>
+            </div>
+
+            <div class="mb-3">
+                <label for="clinic_name" class="form-label">{{ 'Clinic Name'|xlt }}</label>
+                <input
+                    type="text"
+                    class="form-control"
+                    id="clinic_name"
+                    name="clinic_name"
+                    value="{{ settings.clinic_name|attr }}"
+                >
+                <div class="help-text">{{ 'Clinic name to appear in message templates (e.g., "Example Clinic")'|xlt }}</div>
+            </div>
+
+            <div class="mb-3">
+                <label for="clinic_phone" class="form-label">{{ 'Clinic Phone'|xlt }}</label>
+                <input
+                    type="text"
+                    class="form-control"
+                    id="clinic_phone"
+                    name="clinic_phone"
+                    value="{{ settings.clinic_phone|attr }}"
+                    placeholder="650-123-4567"
+                >
+                <div class="help-text">{{ 'Clinic phone number for message templates (e.g., "650-123-4567")'|xlt }}</div>
+            </div>
+
+            {# Actions #}
+            <div class="d-flex gap-2 mt-4">
+                <button type="submit" class="btn btn-primary">
+                    {{ 'Save Settings'|xlt }}
+                </button>
+                <button type="button" class="btn btn-secondary" id="test-connection-btn">
+                    {{ 'Test API Connection'|xlt }}
+                </button>
+            </div>
+        </form>
+
+        <div id="test-result" class="mt-3" style="display: none;">
+            <div class="alert" role="alert" id="test-alert"></div>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ webroot }}/public/assets/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-    function testConnection() {
-        const resultDiv = document.getElementById('testResult');
-        resultDiv.innerHTML = '<div class="alert alert-info">Testing connection...</div>';
+        document.getElementById('test-connection-btn').addEventListener('click', function() {
+            const btn = this;
+            const resultDiv = document.getElementById('test-result');
+            const alertDiv = document.getElementById('test-alert');
 
-        fetch('settings.php?action=test&csrf_token={{ csrf_token|attr }}')
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    resultDiv.innerHTML = '<div class="alert alert-success">' + data.message + '</div>';
-                } else {
-                    resultDiv.innerHTML = '<div class="alert alert-danger">Error: ' + data.message + '</div>';
-                }
-            })
-            .catch(error => {
-                resultDiv.innerHTML = '<div class="alert alert-danger">Connection failed: ' + error + '</div>';
-            });
-    }
+            btn.disabled = true;
+            btn.textContent = '{{ 'Testing...'|xlj }}';
+
+            const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+
+            fetch('?action=test&csrf_token=' + encodeURIComponent(csrfToken))
+                .then(response => response.json())
+                .then(data => {
+                    resultDiv.style.display = 'block';
+                    alertDiv.className = 'alert ' + (data.success ? 'alert-success' : 'alert-danger');
+                    alertDiv.textContent = data.message;
+                })
+                .catch(error => {
+                    resultDiv.style.display = 'block';
+                    alertDiv.className = 'alert alert-danger';
+                    alertDiv.textContent = '{{ 'Connection test failed: '|xlj }}' + error.message;
+                })
+                .finally(() => {
+                    btn.disabled = false;
+                    btn.textContent = '{{ 'Test API Connection'|xlj }}';
+                });
+        });
     </script>
 </body>
 </html>

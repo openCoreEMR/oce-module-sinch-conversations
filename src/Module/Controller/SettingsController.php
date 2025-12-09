@@ -13,9 +13,11 @@
 namespace OpenCoreEMR\Modules\SinchConversations\Controller;
 
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
+use OpenCoreEMR\Modules\SinchConversations\Service\ConfigService;
 use OpenCoreEMR\Modules\SinchConversations\SessionAccessor;
 use OpenCoreEMR\Sinch\Conversation\Client\ConversationApiClient;
 use OpenCoreEMR\Sinch\Conversation\Exception\AccessDeniedException;
+use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
 use OpenEMR\Common\Csrf\CsrfUtils;
 use OpenEMR\Common\Logging\SystemLogger;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -30,6 +32,7 @@ class SettingsController
 
     public function __construct(
         private readonly GlobalConfig $config,
+        private readonly ConfigService $configService,
         private readonly ConversationApiClient $apiClient,
         private readonly SessionAccessor $session,
         private readonly Environment $twig
@@ -99,9 +102,39 @@ class SettingsController
             throw new AccessDeniedException("CSRF token verification failed");
         }
 
-        $this->session->setFlash('settings_message', "Settings saved successfully");
+        try {
+            // Collect settings from form
+            $settings = [
+                'project_id' => (string)$request->request->get('project_id', ''),
+                'app_id' => (string)$request->request->get('app_id', ''),
+                'api_key' => (string)$request->request->get('api_key', ''),
+                'region' => (string)$request->request->get('region', 'us'),
+                'default_channel' => (string)$request->request->get('default_channel', 'SMS'),
+                'clinic_name' => (string)$request->request->get('clinic_name', ''),
+                'clinic_phone' => (string)$request->request->get('clinic_phone', ''),
+            ];
 
-        return $this->redirect($request);
+            // Only include API secret if it was provided
+            $apiSecret = $request->request->get('api_secret', '');
+            if (!empty($apiSecret)) {
+                $settings['api_secret'] = (string)$apiSecret;
+            }
+
+            // Save settings
+            $this->configService->saveSettings($settings);
+
+            $this->session->setFlash('settings_message', "Settings saved successfully");
+
+            return $this->redirect($request);
+        } catch (ValidationException $e) {
+            $this->logger->error("Validation error saving settings: " . $e->getMessage());
+            $this->session->setFlash('settings_message', "Error: " . $e->getMessage());
+            return $this->redirect($request);
+        } catch (\Throwable $e) {
+            $this->logger->error("Error saving settings: " . $e->getMessage());
+            $this->session->setFlash('settings_message', "Error saving settings. Please try again.");
+            return $this->redirect($request);
+        }
     }
 
     /**
@@ -117,13 +150,41 @@ class SettingsController
         }
 
         try {
-            $result = ['success' => true, 'message' => 'API connection test not yet implemented'];
+            // Validate configuration is complete
+            if (empty($this->config->getSinchProjectId())) {
+                return new JsonResponse([
+                    'success' => false,
+                    'message' => 'Project ID is not configured',
+                ], Response::HTTP_BAD_REQUEST);
+            }
+
+            if (empty($this->config->getSinchAppId())) {
+                return new JsonResponse([
+                    'success' => false,
+                    'message' => 'App ID is not configured',
+                ], Response::HTTP_BAD_REQUEST);
+            }
+
+            if (empty($this->config->getSinchApiKey())) {
+                return new JsonResponse([
+                    'success' => false,
+                    'message' => 'API Key is not configured',
+                ], Response::HTTP_BAD_REQUEST);
+            }
+
+            // Test the connection
+            $this->apiClient->testConnection();
+
+            $result = [
+                'success' => true,
+                'message' => 'API connection successful! Your Sinch configuration is working correctly.',
+            ];
             return new JsonResponse($result);
         } catch (\Throwable $e) {
             $this->logger->error("API test failed: " . $e->getMessage());
             return new JsonResponse([
                 'success' => false,
-                'message' => $e->getMessage(),
+                'message' => 'Connection failed: ' . $e->getMessage(),
             ], Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }

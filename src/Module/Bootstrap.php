@@ -37,7 +37,7 @@ class Bootstrap
         $this->globalsConfig = new GlobalConfig($this->globals);
         $this->session = new SessionAccessor();
 
-        $templatePath = \dirname(__DIR__) . DIRECTORY_SEPARATOR . "templates" . DIRECTORY_SEPARATOR;
+        $templatePath = \dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . "templates" . DIRECTORY_SEPARATOR;
         $twig = new TwigContainer($templatePath, $this->kernel);
         $this->twig = $twig->getTwig();
 
@@ -298,12 +298,21 @@ class Bootstrap
     }
 
     /**
+     * Get Config Service
+     */
+    public function getConfigService(): Service\ConfigService
+    {
+        return new Service\ConfigService($this->globalsConfig);
+    }
+
+    /**
      * Get Settings Controller
      */
     public function getSettingsController(): Controller\SettingsController
     {
         return new Controller\SettingsController(
             $this->globalsConfig,
+            $this->getConfigService(),
             $this->getConversationApiClient(),
             $this->session,
             $this->twig
