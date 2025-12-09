@@ -37,6 +37,20 @@ A HIPAA-compliant, omnichannel patient communication module for OpenEMR using th
 
 ## Installation
 
+### Important Note About Uninstall/Reinstall
+
+**OpenEMR does not automatically drop module tables on uninstall.** If you need to reinstall the module cleanly:
+
+```bash
+# Option 1: Via Docker (if using Docker environment)
+docker compose exec -T mysql mariadb -uroot -proot openemr < cleanup.sql
+
+# Option 2: Via phpMyAdmin or MySQL client
+# Connect to your OpenEMR database and run cleanup.sql
+```
+
+This will drop all module tables and allow a clean reinstallation.
+
 ### Via Composer (Recommended)
 
 1. Navigate to your OpenEMR installation directory
@@ -313,6 +327,38 @@ This module uses a **polling architecture** instead of webhooks:
 See [`POLLING-ARCHITECTURE.md`](./POLLING-ARCHITECTURE.md) for detailed implementation.
 
 ## Development
+
+### Development Taskfile
+
+This module includes a **Taskfile** for common development tasks:
+
+```bash
+# Install Task (if not already installed)
+# macOS
+brew install go-task
+
+# Linux
+sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b ~/.local/bin
+
+# Show all available tasks
+task --list
+
+# Quick start
+task setup                    # Complete setup (install, prebuild, start)
+task dev:start                # Start Docker environment
+task dev:port                 # Get OpenEMR URL
+task module:cleanup           # Clean database for reinstall
+task check                    # Run all code quality checks
+```
+
+**Common tasks:**
+- `task dev:start` - Start Docker environment
+- `task dev:logs` - View live logs
+- `task dev:port` - Get OpenEMR access URL
+- `task module:cleanup` - Drop tables for clean reinstall
+- `task db:shell` - Access database
+- `task check` - Run pre-commit checks
+- `task --list` - See all available tasks
 
 ### Docker Development Environment
 

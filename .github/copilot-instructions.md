@@ -587,9 +587,88 @@ Before considering work complete:
 
 ---
 
+## Development Tooling: Taskfile vs Composer Scripts
+
+This module uses **both Taskfile and Composer scripts** with distinct responsibilities:
+
+**Taskfile:** Infrastructure operations (Docker, database, module management)
+**Composer scripts:** Code quality checks (phpcs, phpstan, rector)
+
+**Why Both?**
+- Composer scripts work in **any environment** (local, Docker, CI)
+- Taskfile provides **convenience wrappers** and **Docker orchestration**
+- Clear separation prevents bloated composer.json
+- Taskfile can call Composer scripts for code quality
+
+## Development Taskfile
+
+This module uses **Taskfile** (taskfile.dev) for development automation. When suggesting development commands, **prefer Taskfile for infrastructure operations** and **Composer scripts for code quality**.
+
+### When to Suggest Taskfile vs Composer
+
+**Always suggest Taskfile for:**
+- Docker operations: `task dev:start`, `task dev:logs`, `task dev:port`
+- Module cleanup: `task module:cleanup`, `task module:tables`
+- Database ops: `task db:shell`, `task db:export`
+
+**Suggest either Taskfile OR Composer for code quality:**
+- Code checks: `task check` OR `composer phpcs && composer phpstan`
+- Auto-fix: `task check:fix` OR `composer phpcbf`
+- In CI context: prefer `composer <script>` (no Docker dependency)
+- In local dev: prefer `task check` (convenience wrapper)
+
+**Examples:**
+- Start Docker → `task dev:start` (not `docker compose up`)
+- Clean tables → `task module:cleanup` (not raw SQL)
+- Run checks → `task check` OR `composer phpcs` (both valid)
+- View logs → `task dev:logs` (not `docker compose logs`)
+
+### Common Tasks
+
+```bash
+# Docker
+task dev:start          # Start environment
+task dev:logs           # View logs
+task dev:port           # Get URL
+task dev:shell          # Container shell
+
+# Module
+task module:cleanup     # Drop tables
+task module:tables      # List tables
+task module:data        # Show counts
+
+# Database
+task db:shell           # MariaDB CLI
+task db:query -- "SQL"  # Run query
+
+# Code Quality
+task check              # All checks
+task check:fix          # Auto-fix
+
+# Workflows
+task setup              # Complete setup
+task workflow:reinstall # Clean reinstall
+```
+
+### Why Taskfile + Composer (Not Just One)
+
+**Taskfile advantages:**
+- ✅ Self-documenting (`task --list`)
+- ✅ Safety prompts on destructive operations
+- ✅ Docker orchestration without raw commands
+- ✅ Complex bash logic and workflows
+- ✅ Variables and reusability
+
+**Composer scripts advantages:**
+- ✅ Work in any environment (no Docker needed)
+- ✅ Familiar to all PHP developers
+- ✅ CI/CD friendly (no additional tools)
+- ✅ Standard for PHP projects
+- ✅ No dependencies outside PHP ecosystem
+
 ## Docker Development Environment
 
-This module includes a Docker Compose setup for local development. When suggesting Docker-related commands:
+This module includes a Docker Compose setup for local development. Raw Docker commands are available but Taskfile is preferred:
 
 ### Common Docker Commands
 
@@ -670,8 +749,10 @@ When suggesting code completions:
 8. **Exception handling** - Use custom module exceptions, not die/exit
 9. **Template rendering** - Suggest Twig templates, not inline HTML
 10. **Type casting** - Cast request values: `(string)$request->request->get('field', '')`
-11. **Docker awareness** - When suggesting Docker commands, use `docker compose exec`
-12. **Database access** - Use QueryUtils for all database operations, never direct SQL functions
-13. **MariaDB from Docker** - Use `mariadb` command (not `mysql`)
-14. **Use git commands** - Use `git ls-files`, `git grep` instead of `find`, `grep` for file operations
-15. **Use pre-commit/composer** - Never suggest manual syntax checks; use `pre-commit run -a` or `composer check`
+11. **Prefer Taskfile** - Suggest `task <name>` over raw Docker/composer commands when appropriate
+12. **Docker awareness** - When suggesting Docker commands, use `docker compose exec`
+13. **Database access** - Use QueryUtils for all database operations, never direct SQL functions
+14. **MariaDB from Docker** - Use `mariadb` command (not `mysql`)
+15. **Use git commands** - Use `git ls-files`, `git grep` instead of `find`, `grep` for file operations
+16. **Use pre-commit/composer** - Never suggest manual syntax checks; use `pre-commit run -a` or `composer check`
+17. **Show task list** - When user asks what they can do, suggest `task --list`

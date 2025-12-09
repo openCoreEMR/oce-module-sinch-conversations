@@ -125,6 +125,7 @@
     "post-update-cmd": [
       "echo 'OpenCoreEMR Sinch Conversations Module updated successfully!'"
     ],
+    "_comment": "Composer scripts handle CODE QUALITY checks that work in any environment (local, Docker, CI). For infrastructure operations (Docker, database, module management), use Taskfile instead. See Taskfile.yml for separation of concerns.",
     "code-quality": [
       "@phpcs",
       "@phpstan",

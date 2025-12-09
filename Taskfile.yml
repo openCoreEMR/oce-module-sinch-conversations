@@ -1,0 +1,235 @@
+# https://taskfile.dev
+# Task runner for OpenEMR Sinch Conversations Module development
+#
+# SEPARATION OF CONCERNS:
+#   Taskfile: Infrastructure operations (Docker, database, module management)
+#   Composer: Code quality checks (phpcs, phpstan, rector)
+#
+# WHY BOTH?
+#   - Composer scripts work in ANY environment (local, Docker, CI)
+#   - Taskfile provides convenience wrappers and Docker orchestration
+#   - Prevents bloated composer.json with Docker-specific commands
+#   - Taskfile can call Composer scripts (see check: tasks below)
+#
+# Installation: https://taskfile.dev/installation/
+#   macOS:   brew install go-task
+#   Linux:   sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b ~/.local/bin
+#
+# Usage:
+#   task --list              # Show all available tasks
+#   task dev:start           # Start Docker environment
+#   task module:install      # Install module in OpenEMR
+#   task check               # Run code quality checks (calls pre-commit/composer)
+
+version: '3'
+
+vars:
+  MODULE_PATH: /var/www/localhost/htdocs/openemr/interface/modules/custom_modules/oce-module-sinch-conversations
+  DB_USER: root
+  DB_PASS: root
+  DB_NAME: openemr
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+    - task --list
+
+  # === Docker Environment ===
+
+  dev:start:
+    desc: Start Docker development environment
+    cmds:
+    - docker compose up -d --wait
+    - echo "✅ OpenEMR started. Get port with 'task dev:port'"
+
+  dev:stop:
+    desc: Stop Docker environment (keeps data)
+    cmds:
+    - docker compose down
+    - echo "✅ Docker environment stopped"
+
+  dev:restart:
+    desc: Restart Docker environment
+    cmds:
+    - docker compose restart
+    - echo "✅ Docker environment restarted"
+
+  dev:reset:
+    desc: Stop and remove all data (fresh start)
+    prompt: This will delete ALL data. Continue?
+    cmds:
+    - docker compose down -v
+    - echo "✅ All data removed. Run 'task dev:start' to start fresh"
+
+  dev:logs:
+    desc: View OpenEMR logs (follow mode)
+    cmds:
+    - docker compose logs -f openemr
+
+  dev:logs:errors:
+    desc: View OpenEMR error logs only
+    cmds:
+    - docker compose logs -f openemr | grep -i error
+
+  dev:port:
+    desc: Get assigned port for OpenEMR
+    cmds:
+    - echo "OpenEMR HTTP port:"
+    - docker compose port openemr 80
+    - echo ""
+    - echo "Access OpenEMR at http://localhost:[PORT]"
+    - echo "Login - admin / pass"
+
+  dev:shell:
+    desc: Access OpenEMR container shell
+    cmds:
+    - docker compose exec openemr bash
+
+  dev:status:
+    desc: Check Docker container status
+    cmds:
+    - docker compose ps
+
+  # === Module Management ===
+
+  module:install:
+    desc: Manually install module in OpenEMR (after registration)
+    cmds:
+    - echo "⚠️  Module installation must be done via OpenEMR web interface:"
+    - echo "   1. Go to Administration > Modules > Manage Modules"
+    - echo "   2. Find 'oce-module-sinch-conversations'"
+    - echo "   3. Click Register (if not registered)"
+    - echo "   4. Click Install"
+    - echo "   5. Click Enable"
+
+  module:cleanup:
+    desc: Drop all module database tables (for clean reinstall)
+    prompt: This will delete all module data. Continue?
+    cmds:
+    - docker compose exec -T mysql mariadb -u{{.DB_USER}} -p{{.DB_PASS}} {{.DB_NAME}} < cleanup.sql
+    - echo "✅ Module tables dropped. You can now reinstall the module."
+
+  module:tables:
+    desc: List all module database tables
+    cmds:
+    - docker compose exec mysql mariadb -u{{.DB_USER}} -p{{.DB_PASS}} -e "SELECT table_name FROM information_schema.tables WHERE table_schema='{{.DB_NAME}}' AND table_name LIKE 'oce_sinch%'" {{.DB_NAME}} 2>&1 | grep -v "Using a password"
+
+  module:data:
+    desc: Show counts of data in module tables
+    cmds:
+    - |
+      docker compose exec mysql mariadb -u{{.DB_USER}} -p{{.DB_PASS}} -e "
+      SELECT 'conversations' as table_name, COUNT(*) as count FROM oce_sinch_conversations
+      UNION ALL SELECT 'messages', COUNT(*) FROM oce_sinch_messages
+      UNION ALL SELECT 'contacts', COUNT(*) FROM oce_sinch_contacts
+      UNION ALL SELECT 'patient_consent', COUNT(*) FROM oce_sinch_patient_consent
+      UNION ALL SELECT 'templates', COUNT(*) FROM oce_sinch_message_templates
+      UNION ALL SELECT 'keywords', COUNT(*) FROM oce_sinch_keyword_responses
+      UNION ALL SELECT 'services', COUNT(*) FROM oce_sinch_services
+      " {{.DB_NAME}} 2>&1 | grep -v "Using a password"
+
+  # === Database Access ===
+
+  db:shell:
+    desc: Access MariaDB database shell
+    cmds:
+    - docker compose exec mysql mariadb -u{{.DB_USER}} -p{{.DB_PASS}} {{.DB_NAME}}
+
+  db:export:
+    desc: Export database to backup.sql
+    cmds:
+    - docker compose exec mysql mariadb-dump -u{{.DB_USER}} -p{{.DB_PASS}} {{.DB_NAME}} > backup.sql
+    - echo "✅ Database exported to backup.sql"
+
+  db:import:
+    desc: Import database from backup.sql
+    prompt: This will overwrite the current database. Continue?
+    cmds:
+    - docker compose exec -T mysql mariadb -u{{.DB_USER}} -p{{.DB_PASS}} {{.DB_NAME}} < backup.sql
+    - echo "✅ Database imported from backup.sql"
+
+  db:query:
+    desc: 'Run a SQL query (usage: task db:query -- "SELECT * FROM users LIMIT 5")'
+    cmds:
+    - docker compose exec mysql mariadb -u{{.DB_USER}} -p{{.DB_PASS}} -e "{{.CLI_ARGS}}" {{.DB_NAME}} 2>&1 | grep -v "Using a password"
+
+  # === Code Quality (delegates to Composer scripts) ===
+  # These tasks call Composer scripts directly on the host (no Docker needed).
+  # You can also run `composer phpcs`, `composer phpstan`, etc. directly.
+
+  check:
+    desc: Run all code quality checks (calls pre-commit run -a)
+    cmds:
+    - pre-commit run -a
+
+  check:phpcs:
+    desc: Run PHP CodeSniffer (calls composer phpcs)
+    cmds:
+    - composer phpcs
+
+  check:phpstan:
+    desc: Run PHPStan (calls composer phpstan)
+    cmds:
+    - composer phpstan
+
+  check:fix:
+    desc: Auto-fix code style (calls composer phpcbf)
+    cmds:
+    - composer phpcbf
+
+  # === Development Helpers ===
+  # Composer dependency management tasks (infrastructure, not code quality)
+
+  composer:install:
+    desc: Install composer dependencies
+    cmds:
+    - composer install
+    - echo "✅ Composer dependencies installed"
+
+  composer:update:
+    desc: Update composer dependencies
+    cmds:
+    - composer update
+    - echo "✅ Composer dependencies updated"
+
+  openemr:prebuild:
+    desc: Pre-build OpenEMR dependencies (speeds up first Docker start)
+    cmds:
+    - echo "Building OpenEMR dependencies..."
+    - cd vendor/openemr/openemr && composer install --no-dev
+    - cd vendor/openemr/openemr && npm install --legacy-peer-deps
+    - cd vendor/openemr/openemr && npm run build
+    - echo "✅ OpenEMR dependencies built"
+
+  git:clean:
+    desc: Run git clean (remove untracked files)
+    prompt: This will delete untracked files. Continue?
+    cmds:
+    - git clean -fd
+    - echo "✅ Untracked files removed"
+
+  # === Quick Workflows ===
+
+  setup:
+    desc: Complete setup (install deps, prebuild OpenEMR, start Docker)
+    cmds:
+    - task: composer:install
+    - task: openemr:prebuild
+    - task: dev:start
+    - task: dev:port
+
+  workflow:reinstall:
+    desc: Complete reinstall workflow (cleanup tables, instructions)
+    cmds:
+    - task: module:cleanup
+    - task: module:install
+
+  workflow:reset:
+    desc: Complete reset (stop, clean data, restart)
+    cmds:
+    - task: dev:reset
+    - task: dev:start
+    - echo ""
+    - echo "✅ Environment reset complete"
+    - task: dev:port

@@ -1,5 +1,12 @@
--- This file is executed when the module is uninstalled via the OpenEMR interface
-
+-- Manual cleanup script for the OpenCoreEMR Sinch Conversations Module
+--
+-- IMPORTANT: OpenEMR does not automatically execute this file during uninstall.
+-- You must run it manually if you need to reinstall the module cleanly.
+--
+-- Usage:
+--   docker compose exec -T mysql mariadb -uroot -proot openemr < cleanup.sql
+--   OR via phpMyAdmin / MySQL client
+--
 -- Drop tables in reverse dependency order
 DROP TABLE IF EXISTS `oce_sinch_messages`;
 DROP TABLE IF EXISTS `oce_sinch_conversations`;
