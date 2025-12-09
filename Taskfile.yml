@@ -193,6 +193,13 @@ tasks:
     - composer update
     - echo "✅ Composer dependencies updated"
 
+  docs:sinch:
+    desc: Fetch latest Sinch API documentation for AI agents
+    cmds:
+    - mkdir -p .local
+    - curl -fsSL https://developers.sinch.com/llms.txt -o .local/llms.txt
+    - echo "✅ Sinch API docs updated in .local/llms.txt"
+
   openemr:prebuild:
     desc: Pre-build OpenEMR dependencies (speeds up first Docker start)
     cmds:

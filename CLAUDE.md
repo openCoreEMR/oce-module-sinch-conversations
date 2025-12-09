@@ -678,6 +678,28 @@ private function redirect(Request $request): RedirectResponse
 - This blocks the iframe with: "Firefox will not allow Firefox to display the page if another site has embedded it"
 - Solution: Always use `$request->server->get('SCRIPT_NAME')` for redirects
 
+## Sinch API Documentation
+
+### For AI Agents
+
+When working with Sinch APIs (Conversations, SMS, etc.), reference the official documentation:
+
+1. **Check local copy first**: `.local/llms.txt` (cached copy of Sinch API docs)
+2. **Fetch latest if needed**: https://developers.sinch.com/llms.txt
+
+The `llms.txt` file contains comprehensive API documentation for:
+- Sinch Conversations API
+- Message formats and types
+- Webhook events
+- Authentication
+- Error handling
+
+**When to use:**
+- Implementing API integrations
+- Understanding webhook payloads
+- Debugging API responses
+- Adding new Sinch features
+
 ## Development Tooling: Taskfile vs Composer Scripts
 
 ### Separation of Concerns

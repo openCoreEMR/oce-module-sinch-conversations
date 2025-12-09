@@ -587,6 +587,14 @@ Before considering work complete:
 
 ---
 
+## Sinch API Documentation
+
+When suggesting code for Sinch API integrations:
+1. **Check `.local/llms.txt` first** - Local cached copy of Sinch API documentation
+2. **Fetch from https://developers.sinch.com/llms.txt** if local copy unavailable
+
+The llms.txt file contains complete API documentation for Sinch Conversations, webhooks, message formats, and authentication.
+
 ## Development Tooling: Taskfile vs Composer Scripts
 
 This module uses **both Taskfile and Composer scripts** with distinct responsibilities:
