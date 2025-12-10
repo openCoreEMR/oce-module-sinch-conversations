@@ -16,9 +16,14 @@
     <div class="container-fluid">
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h2>{{ 'Message Inbox'|xlt }}</h2>
-            <a href="?action=refresh&csrf_token={{ csrf_token|attr }}" class="btn btn-primary">
-                {{ 'Refresh Messages'|xlt }}
-            </a>
+            <div class="d-flex gap-2">
+                <a href="settings.php" class="btn btn-secondary">
+                    {{ 'Settings'|xlt }}
+                </a>
+                <a href="?action=refresh&csrf_token={{ csrf_token|attr }}" class="btn btn-primary">
+                    {{ 'Refresh Messages'|xlt }}
+                </a>
+            </div>
         </div>
 
         {% if success_message %}

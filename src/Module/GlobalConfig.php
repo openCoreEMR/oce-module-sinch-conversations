@@ -77,6 +77,11 @@ class GlobalConfig
         return '';
     }
 
+    public function getSinchApiSecret(): string
+    {
+        return $this->getApiSecret();
+    }
+
     public function getRegion(): string
     {
         return $this->globals->getString(self::CONFIG_OPTION_REGION, 'us');

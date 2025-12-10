@@ -14,6 +14,7 @@ namespace OpenCoreEMR\Modules\SinchConversations\Controller;
 
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Service\ConfigService;
+use OpenCoreEMR\Modules\SinchConversations\Service\TemplateSyncService;
 use OpenCoreEMR\Modules\SinchConversations\SessionAccessor;
 use OpenCoreEMR\Sinch\Conversation\Client\ConversationApiClient;
 use OpenCoreEMR\Sinch\Conversation\Exception\AccessDeniedException;
@@ -34,6 +35,7 @@ class SettingsController
         private readonly GlobalConfig $config,
         private readonly ConfigService $configService,
         private readonly ConversationApiClient $apiClient,
+        private readonly TemplateSyncService $templateSyncService,
         private readonly SessionAccessor $session,
         private readonly Environment $twig
     ) {
@@ -53,6 +55,8 @@ class SettingsController
         return match ($action) {
             'save' => $this->handleSave($request),
             'test' => $this->handleTest($request),
+            'test-sms' => $this->handleTestSms($request),
+            'sync-templates' => $this->handleSyncTemplates($request),
             'show', 'default' => $this->showSettings(),
             default => $this->showSettings(),
         };
@@ -173,7 +177,9 @@ class SettingsController
             }
 
             // Test the connection
+            $this->logger->info("Testing Sinch API connection");
             $this->apiClient->testConnection();
+            $this->logger->info("Sinch API connection test successful");
 
             $result = [
                 'success' => true,
@@ -185,6 +191,146 @@ class SettingsController
             return new JsonResponse([
                 'success' => false,
                 'message' => 'Connection failed: ' . $e->getMessage(),
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * Send test SMS
+     *
+     * @param Request $request
+     * @return Response
+     */
+    private function handleTestSms(Request $request): Response
+    {
+        if (!$request->isMethod('POST')) {
+            return new JsonResponse([
+                'success' => false,
+                'message' => 'Invalid request method',
+            ], Response::HTTP_METHOD_NOT_ALLOWED);
+        }
+
+        if (!CsrfUtils::verifyCsrfToken($request->request->get('csrf_token', ''))) {
+            throw new AccessDeniedException("CSRF token verification failed");
+        }
+
+        $phoneNumber = (string)$request->request->get('phone_number', '');
+        $message = (string)$request->request->get('message', '');
+
+        // Validate inputs
+        if (empty($phoneNumber)) {
+            return new JsonResponse([
+                'success' => false,
+                'message' => 'Phone number is required',
+            ], Response::HTTP_BAD_REQUEST);
+        }
+
+        if (empty($message)) {
+            return new JsonResponse([
+                'success' => false,
+                'message' => 'Message is required',
+            ], Response::HTTP_BAD_REQUEST);
+        }
+
+        // Validate configuration
+        if (
+            empty($this->config->getSinchProjectId()) ||
+            empty($this->config->getSinchAppId()) ||
+            empty($this->config->getSinchApiKey())
+        ) {
+            return new JsonResponse([
+                'success' => false,
+                'message' => 'Sinch API is not fully configured. Please save your settings first.',
+            ], Response::HTTP_BAD_REQUEST);
+        }
+
+        try {
+            // Create a temporary contact and send message
+            $contactResponse = $this->apiClient->createContact($phoneNumber, 'SMS');
+            $contactId = $contactResponse['id'] ?? '';
+
+            if (empty($contactId)) {
+                throw new ValidationException('Failed to create contact');
+            }
+
+            // Send the test message
+            $this->apiClient->sendMessage($contactId, $message, [
+                'channel' => 'SMS',
+            ]);
+
+            $this->logger->info("Test SMS sent successfully to {$phoneNumber}");
+
+            return new JsonResponse([
+                'success' => true,
+                'message' => 'Test SMS sent successfully to ' . $phoneNumber,
+            ]);
+        } catch (\Throwable $e) {
+            $this->logger->error("Failed to send test SMS: " . $e->getMessage());
+            return new JsonResponse([
+                'success' => false,
+                'message' => 'Failed to send SMS: ' . $e->getMessage(),
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * Sync templates to Sinch
+     *
+     * @param Request $request
+     * @return Response
+     */
+    private function handleSyncTemplates(Request $request): Response
+    {
+        if (!CsrfUtils::verifyCsrfToken($request->query->get('csrf_token', ''))) {
+            throw new AccessDeniedException("CSRF token verification failed");
+        }
+
+        // Validate configuration is complete
+        if (
+            empty($this->config->getSinchProjectId()) ||
+            empty($this->config->getSinchAppId()) ||
+            empty($this->config->getSinchApiKey()) ||
+            empty($this->config->getSinchApiSecret())
+        ) {
+            return new JsonResponse([
+                'success' => false,
+                'message' => 'Sinch API credentials are incomplete. ' .
+                    'Please configure Project ID, App ID, API Key, and API Secret.',
+            ], Response::HTTP_BAD_REQUEST);
+        }
+
+        try {
+            $this->logger->info("Starting template sync");
+            $results = $this->templateSyncService->syncAllTemplates();
+
+            $message = sprintf(
+                'Template sync completed: %d created, %d updated, %d failed out of %d total',
+                $results['created'],
+                $results['updated'],
+                $results['failed'],
+                $results['total']
+            );
+
+            if ($results['failed'] > 0) {
+                $this->logger->warning($message, $results);
+                return new JsonResponse([
+                    'success' => false,
+                    'message' => $message,
+                    'details' => $results,
+                ], Response::HTTP_PARTIAL_CONTENT);
+            }
+
+            $this->logger->info($message);
+            return new JsonResponse([
+                'success' => true,
+                'message' => $message,
+                'details' => $results,
+            ]);
+        } catch (\Throwable $e) {
+            $this->logger->error("Template sync failed: " . $e->getMessage());
+            return new JsonResponse([
+                'success' => false,
+                'message' => 'Template sync failed: ' . $e->getMessage(),
             ], Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }

@@ -64,17 +64,17 @@ class Bootstrap
             GlobalsInitializedEvent::EVENT_HANDLE,
             function (GlobalsInitializedEvent $event): void {
                 $event->getGlobalsService()->createSection(
-                    'Conversations'
+                    'OpenCoreEMR Sinch Conversations'
                 );
 
                 $setting = new GlobalSetting(
-                    xlt('Enable Sinch Conversations Module'),
+                    xlt('Enable OpenCoreEMR Sinch Conversations Module'),
                     'bool',
                     '0',
-                    xlt('Enable or disable the Sinch Conversations integration for patient messaging')
+                    xlt('Enable or disable the OpenCoreEMR Sinch Conversations integration for patient messaging')
                 );
                 $event->getGlobalsService()->appendToSection(
-                    'Conversations',
+                    'OpenCoreEMR Sinch Conversations',
                     GlobalConfig::CONFIG_OPTION_ENABLED,
                     $setting
                 );
@@ -86,7 +86,7 @@ class Bootstrap
                     xlt('Your Sinch project ID from the Sinch dashboard')
                 );
                 $event->getGlobalsService()->appendToSection(
-                    'Conversations',
+                    'OpenCoreEMR Sinch Conversations',
                     GlobalConfig::CONFIG_OPTION_PROJECT_ID,
                     $setting
                 );
@@ -98,7 +98,7 @@ class Bootstrap
                     xlt('Your Sinch app ID for the Conversations API')
                 );
                 $event->getGlobalsService()->appendToSection(
-                    'Conversations',
+                    'OpenCoreEMR Sinch Conversations',
                     GlobalConfig::CONFIG_OPTION_APP_ID,
                     $setting
                 );
@@ -110,7 +110,7 @@ class Bootstrap
                     xlt('Your Sinch API key')
                 );
                 $event->getGlobalsService()->appendToSection(
-                    'Conversations',
+                    'OpenCoreEMR Sinch Conversations',
                     GlobalConfig::CONFIG_OPTION_API_KEY,
                     $setting
                 );
@@ -122,7 +122,7 @@ class Bootstrap
                     xlt('Your Sinch API secret (will be encrypted)')
                 );
                 $event->getGlobalsService()->appendToSection(
-                    'Conversations',
+                    'OpenCoreEMR Sinch Conversations',
                     GlobalConfig::CONFIG_OPTION_API_SECRET,
                     $setting
                 );
@@ -134,7 +134,7 @@ class Bootstrap
                     xlt('Enter your Sinch API region (us or eu)')
                 );
                 $event->getGlobalsService()->appendToSection(
-                    'Conversations',
+                    'OpenCoreEMR Sinch Conversations',
                     GlobalConfig::CONFIG_OPTION_REGION,
                     $setting
                 );
@@ -146,7 +146,7 @@ class Bootstrap
                     xlt('Default messaging channel (SMS, WHATSAPP, or RCS)')
                 );
                 $event->getGlobalsService()->appendToSection(
-                    'Conversations',
+                    'OpenCoreEMR Sinch Conversations',
                     GlobalConfig::CONFIG_OPTION_DEFAULT_CHANNEL,
                     $setting
                 );
@@ -158,7 +158,7 @@ class Bootstrap
                     xlt('Clinic name to appear in messages (e.g., "Example Clinic")')
                 );
                 $event->getGlobalsService()->appendToSection(
-                    'Conversations',
+                    'OpenCoreEMR Sinch Conversations',
                     GlobalConfig::CONFIG_OPTION_CLINIC_NAME,
                     $setting
                 );
@@ -170,7 +170,7 @@ class Bootstrap
                     xlt('Clinic phone number for message templates (e.g., "650-123-4567")')
                 );
                 $event->getGlobalsService()->appendToSection(
-                    'Conversations',
+                    'OpenCoreEMR Sinch Conversations',
                     GlobalConfig::CONFIG_OPTION_CLINIC_PHONE,
                     $setting
                 );
@@ -189,7 +189,7 @@ class Bootstrap
                 $menuItem->requirement = 0;
                 $menuItem->target = 'mod';
                 $menuItem->menu_id = 'oce_sinch_conversations';
-                $menuItem->label = xl('Conversations');
+                $menuItem->label = xl('OpenCoreEMR Sinch Conversations');
                 $menuItem->url = '/interface/modules/custom_modules/' . self::MODULE_NAME . '/public/index.php';
                 $menuItem->children = [];
                 $menuItem->acl_req = [];
@@ -306,6 +306,17 @@ class Bootstrap
     }
 
     /**
+     * Get Template Sync Service
+     */
+    public function getTemplateSyncService(): Service\TemplateSyncService
+    {
+        return new Service\TemplateSyncService(
+            $this->globalsConfig,
+            $this->getConversationApiClient()
+        );
+    }
+
+    /**
      * Get Settings Controller
      */
     public function getSettingsController(): Controller\SettingsController
@@ -314,6 +325,7 @@ class Bootstrap
             $this->globalsConfig,
             $this->getConfigService(),
             $this->getConversationApiClient(),
+            $this->getTemplateSyncService(),
             $this->session,
             $this->twig
         );

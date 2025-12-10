@@ -101,12 +101,14 @@ CREATE TABLE IF NOT EXISTS `oce_sinch_message_templates` (
   `required_variables` JSON NOT NULL COMMENT 'Array of required variable names',
   `compliance_confidence` INT NOT NULL DEFAULT 95 COMMENT 'Compliance confidence score (90-100)',
   `sinch_approved` BOOLEAN DEFAULT TRUE COMMENT 'Whether approved by Sinch compliance',
+  `sinch_template_id` VARCHAR(255) DEFAULT NULL COMMENT 'Sinch template ID from Template Management API',
   `active` BOOLEAN DEFAULT TRUE COMMENT 'Whether template is active',
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT 'When this template was created',
   `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'When this record was last updated',
   INDEX `idx_template_key` (`template_key`),
   INDEX `idx_category` (`category`),
   INDEX `idx_communication_type` (`communication_type`),
+  INDEX `idx_sinch_template_id` (`sinch_template_id`),
   INDEX `idx_active` (`active`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

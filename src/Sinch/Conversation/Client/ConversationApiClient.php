@@ -23,6 +23,7 @@ class ConversationApiClient
     private const BASE_URL = 'https://us.conversation.api.sinch.com';
     private readonly Client $httpClient;
     private readonly SystemLogger $logger;
+    private ?string $cachedAccessToken = null;
 
     public function __construct(private readonly GlobalConfig $config)
     {
@@ -255,16 +256,62 @@ class ConversationApiClient
 
         try {
             // Make a lightweight request to verify credentials
+            $headers = $this->getHeaders();
+            $this->logger->debug(
+                "Making API test request to Sinch",
+                [
+                    'project_id' => $projectId,
+                    'endpoint' => "/v1/projects/{$projectId}/messages",
+                    'headers' => array_merge(
+                        $headers,
+                        ['Authorization' => 'Bearer ***'] // Mask the token
+                    ),
+                    'query' => ['page_size' => 1],
+                ]
+            );
+
             $response = $this->httpClient->get(
                 "/v1/projects/{$projectId}/messages",
                 [
-                    'headers' => $this->getHeaders(),
+                    'headers' => $headers,
                     'query' => ['page_size' => 1],
                 ]
             );
 
             $statusCode = $response->getStatusCode();
-            return $statusCode >= 200 && $statusCode < 300;
+            $body = (string)$response->getBody();
+            $responseHeaders = $response->getHeaders();
+
+            $this->logger->debug(
+                "Sinch API test response received",
+                [
+                    'status_code' => $statusCode,
+                    'headers' => $responseHeaders,
+                    'body' => $body,
+                ]
+            );
+
+            if ($statusCode >= 200 && $statusCode < 300) {
+                return true;
+            }
+
+            // Handle error responses
+            $errorData = json_decode($body, true);
+            $errorMessage = $errorData['error']['message'] ?? 'Authentication failed';
+
+            // Check WWW-Authenticate header for additional error details
+            $wwwAuth = $responseHeaders['www-authenticate'][0] ?? '';
+            if (!empty($wwwAuth) && str_contains($wwwAuth, 'error_description=')) {
+                // Extract error description from WWW-Authenticate header
+                if (preg_match('/error_description="([^"]+)"/', $wwwAuth, $matches)) {
+                    $errorMessage = $matches[1];
+                }
+            }
+
+            throw new ApiException(
+                "API authentication failed: {$errorMessage}",
+                $statusCode
+            );
         } catch (GuzzleException $e) {
             $this->logger->error("Sinch API connection test failed: " . $e->getMessage());
             throw new ApiException("Connection test failed: " . $e->getMessage());
@@ -272,15 +319,204 @@ class ConversationApiClient
     }
 
     /**
-     * Get authorization headers
+     * Get OAuth2 access token
+     *
+     * @return string Access token
+     * @throws ApiException
+     */
+    public function getOAuth2Token(): string
+    {
+        $region = $this->config->getSinchRegion();
+        $keyId = $this->config->getSinchApiKey();
+        $keySecret = $this->config->getSinchApiSecret();
+
+        if (empty($keyId) || empty($keySecret)) {
+            throw new ApiException("API Key ID and Secret are required for OAuth2 authentication");
+        }
+
+        $authClient = new Client([
+            'base_uri' => "https://{$region}.auth.sinch.com",
+            'timeout' => 30,
+            'http_errors' => false,
+        ]);
+
+        try {
+            $this->logger->debug("Requesting OAuth2 token from Sinch");
+
+            $response = $authClient->post('/oauth2/token', [
+                'form_params' => [
+                    'grant_type' => 'client_credentials',
+                ],
+                'auth' => [$keyId, $keySecret],
+            ]);
+
+            $statusCode = $response->getStatusCode();
+            $body = (string)$response->getBody();
+
+            if ($statusCode !== 200) {
+                $error = json_decode($body, true);
+                $errorMessage = $error['error_description'] ?? $error['error'] ?? 'Failed to get OAuth2 token';
+                throw new ApiException("OAuth2 authentication failed: {$errorMessage}", $statusCode);
+            }
+
+            $data = json_decode($body, true);
+            $accessToken = $data['access_token'] ?? '';
+
+            if (empty($accessToken)) {
+                throw new ApiException("No access token in OAuth2 response");
+            }
+
+            $this->logger->debug("OAuth2 token obtained successfully");
+            return $accessToken;
+        } catch (GuzzleException $e) {
+            $this->logger->error("OAuth2 request failed: " . $e->getMessage());
+            throw new ApiException("OAuth2 request failed: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Create a template in Sinch Template Management API
+     *
+     * @param array<string, mixed> $templateData Template definition
+     * @return array<string, mixed> Created template with ID
+     * @throws ApiException
+     */
+    public function createTemplate(array $templateData): array
+    {
+        $projectId = $this->config->getSinchProjectId();
+        $region = $this->config->getSinchRegion();
+        $accessToken = $this->getOAuth2Token();
+
+        $templateClient = new Client([
+            'base_uri' => "https://{$region}.template.api.sinch.com",
+            'timeout' => 30,
+            'http_errors' => false,
+        ]);
+
+        try {
+            $this->logger->debug(
+                "Creating template in Sinch",
+                ['template_key' => $templateData['template_key'] ?? 'unknown']
+            );
+
+            $response = $templateClient->post(
+                "/v2/projects/{$projectId}/templates",
+                [
+                    'headers' => [
+                        'Content-Type' => 'application/json',
+                        'Authorization' => "Bearer {$accessToken}",
+                    ],
+                    'json' => $this->formatTemplateForSinch($templateData),
+                ]
+            );
+
+            return $this->handleResponse($response);
+        } catch (GuzzleException $e) {
+            $this->logger->error("Failed to create template: " . $e->getMessage());
+            throw new ApiException("Failed to create template: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * List templates from Sinch
+     *
+     * @return array<int, array<string, mixed>>
+     * @throws ApiException
+     */
+    public function listTemplates(): array
+    {
+        $projectId = $this->config->getSinchProjectId();
+        $region = $this->config->getSinchRegion();
+        $accessToken = $this->getOAuth2Token();
+
+        $templateClient = new Client([
+            'base_uri' => "https://{$region}.template.api.sinch.com",
+            'timeout' => 30,
+            'http_errors' => false,
+        ]);
+
+        try {
+            $response = $templateClient->get(
+                "/v2/projects/{$projectId}/templates",
+                [
+                    'headers' => [
+                        'Content-Type' => 'application/json',
+                        'Authorization' => "Bearer {$accessToken}",
+                    ],
+                ]
+            );
+
+            $data = $this->handleResponse($response);
+            return $data['templates'] ?? [];
+        } catch (GuzzleException $e) {
+            $this->logger->error("Failed to list templates: " . $e->getMessage());
+            throw new ApiException("Failed to list templates: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Format template data for Sinch API v2
+     *
+     * @param array<string, mixed> $templateData
+     * @return array<string, mixed>
+     */
+    private function formatTemplateForSinch(array $templateData): array
+    {
+        // Extract variables from template body
+        $variables = [];
+        foreach ($templateData['required_variables'] ?? [] as $varName) {
+            $variables[] = [
+                'key' => $varName,
+                'preview_value' => ucwords(str_replace('_', ' ', $varName)),
+            ];
+        }
+
+        return [
+            'description' => $templateData['description'] ?? $templateData['template_name'],
+            'default_translation' => 'en-US',
+            'translations' => [
+                [
+                    'language_code' => 'en-US',
+                    'version' => '1',
+                    'variables' => $variables,
+                    'content' => [
+                        'text_message' => [
+                            'text' => $this->convertTemplateVariables($templateData['body']),
+                        ],
+                    ],
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * Convert {{ variable }} syntax to {{variable}} (Sinch format)
+     *
+     * @param string $body
+     * @return string
+     */
+    private function convertTemplateVariables(string $body): string
+    {
+        // Convert {{ variable_name }} to {{variable_name}}
+        return preg_replace('/\{\{\s*(\w+)\s*\}\}/', '{{$1}}', $body) ?? $body;
+    }
+
+    /**
+     * Get authorization headers with OAuth2 token
      *
      * @return array<string, string>
+     * @throws ApiException
      */
     private function getHeaders(): array
     {
+        // Get OAuth2 token if not cached
+        if ($this->cachedAccessToken === null) {
+            $this->cachedAccessToken = $this->getOAuth2Token();
+        }
+
         return [
             'Content-Type' => 'application/json',
-            'Authorization' => 'Bearer ' . $this->config->getSinchApiKey(),
+            'Authorization' => 'Bearer ' . $this->cachedAccessToken,
         ];
     }
 

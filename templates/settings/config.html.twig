@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ 'Sinch Conversations Settings'|xlt }}</title>
+    <title>{{ 'OpenCoreEMR Sinch Conversations Settings'|xlt }}</title>
     <link rel="stylesheet" href="{{ webroot }}/public/assets/bootstrap/dist/css/bootstrap.min.css">
     <style>
         body {
@@ -49,7 +49,7 @@
 </head>
 <body>
     <div class="settings-container">
-        <h1 class="mb-4">{{ 'Sinch Conversations Settings'|xlt }}</h1>
+        <h1 class="mb-4">{{ 'OpenCoreEMR Sinch Conversations Settings'|xlt }}</h1>
 
         {% if success_message %}
             <div class="alert alert-success alert-dismissible fade show" role="alert">
@@ -60,7 +60,7 @@
 
         <div class="alert alert-info" role="alert">
             <strong>{{ 'Note:'|xlt }}</strong>
-            {{ 'You can also configure these settings via Administration > Globals > Conversations'|xlt }}
+            {{ 'You can also configure these settings via Administration > Globals > OpenCoreEMR Sinch Conversations'|xlt }}
         </div>
 
         <form method="post" action="?action=save">
@@ -194,11 +194,63 @@
                 <button type="button" class="btn btn-secondary" id="test-connection-btn">
                     {{ 'Test API Connection'|xlt }}
                 </button>
+                <button type="button" class="btn btn-info" id="sync-templates-btn">
+                    {{ 'Sync Templates to Sinch'|xlt }}
+                </button>
             </div>
         </form>
 
         <div id="test-result" class="mt-3" style="display: none;">
             <div class="alert" role="alert" id="test-alert"></div>
+        </div>
+
+        <div id="sync-result" class="mt-3" style="display: none;">
+            <div class="alert" role="alert" id="sync-alert"></div>
+        </div>
+
+        {# Test SMS Section #}
+        <div class="section-header mt-4">
+            <h3>{{ 'Send Test SMS'|xlt }}</h3>
+            <p class="help-text">
+                {{ 'Send a test message to verify your Sinch integration is working correctly.'|xlt }}
+            </p>
+        </div>
+
+        <form id="test-sms-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token|attr }}">
+
+            <div class="mb-3">
+                <label for="test_phone" class="form-label">{{ 'Phone Number'|xlt }} <span class="text-danger">*</span></label>
+                <input
+                    type="tel"
+                    class="form-control"
+                    id="test_phone"
+                    name="phone_number"
+                    placeholder="+1234567890"
+                    required
+                >
+                <div class="help-text">{{ 'Enter phone number in E.164 format (e.g., +1234567890)'|xlt }}</div>
+            </div>
+
+            <div class="mb-3">
+                <label for="test_message" class="form-label">{{ 'Test Message'|xlt }} <span class="text-danger">*</span></label>
+                <textarea
+                    class="form-control"
+                    id="test_message"
+                    name="message"
+                    rows="3"
+                    required
+                >{{ 'This is a test message from OpenCoreEMR Sinch Conversations.'|xlt }}</textarea>
+                <div class="help-text">{{ 'SMS messages are limited to 160 characters per segment'|xlt }}</div>
+            </div>
+
+            <button type="submit" class="btn btn-primary" id="send-test-sms-btn">
+                {{ 'Send Test SMS'|xlt }}
+            </button>
+        </form>
+
+        <div id="test-sms-result" class="mt-3" style="display: none;">
+            <div class="alert" role="alert" id="test-sms-alert"></div>
         </div>
     </div>
 
@@ -210,7 +262,7 @@
             const alertDiv = document.getElementById('test-alert');
 
             btn.disabled = true;
-            btn.textContent = '{{ 'Testing...'|xlj }}';
+            btn.textContent = {{ 'Testing...'|xlj }};
 
             const csrfToken = document.querySelector('input[name="csrf_token"]').value;
 
@@ -228,7 +280,81 @@
                 })
                 .finally(() => {
                     btn.disabled = false;
-                    btn.textContent = '{{ 'Test API Connection'|xlj }}';
+                    btn.textContent = {{ 'Test API Connection'|xlj }};
+                });
+        });
+
+        document.getElementById('sync-templates-btn').addEventListener('click', function() {
+            const btn = this;
+            const resultDiv = document.getElementById('sync-result');
+            const alertDiv = document.getElementById('sync-alert');
+
+            btn.disabled = true;
+            btn.textContent = {{ 'Syncing...'|xlj }};
+
+            const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+
+            fetch('?action=sync-templates&csrf_token=' + encodeURIComponent(csrfToken))
+                .then(response => response.json())
+                .then(data => {
+                    resultDiv.style.display = 'block';
+                    alertDiv.className = 'alert ' + (data.success ? 'alert-success' : 'alert-warning');
+                    alertDiv.textContent = data.message;
+
+                    // Show details if available
+                    if (data.details && data.details.errors && data.details.errors.length > 0) {
+                        let errorHtml = '<hr><strong>Errors:</strong><ul>';
+                        data.details.errors.forEach(error => {
+                            errorHtml += '<li>' + error.template_key + ': ' + error.error + '</li>';
+                        });
+                        errorHtml += '</ul>';
+                        alertDiv.innerHTML = data.message + errorHtml;
+                    }
+                })
+                .catch(error => {
+                    resultDiv.style.display = 'block';
+                    alertDiv.className = 'alert alert-danger';
+                    alertDiv.textContent = '{{ 'Template sync failed: '|xlj }}' + error.message;
+                })
+                .finally(() => {
+                    btn.disabled = false;
+                    btn.textContent = {{ 'Sync Templates to Sinch'|xlj }};
+                });
+        });
+
+        document.getElementById('test-sms-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const btn = document.getElementById('send-test-sms-btn');
+            const resultDiv = document.getElementById('test-sms-result');
+            const alertDiv = document.getElementById('test-sms-alert');
+            const formData = new FormData(this);
+
+            btn.disabled = true;
+            btn.textContent = {{ 'Sending...'|xlj }};
+
+            fetch('?action=test-sms', {
+                method: 'POST',
+                body: formData
+            })
+                .then(response => response.json())
+                .then(data => {
+                    resultDiv.style.display = 'block';
+                    alertDiv.className = 'alert ' + (data.success ? 'alert-success' : 'alert-danger');
+                    alertDiv.textContent = data.message;
+
+                    if (data.success) {
+                        document.getElementById('test-sms-form').reset();
+                    }
+                })
+                .catch(error => {
+                    resultDiv.style.display = 'block';
+                    alertDiv.className = 'alert alert-danger';
+                    alertDiv.textContent = '{{ 'Failed to send test SMS: '|xlj }}' + error.message;
+                })
+                .finally(() => {
+                    btn.disabled = false;
+                    btn.textContent = {{ 'Send Test SMS'|xlj }};
                 });
         });
     </script>
