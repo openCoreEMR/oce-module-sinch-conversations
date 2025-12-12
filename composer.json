@@ -44,7 +44,7 @@
     "openemr/openemr": ">=7.0.3.4 || 7.0.4.x-dev || dev-master",
     "phpstan/phpstan": "^1.10",
     "rector/rector": "^1.0",
-    "squizlabs/php_codesniffer": "^3.0"
+    "squizlabs/php_codesniffer": "^4.0"
   },
   "repositories": [
     {
