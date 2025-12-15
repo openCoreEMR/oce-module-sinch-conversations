@@ -90,6 +90,24 @@ if (!$isConfigured && !$databaseExists) {
     require_once '/var/www/localhost/htdocs/openemr/vendor/autoload.php';
     require_once '/var/www/localhost/htdocs/openemr/library/classes/Installer.class.php';
 
+    // CRITICAL: Pre-populate $sqlconf global variable for GACL initialization
+    // The install_gacl() method (called by quick_install) needs this to exist
+    // even though write_configuration_file() creates sqlconf.php, it doesn't require it
+    global $sqlconf, $disable_utf8_flag;
+    $disable_utf8_flag = false;
+    $sqlconf = [
+        'host' => $installSettings['server'],
+        'port' => $installSettings['port'],
+        'login' => $installSettings['login'],
+        'pass' => $installSettings['pass'],
+        'dbase' => $installSettings['dbname'],
+        'db_encoding' => 'utf8mb4',
+    ];
+
+    // Set required globals for installer
+    $GLOBALS['OE_SITES_BASE'] = '/var/www/localhost/htdocs/openemr/sites';
+    $GLOBALS['OE_SITE_DIR'] = $GLOBALS['OE_SITES_BASE'] . '/default';
+
     // Run the installer
     $installer = new Installer($installSettings);
     if (!$installer->quick_install()) {

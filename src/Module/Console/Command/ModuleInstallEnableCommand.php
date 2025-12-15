@@ -1,0 +1,64 @@
+<?php
+
+/**
+ * Command to register, install, and enable an OpenEMR module in one step
+ *
+ * @package   OpenEMR
+ * @link      http://www.open-emr.org
+ * @author    Michael A. Smith <michael@opencoreemr.com>
+ * @copyright Copyright (c) 2026 OpenCoreEMR Inc <https://opencoreemr.com/>
+ * @license   https://github.com/openemr/openemr/blob/master/LICENSE GNU General Public License 3
+ */
+
+namespace OpenCoreEMR\Modules\SinchConversations\Console\Command;
+
+use Symfony\Component\Console\Attribute\AsCommand;
+use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Input\InputArgument;
+use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Output\OutputInterface;
+
+#[AsCommand(
+    name: 'module:install-enable',
+    description: 'Register, install SQL, and enable a module in one step'
+)]
+class ModuleInstallEnableCommand extends AbstractModuleCommand
+{
+    protected function configure(): void
+    {
+        parent::configure();
+
+        $this->addArgument(
+            'module',
+            InputArgument::REQUIRED,
+            'Module directory name (e.g., oce-module-sinch-conversations)'
+        );
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        if (!$this->bootstrapOpenEmr($input, $output)) {
+            return Command::FAILURE;
+        }
+
+        $moduleName = $this->getModuleName($input);
+        $installer = $this->getInstaller();
+
+        try {
+            $output->writeln('<info>Running full module installation...</info>');
+            $output->writeln('');
+
+            $installer->register($moduleName);
+            $installer->install($moduleName);
+            $installer->enable($moduleName);
+
+            $output->writeln('');
+            $output->writeln('<info>Module installation complete!</info>');
+
+            return Command::SUCCESS;
+        } catch (\Throwable $e) {
+            $output->writeln('<error>Error: ' . $e->getMessage() . '</error>');
+            return Command::FAILURE;
+        }
+    }
+}

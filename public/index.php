@@ -15,21 +15,25 @@ require_once __DIR__ . '/../../../../globals.php';
 use OpenCoreEMR\Modules\SinchConversations\Bootstrap;
 use OpenCoreEMR\Modules\SinchConversations\GlobalsAccessor;
 use OpenCoreEMR\Sinch\Conversation\Exception\ExceptionInterface;
+use OpenEMR\Common\Logging\SystemLogger;
 use Symfony\Component\HttpFoundation\Response;
 
+$logger = new SystemLogger();
 $globalsAccessor = new GlobalsAccessor();
+
+/** @var \OpenEMR\Core\Kernel $kernel */
 $kernel = $globalsAccessor->get('kernel');
 $bootstrap = new Bootstrap($kernel->getEventDispatcher(), $kernel, $globalsAccessor);
 
 $controller = $bootstrap->getInboxController();
 
-$action = $_GET['action'] ?? $_POST['action'] ?? 'list';
+$action = (string)($_GET['action'] ?? $_POST['action'] ?? 'list');
 
 try {
     $response = $controller->dispatch($action);
     $response->send();
 } catch (ExceptionInterface $e) {
-    error_log("Sinch Conversations error: " . $e->getMessage());
+    $logger->error("Sinch Conversations error: " . $e->getMessage());
 
     $response = new Response(
         "Error: " . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8'),
@@ -37,7 +41,7 @@ try {
     );
     $response->send();
 } catch (\Throwable $e) {
-    error_log("Unexpected error in Sinch Conversations: " . $e->getMessage());
+    $logger->error("Unexpected error in Sinch Conversations: " . $e->getMessage());
 
     $response = new Response(
         "Error: An unexpected error occurred",

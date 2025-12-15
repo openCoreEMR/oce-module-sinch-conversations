@@ -15,3 +15,9 @@ Thumbs.db
 # Module specific
 *.log
 .local
+.env
+
+# PHPUnit
+.phpunit.cache/
+htmlcov/
+coverage-report/

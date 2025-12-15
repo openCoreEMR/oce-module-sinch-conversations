@@ -16,8 +16,10 @@ namespace OpenCoreEMR\Modules\SinchConversations;
  * Provides centralized access to OpenEMR globals.
  * This class serves as a single point of abstraction for globals access,
  * making it easier to update or refactor in the future.
+ *
+ * @internal Use ConfigFactory::createConfigAccessor() instead of instantiating directly
  */
-class GlobalsAccessor
+class GlobalsAccessor implements ConfigAccessorInterface
 {
     /**
      * Get a value from globals
@@ -49,7 +51,10 @@ class GlobalsAccessor
     public function getString(string $key, string $default = ''): string
     {
         $value = $this->get($key, $default);
-        return is_string($value) ? $value : (string)$value;
+        if (is_string($value)) {
+            return $value;
+        }
+        return is_scalar($value) || $value === null ? (string)$value : $default;
     }
 
     /**
@@ -71,7 +76,10 @@ class GlobalsAccessor
     public function getInt(string $key, int $default = 0): int
     {
         $value = $this->get($key, $default);
-        return is_int($value) ? $value : (int)$value;
+        if (is_int($value)) {
+            return $value;
+        }
+        return is_numeric($value) ? (int)$value : $default;
     }
 
     /**

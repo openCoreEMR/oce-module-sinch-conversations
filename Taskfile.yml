@@ -62,6 +62,19 @@ tasks:
     - docker compose down -v
     - echo "✅ All data removed. Run 'task dev:start' to start fresh"
 
+  dev:purge:
+    desc: Stop and remove all containers, volumes, and orphans
+    prompt: This will DELETE all Docker containers, volumes, and orphans. Continue?
+    cmds:
+    - docker compose down -v --remove-orphans
+    - echo "✅ Docker environment purged"
+
+  dev:has-volumes:
+    desc: Check if Docker volumes exist (returns 0 if exist, 1 if not)
+    internal: true
+    cmds:
+    - test -n "$(docker compose volumes -q)"
+
   dev:logs:
     desc: View OpenEMR logs (follow mode)
     cmds:
@@ -81,6 +94,27 @@ tasks:
     - echo "Access OpenEMR at http://localhost:[PORT]"
     - echo "Login - admin / pass"
 
+  dev:browse:
+    desc: Open OpenEMR in your default browser
+    cmds:
+    - |
+      HTTPS_PORT=$(docker compose port openemr 443 | cut -d: -f2)
+      if [ -z "$HTTPS_PORT" ]; then
+        echo "❌ Could not detect HTTPS port. Is Docker running?"
+        exit 1
+      fi
+      URL="https://localhost:$HTTPS_PORT"
+      echo "Opening OpenEMR at $URL"
+      echo "Login credentials: admin / pass"
+      if command -v open > /dev/null 2>&1; then
+        open "$URL"
+      elif command -v xdg-open > /dev/null 2>&1; then
+        xdg-open "$URL"
+      else
+        echo "❌ Could not find 'open' or 'xdg-open' command"
+        echo "Please open this URL manually: $URL"
+      fi
+
   dev:shell:
     desc: Access OpenEMR container shell
     cmds:
@@ -93,15 +127,47 @@ tasks:
 
   # === Module Management ===
 
-  module:install:
-    desc: Manually install module in OpenEMR (after registration)
+  module:list:
+    desc: List all registered modules in OpenEMR
     cmds:
-    - echo "⚠️  Module installation must be done via OpenEMR web interface:"
-    - echo "   1. Go to Administration > Modules > Manage Modules"
-    - echo "   2. Find 'oce-module-sinch-conversations'"
-    - echo "   3. Click Register (if not registered)"
-    - echo "   4. Click Install"
-    - echo "   5. Click Enable"
+    - docker compose exec openemr php {{.MODULE_PATH}}/bin/install-module.php module:list
+
+  module:register:
+    desc: Register module in OpenEMR database
+    cmds:
+    - docker compose exec openemr php {{.MODULE_PATH}}/bin/install-module.php module:register oce-module-sinch-conversations
+
+  module:install:
+    desc: Install module SQL schema (requires registered module)
+    cmds:
+    - docker compose exec openemr php {{.MODULE_PATH}}/bin/install-module.php module:install oce-module-sinch-conversations
+
+  module:enable:
+    desc: Enable the module
+    cmds:
+    - docker compose exec openemr php {{.MODULE_PATH}}/bin/install-module.php module:enable oce-module-sinch-conversations
+
+  module:disable:
+    desc: Disable the module
+    cmds:
+    - docker compose exec openemr php {{.MODULE_PATH}}/bin/install-module.php module:disable oce-module-sinch-conversations
+
+  module:unregister:
+    desc: Unregister module from database (must be disabled first)
+    cmds:
+    - docker compose exec openemr php {{.MODULE_PATH}}/bin/install-module.php module:unregister oce-module-sinch-conversations
+
+  module:install-enable:
+    desc: Full install (register + install SQL + enable) in one command
+    cmds:
+    - docker compose exec openemr php {{.MODULE_PATH}}/bin/install-module.php module:install-enable oce-module-sinch-conversations
+
+  module:reinstall:
+    desc: Reinstall module (cleanup, unregister, then full install)
+    cmds:
+    - task: module:cleanup
+    - task: module:unregister
+    - task: module:install-enable
 
   module:cleanup:
     desc: Drop all module database tables (for clean reinstall)
@@ -178,6 +244,19 @@ tasks:
     cmds:
     - composer phpcbf
 
+  # === Testing ===
+
+  test:
+    desc: Run PHPUnit tests
+    cmds:
+    - composer test
+
+  test:coverage:
+    desc: Run PHPUnit with HTML coverage report
+    cmds:
+    - composer phpunit-coverage
+    - echo "✅ Coverage report generated in htmlcov/"
+
   # === Development Helpers ===
   # Composer dependency management tasks (infrastructure, not code quality)
 
@@ -210,11 +289,27 @@ tasks:
     - echo "✅ OpenEMR dependencies built"
 
   git:clean:
-    desc: Run git clean (remove untracked files)
-    prompt: This will delete untracked files. Continue?
+    desc: Run git clean (remove untracked files, preserves .local/)
+    prompt: This will delete untracked files (except .local/). Continue?
     cmds:
-    - git clean -fd
-    - echo "✅ Untracked files removed"
+    - git clean -fd -e .local
+    - echo "✅ Untracked files removed (preserved .local/)"
+
+  vendor:clean:
+    desc: Remove vendor directory (forces complete reinstall of dependencies)
+    prompt: This will DELETE the entire vendor directory. Continue?
+    preconditions:
+    - sh: test -z "$(docker compose volumes -q)"
+      msg: |
+        ❌ Docker volumes still exist. You must run 'task dev:purge' first.
+
+        Reason: OpenEMR stores crypto keys in both the database (volume) and filesystem (vendor).
+        Removing vendor without removing volumes will break encryption and make the database unusable.
+
+        Run: task workflow:nuke (to remove both) or task dev:purge (then task vendor:clean)
+    cmds:
+    - git clean -fdx vendor/
+    - echo "✅ Vendor directory removed"
 
   # === Quick Workflows ===
 
@@ -240,3 +335,11 @@ tasks:
     - echo ""
     - echo "✅ Environment reset complete"
     - task: dev:port
+
+  workflow:nuke:
+    desc: Nuclear reset (removes vendor + database volumes, forces complete reinstall)
+    cmds:
+    - task: dev:purge
+    - task: vendor:clean
+    - echo "✅ Complete reset done. Vendor removed, Docker volumes deleted."
+    - echo "   Run 'task setup' to rebuild from scratch."

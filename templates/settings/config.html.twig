@@ -60,7 +60,7 @@
 
         <div class="alert alert-info" role="alert">
             <strong>{{ 'Note:'|xlt }}</strong>
-            {{ 'You can also configure these settings via Administration > Globals > OpenCoreEMR Sinch Conversations'|xlt }}
+            {{ 'The Sinch API Configuration (Project ID, App ID, API Key, API Secret, Region) can also be configured via Administration > Globals > OpenCoreEMR Sinch Conversations. The Messaging Configuration settings are only available here.'|xlt }}
         </div>
 
         <form method="post" action="?action=save">
@@ -271,7 +271,30 @@
                 .then(data => {
                     resultDiv.style.display = 'block';
                     alertDiv.className = 'alert ' + (data.success ? 'alert-success' : 'alert-danger');
-                    alertDiv.textContent = data.message;
+
+                    let message = data.message;
+
+                    // Show app configuration if available
+                    if (data.success && data.app_config) {
+                        message += '\n\n{{ "App Configuration:"|xlt }}\n';
+                        message += '{{ "Display Name:"|xlt }} ' + (data.app_config.display_name || 'N/A') + '\n';
+
+                        if (data.app_config.channel_credentials && data.app_config.channel_credentials.length > 0) {
+                            message += '\n{{ "Channels:"|xlt }}\n';
+                            data.app_config.channel_credentials.forEach(channel => {
+                                message += '  - ' + (channel.channel || 'Unknown') + ': ' +
+                                          (channel.state || 'Unknown state') + '\n';
+                                if (channel.static_bearer) {
+                                    message += '    {{ "Bearer:"|xlt }} ' + channel.static_bearer.claimed_identity + '\n';
+                                }
+                            });
+                        } else {
+                            message += '\n{{ "⚠️ No channels configured!"|xlt }}\n';
+                        }
+                    }
+
+                    alertDiv.style.whiteSpace = 'pre-wrap';
+                    alertDiv.textContent = message;
                 })
                 .catch(error => {
                     resultDiv.style.display = 'block';
