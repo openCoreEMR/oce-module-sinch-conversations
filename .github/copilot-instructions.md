@@ -1,6 +1,8 @@
-# OpenEMR Module Development Guide for GitHub Copilot
+# OpenCoreEMR Module Development Guide for GitHub Copilot
 
-This document describes the architectural patterns and conventions for OpenEMR modules developed by OpenCoreEMR. Use these patterns as context when providing code suggestions for **any** OpenEMR module in this organization.
+This document describes the architectural patterns and conventions for **OpenCoreEMR modules**. These are **open source modules for OpenEMR** developed by OpenCoreEMR Inc., distinct from the OpenEMR community/foundation modules.
+
+Use these patterns as context when providing code suggestions for **any module in the OpenCoreEMR organization**.
 
 ## Module Architecture Overview
 
@@ -49,9 +51,9 @@ Public PHP files should be short! Just dispatch a controller and send a response
  * [Description of endpoint]
  *
  * @package   OpenCoreEMR
- * @link      http://www.open-emr.org
+ * @link      https://opencoreemr.com/
  * @author    [Author Name] <email@example.com>
- * @copyright Copyright (c) 2025 OpenCoreEMR Inc
+ * @copyright Copyright (c) [Year] OpenCoreEMR Inc
  * @license   GNU General Public License 3
  */
 
@@ -59,6 +61,12 @@ require_once __DIR__ . '/../../../../globals.php';
 
 use OpenCoreEMR\Modules\{ModuleName}\Bootstrap;
 use OpenCoreEMR\Modules\{ModuleName}\GlobalsAccessor;
+use OpenCoreEMR\Modules\{ModuleName}\Exception\{Module}ExceptionInterface;
+use OpenEMR\Common\Logging\SystemLogger;
+use Symfony\Component\HttpFoundation\Response;
+
+// Initialize logger
+$logger = new SystemLogger();
 
 // Get kernel and bootstrap module
 $globalsAccessor = new GlobalsAccessor();
@@ -72,8 +80,26 @@ $controller = $bootstrap->get{Feature}Controller();
 $action = $_GET['action'] ?? $_POST['action'] ?? 'default';
 
 // Dispatch to controller and send response
-$response = $controller->dispatch($action);
-$response->send();
+try {
+    $response = $controller->dispatch($action);
+    $response->send();
+} catch ({Module}ExceptionInterface $e) {
+    $logger->error("Module error: " . $e->getMessage());
+
+    $response = new Response(
+        "Error: " . htmlspecialchars($e->getMessage()),
+        $e->getStatusCode()
+    );
+    $response->send();
+} catch (\Throwable $e) {
+    $logger->error("Unexpected error: " . $e->getMessage());
+
+    $response = new Response(
+        "Error: An unexpected error occurred",
+        500
+    );
+    $response->send();
+}
 ```
 
 ## Controller Pattern
@@ -81,6 +107,7 @@ $response->send();
 Controllers should:
 - Be in `src/Controller/`
 - Use **constructor dependency injection**
+- Inject `Psr\Log\LoggerInterface` for logging (not `SystemLogger` directly)
 - Use **Symfony Request objects** (never access $_GET, $_POST, $_SERVER directly)
 - Return **Symfony Response objects** (never void)
 - Have a `dispatch()` method that routes actions
@@ -97,7 +124,7 @@ use OpenCoreEMR\Modules\{ModuleName}\Exception\{Module}ValidationException;
 use OpenCoreEMR\Modules\{ModuleName}\GlobalConfig;
 use OpenCoreEMR\Modules\{ModuleName}\Service\{Feature}Service;
 use OpenEMR\Common\Csrf\CsrfUtils;
-use OpenEMR\Common\Logging\SystemLogger;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -105,14 +132,12 @@ use Twig\Environment;
 
 class {Feature}Controller
 {
-    private readonly SystemLogger $logger;
-
     public function __construct(
         private readonly GlobalConfig $config,
         private readonly {Feature}Service $service,
-        private readonly Environment $twig
+        private readonly Environment $twig,
+        private readonly LoggerInterface $logger
     ) {
-        $this->logger = new SystemLogger();
     }
 
     /**
@@ -237,18 +262,18 @@ class {Module}NotFoundException extends {Module}Exception
 
 ```php
 try {
-    $response = $controller->dispatch($action, $_REQUEST);
+    $response = $controller->dispatch($action);
     $response->send();
-} catch ({Module}ExceptionInterface $e) {
-    error_log("Error: " . $e->getMessage());
+} catch (ExceptionInterface $e) {
+    $logger->error("Sinch Conversations error: " . $e->getMessage());
 
     $response = new Response(
         "Error: " . htmlspecialchars($e->getMessage()),
         $e->getStatusCode()
     );
     $response->send();
-} catch (\Exception $e) {
-    error_log("Unexpected error: " . $e->getMessage());
+} catch (\Throwable $e) {
+    $logger->error("Unexpected error in Sinch Conversations: " . $e->getMessage());
 
     $response = new Response(
         "Error: An unexpected error occurred",
@@ -567,6 +592,73 @@ Update `.composer-require-checker.json` to whitelist OpenEMR symbols:
 - ✅ Sanitize all user input in templates (`text`, `attr` filters)
 - ✅ Log security events (failed auth, path traversal attempts)
 - ✅ Never expose detailed error messages to users
+- ✅ Use `SystemLogger` for all logging (never `error_log()` or `var_dump()`)
+
+## Logging
+
+**Always use dependency injection with `Psr\Log\LoggerInterface`:**
+
+```php
+use Psr\Log\LoggerInterface;
+
+class MyController
+{
+    public function __construct(
+        private readonly LoggerInterface $logger
+    ) {
+    }
+
+    public function someMethod(): void
+    {
+        $this->logger->error("Error message");
+        $this->logger->warning("Warning message");
+        $this->logger->info("Info message");
+        $this->logger->debug("Debug message");
+    }
+}
+```
+
+**In Bootstrap/Factory classes, inject `SystemLogger`:**
+
+```php
+use OpenEMR\Common\Logging\SystemLogger;
+
+class Bootstrap
+{
+    private readonly LoggerInterface $logger;
+
+    public function __construct()
+    {
+        $this->logger = new SystemLogger();
+    }
+
+    public function getMyController(): MyController
+    {
+        return new MyController($this->logger);
+    }
+}
+```
+
+**In standalone scripts/public entry points:**
+
+```php
+use OpenEMR\Common\Logging\SystemLogger;
+
+$logger = new SystemLogger();
+$logger->error("Error occurred");
+```
+
+**Never use:**
+- ❌ `error_log()` - Use `LoggerInterface` via dependency injection
+- ❌ Instantiate `SystemLogger` in controllers/services - Inject `LoggerInterface` instead
+- ❌ `var_dump()` or `print_r()` - Remove before committing
+- ❌ `echo` for debugging - Use proper logging
+
+**Why dependency injection?**
+- ✅ Testable - Easy to mock logger in unit tests
+- ✅ Flexible - Can swap implementations without changing code
+- ✅ PSR-3 compliant - Works with any PSR-3 logger
+- ✅ Best practice - Follows SOLID principles
 
 ## OpenEMR Integration Patterns
 
@@ -629,6 +721,30 @@ When suggesting code for Sinch API integrations:
 2. **Fetch from https://developers.sinch.com/llms.txt** if local copy unavailable
 
 The llms.txt file contains complete API documentation for Sinch Conversations, webhooks, message formats, and authentication.
+
+**Additional Sinch APIs (not in llms.txt):**
+
+**Provisioning & Management APIs:**
+- **Subproject API**: For managing subprojects within a Sinch project
+  - Docs: https://developers.sinch.com/docs/subproject/api-reference/subproject.md
+  - Use for: Multi-tenant setups, organizational hierarchy, resource isolation
+  - Operations: Create, list, get, update, delete subprojects
+
+- **Access Keys API**: For managing API keys and access control
+  - Docs: https://developers.sinch.com/docs/accesskeys/api-reference.md
+  - Use for: Creating/revoking API keys, managing permissions
+  - Operations: Create keys, list keys, revoke keys, manage scopes
+
+- **Projects API**: For managing Sinch projects
+  - Docs: https://developers.sinch.com/docs/account/projects.md
+  - Use for: Project configuration, settings management
+  - Operations: Get project details, update settings
+
+**When implementing provisioning features:**
+1. Check llms.txt for Conversations API details
+2. Consult web docs (markdown format) for Access Keys, Subprojects, and Projects APIs
+3. Use `AppConfigurationClient` pattern for new provisioning methods
+4. Add corresponding CLI commands for automation
 
 ## Development Tooling: Taskfile vs Composer Scripts
 

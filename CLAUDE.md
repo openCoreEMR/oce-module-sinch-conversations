@@ -1,6 +1,8 @@
-# OpenEMR Module Development Guide for AI Agents
+# OpenCoreEMR Module Development Guide for AI Agents
 
-This document describes the architectural patterns and conventions for OpenEMR modules developed by OpenCoreEMR. Follow these patterns when working on **any** OpenEMR module in this organization.
+This document describes the architectural patterns and conventions for **OpenCoreEMR modules**. These are **open source modules for OpenEMR** developed by OpenCoreEMR Inc., distinct from the OpenEMR community/foundation modules.
+
+Follow these patterns when working on **any module in the OpenCoreEMR organization**.
 
 ## Module Architecture Overview
 
@@ -49,9 +51,9 @@ Public PHP files should be short! Just dispatch a controller and send a response
  * [Description of endpoint]
  *
  * @package   OpenCoreEMR
- * @link      http://www.open-emr.org
+ * @link      https://opencoreemr.com/
  * @author    [Author Name] <email@example.com>
- * @copyright Copyright (c) 2025 OpenCoreEMR Inc
+ * @copyright Copyright (c) [Year] OpenCoreEMR Inc
  * @license   GNU General Public License 3
  */
 
@@ -97,22 +99,19 @@ use OpenCoreEMR\Modules\{ModuleName}\Exception\{Module}ValidationException;
 use OpenCoreEMR\Modules\{ModuleName}\GlobalConfig;
 use OpenCoreEMR\Modules\{ModuleName}\Service\{Feature}Service;
 use OpenEMR\Common\Csrf\CsrfUtils;
-use OpenEMR\Common\Logging\SystemLogger;
-use Symfony\Component\HttpFoundation\RedirectResponse;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Twig\Environment;
 
 class {Feature}Controller
 {
-    private readonly SystemLogger $logger;
-
     public function __construct(
         private readonly GlobalConfig $config,
         private readonly {Feature}Service $service,
-        private readonly Environment $twig
+        private readonly Environment $twig,
+        private readonly LoggerInterface $logger
     ) {
-        $this->logger = new SystemLogger();
     }
 
     /**
@@ -263,10 +262,10 @@ class {Module}NotFoundException extends {Module}Exception
 
 ```php
 try {
-    $response = $controller->dispatch($action, $_REQUEST);
+    $response = $controller->dispatch($action);
     $response->send();
 } catch ({Module}ExceptionInterface $e) {
-    error_log("Error: " . $e->getMessage());
+    $logger->error("Module error: " . $e->getMessage());
 
     $response = new Response(
         "Error: " . htmlspecialchars($e->getMessage()),
@@ -274,7 +273,7 @@ try {
     );
     $response->send();
 } catch (\Throwable $e) {
-    error_log("Unexpected error: " . $e->getMessage());
+    $logger->error("Unexpected error: " . $e->getMessage());
 
     $response = new Response(
         "Error: An unexpected error occurred",
@@ -728,11 +727,41 @@ The `llms.txt` file contains comprehensive API documentation for:
 - Authentication
 - Error handling
 
+**Additional Sinch APIs (not in llms.txt):**
+
+**Provisioning & Management APIs:**
+- **Subproject API**: For managing subprojects within a Sinch project
+  - Docs: https://developers.sinch.com/docs/subproject/api-reference/subproject.md
+  - Use for: Multi-tenant setups, organizational hierarchy, resource isolation
+  - Operations: Create, list, get, update, delete subprojects
+  - Not currently documented in llms.txt - consult web docs directly
+
+- **Access Keys API**: For managing API keys and access control
+  - Docs: https://developers.sinch.com/docs/accesskeys/api-reference.md
+  - Use for: Creating/revoking API keys, managing permissions, scopes
+  - Operations: Create keys, list keys, revoke keys, manage scopes
+  - Essential for provisioning automation and multi-tenant setups
+  - Not currently documented in llms.txt - consult web docs directly
+
+- **Projects API**: For managing Sinch projects
+  - Docs: https://developers.sinch.com/docs/account/projects.md
+  - Use for: Project configuration, settings management
+  - Operations: Get project details, update settings
+  - Not currently documented in llms.txt - consult web docs directly
+
+**When implementing provisioning features:**
+1. Check llms.txt for Conversations API details (messages, contacts, webhooks)
+2. Consult web docs (markdown format) for Access Keys, Subprojects, and Projects APIs
+3. Use `AppConfigurationClient` pattern for new provisioning methods
+4. Add corresponding CLI commands for automation
+5. Follow existing command patterns (environment vars, options, error handling)
+
 **When to use:**
 - Implementing API integrations
 - Understanding webhook payloads
 - Debugging API responses
 - Adding new Sinch features
+- Managing subprojects and resource organization
 
 ## Development Tooling: Taskfile vs Composer Scripts
 
