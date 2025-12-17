@@ -623,20 +623,60 @@ This runs:
 - If a parameter is unused, either use it or remove it
 - Remove commented-out code
 
+## Researching OpenEMR Code and Dependencies
+
+**CRITICAL: Always check OpenEMR's actual requirements in `vendor/openemr/openemr/composer.json`**
+
+When you need to understand OpenEMR's code, dependencies, or version constraints:
+
+### ✅ ALWAYS DO:
+- **Check `vendor/openemr/openemr/composer.json`** for OpenEMR's exact dependency versions
+- **Look in `vendor/openemr/openemr/src/`** for OpenEMR core classes
+- **Match OpenEMR's Symfony version constraints** - They use exact versions (e.g., `6.4.15`), not ranges
+- **Use `^6.4` constraints** for Symfony packages to stay compatible with OpenEMR 6.4.x
+
+### ❌ NEVER DO:
+- ~~Search online for OpenEMR version requirements~~ → Check `vendor/openemr/openemr/composer.json`
+- ~~Guess at version constraints~~ → Verify against OpenEMR's actual versions
+- ~~Use `^6.0 || ^7.0` for Symfony~~ → Use `^6.4` to match OpenEMR's 6.4.x versions
+- ~~Assume OpenEMR uses latest versions~~ → They pin specific versions
+
+### Example: Checking OpenEMR's Symfony Versions
+
+```bash
+# Check what Symfony versions OpenEMR uses
+cat vendor/openemr/openemr/composer.json | grep symfony
+
+# Result shows exact versions:
+# "symfony/console": "6.4.15",
+# "symfony/event-dispatcher": "6.4.13",
+# "symfony/http-foundation": "6.4.16",
+```
+
+### Why This Matters
+
+OpenEMR uses **exact Symfony 6.4.x versions**, not version ranges. Your module must be compatible:
+- ✅ **Use `^6.4`** - Compatible with OpenEMR's 6.4.x versions
+- ❌ **Don't use `^6.0 || ^7.0`** - Would allow Symfony 7.x which OpenEMR doesn't support
+- ❌ **Don't use `^7.0`** - Not compatible with OpenEMR
+
 ## Dependencies
 
-Always include these in `composer.json`:
+Always include these in `composer.json` with version constraints that match OpenEMR:
 
 ```json
 {
   "require": {
     "php": ">=8.2",
-    "symfony/event-dispatcher": "^6.0 || ^7.0",
-    "symfony/http-foundation": "^6.0 || ^7.0",
+    "symfony/console": "^6.4",
+    "symfony/event-dispatcher": "^6.4",
+    "symfony/http-foundation": "^6.4",
     "twig/twig": "^3.0"
   }
 }
 ```
+
+**Note:** Version constraints must match OpenEMR's installed versions. Always verify in `vendor/openemr/openemr/composer.json`.
 
 ## Composer Require Checker Configuration
 
