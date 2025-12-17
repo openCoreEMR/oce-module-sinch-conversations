@@ -70,6 +70,84 @@ class ConversationApiClient
         }
 
         try {
+            $this->logger->debug(
+                "Sending message via Sinch",
+                [
+                    'endpoint' => "/v1/projects/{$projectId}/messages:send",
+                    'payload' => $payload,
+                ]
+            );
+
+            $response = $this->httpClient->post(
+                "/v1/projects/{$projectId}/messages:send",
+                [
+                    'headers' => $this->getHeaders(),
+                    'json' => $payload,
+                ]
+            );
+
+            return $this->handleResponse($response);
+        } catch (GuzzleException $e) {
+            $this->logger->error("Sinch API error: " . $e->getMessage());
+            throw new ApiException("Failed to send message: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Send a message using channel identity (for DISPATCH mode apps)
+     *
+     * @param string $channelIdentity Phone number, WhatsApp ID, etc
+     * @param string $message Message text
+     * @param string $channel SMS, WHATSAPP, RCS, etc
+     * @param array<string, mixed> $options Additional options (metadata, etc)
+     * @return array<string, mixed> Response data
+     * @throws ApiException
+     */
+    public function sendMessageByChannelIdentity(
+        string $channelIdentity,
+        string $message,
+        string $channel = 'SMS',
+        array $options = []
+    ): array {
+        $projectId = $this->config->getSinchProjectId();
+        $appId = $this->config->getSinchAppId();
+
+        $payload = [
+            'app_id' => $appId,
+            'recipient' => [
+                'identified_by' => [
+                    'channel_identities' => [
+                        [
+                            'channel' => $channel,
+                            'identity' => $channelIdentity,
+                        ],
+                    ],
+                ],
+            ],
+            'message' => [
+                'text_message' => [
+                    'text' => $message,
+                ],
+            ],
+        ];
+
+        if (isset($options['channel_priority'])) {
+            $payload['channel_priority_order'] = $options['channel_priority'];
+        }
+
+        if (isset($options['metadata'])) {
+            $payload['metadata'] = $options['metadata'];
+        }
+
+        try {
+            $this->logger->debug(
+                "Sending message via Sinch (DISPATCH mode)",
+                [
+                    'endpoint' => "/v1/projects/{$projectId}/messages:send",
+                    'payload' => $payload,
+                ]
+            );
+
             $response = $this->httpClient->post(
                 "/v1/projects/{$projectId}/messages:send",
                 [
@@ -199,6 +277,14 @@ class ConversationApiClient
         }
 
         try {
+            $this->logger->debug(
+                "Creating contact in Sinch",
+                [
+                    'endpoint' => "/v1/projects/{$projectId}/contacts",
+                    'payload' => $payload,
+                ]
+            );
+
             $response = $this->httpClient->post(
                 "/v1/projects/{$projectId}/contacts",
                 [
@@ -237,6 +323,39 @@ class ConversationApiClient
         } catch (GuzzleException $e) {
             $this->logger->error("Sinch API error: " . $e->getMessage());
             throw new ApiException("Failed to get contact: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Get app configuration details
+     *
+     * @param string|null $appId App ID (uses configured app ID if not provided)
+     * @return array<string, mixed> App configuration
+     * @throws ApiException
+     */
+    public function getApp(?string $appId = null): array
+    {
+        $projectId = $this->config->getSinchProjectId();
+        $appId = $appId ?? $this->config->getSinchAppId();
+
+        if (empty($appId)) {
+            throw new ApiException("App ID is not configured");
+        }
+
+        try {
+            $this->logger->debug("Fetching app configuration", ['app_id' => $appId]);
+
+            $response = $this->httpClient->get(
+                "/v1/projects/{$projectId}/apps/{$appId}",
+                [
+                    'headers' => $this->getHeaders(),
+                ]
+            );
+
+            return $this->handleResponse($response);
+        } catch (GuzzleException $e) {
+            $this->logger->error("Failed to get app configuration: " . $e->getMessage());
+            throw new ApiException("Failed to get app configuration: " . $e->getMessage());
         }
     }
 
@@ -399,15 +518,17 @@ class ConversationApiClient
                 ['template_key' => $templateData['template_key'] ?? 'unknown']
             );
 
-            $response = $templateClient->post(
-                "/v2/projects/{$projectId}/templates",
-                [
-                    'headers' => [
-                        'Content-Type' => 'application/json',
-                        'Authorization' => "Bearer {$accessToken}",
-                    ],
-                    'json' => $this->formatTemplateForSinch($templateData),
-                ]
+            $response = $this->executeWithRetry(
+                fn(): \Psr\Http\Message\ResponseInterface => $templateClient->post(
+                    "/v2/projects/{$projectId}/templates",
+                    [
+                        'headers' => [
+                            'Content-Type' => 'application/json',
+                            'Authorization' => "Bearer {$accessToken}",
+                        ],
+                        'json' => $this->formatTemplateForSinch($templateData),
+                    ]
+                )
             );
 
             return $this->handleResponse($response);
@@ -479,7 +600,7 @@ class ConversationApiClient
                     'language_code' => 'en-US',
                     'version' => '1',
                     'variables' => $variables,
-                    'content' => [
+                    'message' => [
                         'text_message' => [
                             'text' => $this->convertTemplateVariables($templateData['body']),
                         ],
@@ -499,6 +620,71 @@ class ConversationApiClient
     {
         // Convert {{ variable_name }} to {{variable_name}}
         return preg_replace('/\{\{\s*(\w+)\s*\}\}/', '{{$1}}', $body) ?? $body;
+    }
+
+    /**
+     * Execute HTTP request with retry logic and exponential backoff
+     *
+     * @param callable(): \Psr\Http\Message\ResponseInterface $requestCallback Function that performs the HTTP request
+     * @param int $maxRetries Maximum number of retry attempts
+     * @param int $initialDelayMs Initial delay in milliseconds
+     * @return \Psr\Http\Message\ResponseInterface
+     * @throws ApiException
+     */
+    private function executeWithRetry(
+        callable $requestCallback,
+        int $maxRetries = 3,
+        int $initialDelayMs = 100
+    ): \Psr\Http\Message\ResponseInterface {
+        $attempt = 0;
+        $delayMs = $initialDelayMs;
+
+        while ($attempt <= $maxRetries) {
+            try {
+                $response = $requestCallback();
+                $statusCode = $response->getStatusCode();
+
+                // Success - return immediately
+                if ($statusCode >= 200 && $statusCode < 300) {
+                    if ($attempt > 0) {
+                        $this->logger->info("Request succeeded after {$attempt} retries");
+                    }
+                    return $response;
+                }
+
+                // Rate limit or server error - retry
+                if ($statusCode === 429 || $statusCode >= 500) {
+                    if ($attempt < $maxRetries) {
+                        $this->logger->warning(
+                            "Request failed with {$statusCode}, retrying in {$delayMs}ms (attempt " .
+                            ($attempt + 1) . "/{$maxRetries})"
+                        );
+                        usleep($delayMs * 1000); // Convert ms to microseconds
+                        $delayMs *= 2; // Exponential backoff
+                        $attempt++;
+                        continue;
+                    }
+                }
+
+                // Client error or final attempt - return response
+                return $response;
+            } catch (GuzzleException $e) {
+                if ($attempt < $maxRetries) {
+                    $this->logger->warning(
+                        "Request threw exception: {$e->getMessage()}, retrying in {$delayMs}ms " .
+                        "(attempt " . ($attempt + 1) . "/{$maxRetries})"
+                    );
+                    usleep($delayMs * 1000);
+                    $delayMs *= 2;
+                    $attempt++;
+                    continue;
+                }
+                throw $e;
+            }
+        }
+
+        // This should never be reached, but just in case
+        throw new ApiException("Request failed after {$maxRetries} retries");
     }
 
     /**
@@ -539,7 +725,16 @@ class ConversationApiClient
         $error = json_decode($body, true);
         $message = $error['error']['message'] ?? 'Unknown API error';
 
-        $this->logger->error("Sinch API error {$statusCode}: {$message}");
+        // Log full error details for debugging
+        $this->logger->error(
+            sprintf(
+                "Sinch API error %d: %s\nFull response: %s",
+                $statusCode,
+                $message,
+                $body
+            )
+        );
+
         throw new ApiException("API request failed: {$message}", $statusCode);
     }
 }
