@@ -1,6 +1,8 @@
-# OpenEMR Module Development Guide for AI Agents
+# OpenCoreEMR Module Development Guide for AI Agents
 
-This document describes the architectural patterns and conventions for OpenEMR modules developed by OpenCoreEMR. Follow these patterns when working on **any** OpenEMR module in this organization.
+This document describes the architectural patterns and conventions for **OpenCoreEMR modules**. These are **open source modules for OpenEMR** developed by OpenCoreEMR Inc., distinct from the OpenEMR community/foundation modules.
+
+Follow these patterns when working on **any module in the OpenCoreEMR organization**.
 
 ## Module Architecture Overview
 
@@ -49,9 +51,9 @@ Public PHP files should be short! Just dispatch a controller and send a response
  * [Description of endpoint]
  *
  * @package   OpenCoreEMR
- * @link      http://www.open-emr.org
+ * @link      https://opencoreemr.com/
  * @author    [Author Name] <email@example.com>
- * @copyright Copyright (c) 2025 OpenCoreEMR Inc
+ * @copyright Copyright (c) [Year] OpenCoreEMR Inc
  * @license   GNU General Public License 3
  */
 
@@ -97,22 +99,19 @@ use OpenCoreEMR\Modules\{ModuleName}\Exception\{Module}ValidationException;
 use OpenCoreEMR\Modules\{ModuleName}\GlobalConfig;
 use OpenCoreEMR\Modules\{ModuleName}\Service\{Feature}Service;
 use OpenEMR\Common\Csrf\CsrfUtils;
-use OpenEMR\Common\Logging\SystemLogger;
-use Symfony\Component\HttpFoundation\RedirectResponse;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Twig\Environment;
 
 class {Feature}Controller
 {
-    private readonly SystemLogger $logger;
-
     public function __construct(
         private readonly GlobalConfig $config,
         private readonly {Feature}Service $service,
-        private readonly Environment $twig
+        private readonly Environment $twig,
+        private readonly LoggerInterface $logger
     ) {
-        $this->logger = new SystemLogger();
     }
 
     /**
@@ -263,10 +262,10 @@ class {Module}NotFoundException extends {Module}Exception
 
 ```php
 try {
-    $response = $controller->dispatch($action, $_REQUEST);
+    $response = $controller->dispatch($action);
     $response->send();
 } catch ({Module}ExceptionInterface $e) {
-    error_log("Error: " . $e->getMessage());
+    $logger->error("Module error: " . $e->getMessage());
 
     $response = new Response(
         "Error: " . htmlspecialchars($e->getMessage()),
@@ -274,7 +273,7 @@ try {
     );
     $response->send();
 } catch (\Throwable $e) {
-    error_log("Unexpected error: " . $e->getMessage());
+    $logger->error("Unexpected error: " . $e->getMessage());
 
     $response = new Response(
         "Error: An unexpected error occurred",
@@ -624,20 +623,60 @@ This runs:
 - If a parameter is unused, either use it or remove it
 - Remove commented-out code
 
+## Researching OpenEMR Code and Dependencies
+
+**CRITICAL: Always check OpenEMR's actual requirements in `vendor/openemr/openemr/composer.json`**
+
+When you need to understand OpenEMR's code, dependencies, or version constraints:
+
+### ✅ ALWAYS DO:
+- **Check `vendor/openemr/openemr/composer.json`** for OpenEMR's exact dependency versions
+- **Look in `vendor/openemr/openemr/src/`** for OpenEMR core classes
+- **Match OpenEMR's Symfony version constraints** - They use exact versions (e.g., `6.4.15`), not ranges
+- **Use `^6.4` constraints** for Symfony packages to stay compatible with OpenEMR 6.4.x
+
+### ❌ NEVER DO:
+- ~~Search online for OpenEMR version requirements~~ → Check `vendor/openemr/openemr/composer.json`
+- ~~Guess at version constraints~~ → Verify against OpenEMR's actual versions
+- ~~Use `^6.0 || ^7.0` for Symfony~~ → Use `^6.4` to match OpenEMR's 6.4.x versions
+- ~~Assume OpenEMR uses latest versions~~ → They pin specific versions
+
+### Example: Checking OpenEMR's Symfony Versions
+
+```bash
+# Check what Symfony versions OpenEMR uses
+cat vendor/openemr/openemr/composer.json | grep symfony
+
+# Result shows exact versions:
+# "symfony/console": "6.4.15",
+# "symfony/event-dispatcher": "6.4.13",
+# "symfony/http-foundation": "6.4.16",
+```
+
+### Why This Matters
+
+OpenEMR uses **exact Symfony 6.4.x versions**, not version ranges. Your module must be compatible:
+- ✅ **Use `^6.4`** - Compatible with OpenEMR's 6.4.x versions
+- ❌ **Don't use `^6.0 || ^7.0`** - Would allow Symfony 7.x which OpenEMR doesn't support
+- ❌ **Don't use `^7.0`** - Not compatible with OpenEMR
+
 ## Dependencies
 
-Always include these in `composer.json`:
+Always include these in `composer.json` with version constraints that match OpenEMR:
 
 ```json
 {
   "require": {
     "php": ">=8.2",
-    "symfony/event-dispatcher": "^6.0 || ^7.0",
-    "symfony/http-foundation": "^6.0 || ^7.0",
+    "symfony/console": "^6.4",
+    "symfony/event-dispatcher": "^6.4",
+    "symfony/http-foundation": "^6.4",
     "twig/twig": "^3.0"
   }
 }
 ```
+
+**Note:** Version constraints must match OpenEMR's installed versions. Always verify in `vendor/openemr/openemr/composer.json`.
 
 ## Composer Require Checker Configuration
 
@@ -728,11 +767,41 @@ The `llms.txt` file contains comprehensive API documentation for:
 - Authentication
 - Error handling
 
+**Additional Sinch APIs (not in llms.txt):**
+
+**Provisioning & Management APIs:**
+- **Subproject API**: For managing subprojects within a Sinch project
+  - Docs: https://developers.sinch.com/docs/subproject/api-reference/subproject.md
+  - Use for: Multi-tenant setups, organizational hierarchy, resource isolation
+  - Operations: Create, list, get, update, delete subprojects
+  - Not currently documented in llms.txt - consult web docs directly
+
+- **Access Keys API**: For managing API keys and access control
+  - Docs: https://developers.sinch.com/docs/accesskeys/api-reference.md
+  - Use for: Creating/revoking API keys, managing permissions, scopes
+  - Operations: Create keys, list keys, revoke keys, manage scopes
+  - Essential for provisioning automation and multi-tenant setups
+  - Not currently documented in llms.txt - consult web docs directly
+
+- **Projects API**: For managing Sinch projects
+  - Docs: https://developers.sinch.com/docs/account/projects.md
+  - Use for: Project configuration, settings management
+  - Operations: Get project details, update settings
+  - Not currently documented in llms.txt - consult web docs directly
+
+**When implementing provisioning features:**
+1. Check llms.txt for Conversations API details (messages, contacts, webhooks)
+2. Consult web docs (markdown format) for Access Keys, Subprojects, and Projects APIs
+3. Use `AppConfigurationClient` pattern for new provisioning methods
+4. Add corresponding CLI commands for automation
+5. Follow existing command patterns (environment vars, options, error handling)
+
 **When to use:**
 - Implementing API integrations
 - Understanding webhook payloads
 - Debugging API responses
 - Adding new Sinch features
+- Managing subprojects and resource organization
 
 ## Development Tooling: Taskfile vs Composer Scripts
 

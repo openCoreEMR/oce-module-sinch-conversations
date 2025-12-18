@@ -44,17 +44,59 @@ class TemplateSyncService
             'total' => count($templateDefinitions),
             'created' => 0,
             'updated' => 0,
+            'skipped' => 0,
             'failed' => 0,
             'errors' => [],
         ];
 
+        // Get existing templates from Sinch to check for duplicates
+        try {
+            $existingTemplates = $this->apiClient->listTemplates();
+            $existingByDescription = [];
+            foreach ($existingTemplates as $template) {
+                $desc = $template['description'] ?? '';
+                if (!empty($desc)) {
+                    $existingByDescription[$desc] = $template;
+                }
+            }
+            $this->logger->debug(
+                "Found " . count($existingTemplates) . " existing templates in Sinch"
+            );
+        } catch (\Throwable $e) {
+            $this->logger->warning(
+                "Could not list existing templates, will attempt to create all: " . $e->getMessage()
+            );
+            $existingByDescription = [];
+        }
+
         foreach ($templateDefinitions as $template) {
             try {
+                $description = $template['description'] ?? $template['template_name'];
+
+                // Check if template already exists in Sinch
+                if (isset($existingByDescription[$description])) {
+                    $sinchTemplate = $existingByDescription[$description];
+                    $sinchTemplateId = $sinchTemplate['id'] ?? null;
+
+                    $this->logger->debug(
+                        "Template already exists in Sinch: {$template['template_key']}",
+                        ['sinch_id' => $sinchTemplateId]
+                    );
+
+                    // Save/update locally with existing Sinch ID
+                    if ($sinchTemplateId) {
+                        $this->saveTemplateLocally($template, $sinchTemplateId);
+                        $results['skipped']++;
+                        continue;
+                    }
+                }
+
+                // Template doesn't exist, sync it
                 $this->syncTemplate($template);
 
-                // Check if template already exists locally
+                // Check if template already existed locally
                 $existing = $this->getLocalTemplate($template['template_key']);
-                if ($existing) {
+                if ($existing && !empty($existing['sinch_template_id'])) {
                     $results['updated']++;
                 } else {
                     $results['created']++;
@@ -69,6 +111,10 @@ class TemplateSyncService
                     "Failed to sync template: {$template['template_key']}",
                     ['error' => $e->getMessage()]
                 );
+
+                // Stop on first failure
+                $this->logger->warning("Stopping template sync due to failure");
+                break;
             }
         }
 

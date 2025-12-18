@@ -20,7 +20,7 @@ use OpenCoreEMR\Sinch\Conversation\Exception\AccessDeniedException;
 use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
 use OpenEMR\Common\Csrf\CsrfUtils;
 use OpenEMR\Common\Database\QueryUtils;
-use OpenEMR\Common\Logging\SystemLogger;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -28,16 +28,14 @@ use Twig\Environment;
 
 class ConversationController
 {
-    private readonly SystemLogger $logger;
-
     public function __construct(
         private readonly GlobalConfig $config,
         private readonly MessagePollingService $pollingService,
         private readonly MessageService $messageService,
         private readonly SessionAccessor $session,
-        private readonly Environment $twig
+        private readonly Environment $twig,
+        private readonly LoggerInterface $logger
     ) {
-        $this->logger = new SystemLogger();
     }
 
     /**
