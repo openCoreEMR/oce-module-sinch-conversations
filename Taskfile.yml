@@ -231,11 +231,11 @@ tasks:
     - echo "✅ OpenEMR dependencies built"
 
   git:clean:
-    desc: Run git clean (remove untracked files)
-    prompt: This will delete untracked files. Continue?
+    desc: Run git clean (remove untracked files, preserves .local/)
+    prompt: This will delete untracked files (except .local/). Continue?
     cmds:
-    - git clean -fd
-    - echo "✅ Untracked files removed"
+    - git clean -fd -e .local
+    - echo "✅ Untracked files removed (preserved .local/)"
 
   # === Quick Workflows ===
 
