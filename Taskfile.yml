@@ -62,6 +62,19 @@ tasks:
     - docker compose down -v
     - echo "✅ All data removed. Run 'task dev:start' to start fresh"
 
+  dev:purge:
+    desc: Stop and remove all containers, volumes, and orphans
+    prompt: This will DELETE all Docker containers, volumes, and orphans. Continue?
+    cmds:
+    - docker compose down -v --remove-orphans
+    - echo "✅ Docker environment purged"
+
+  dev:has-volumes:
+    desc: Check if Docker volumes exist (returns 0 if exist, 1 if not)
+    internal: true
+    cmds:
+    - test -n "$(docker compose volumes -q)"
+
   dev:logs:
     desc: View OpenEMR logs (follow mode)
     cmds:
@@ -237,6 +250,22 @@ tasks:
     - git clean -fd -e .local
     - echo "✅ Untracked files removed (preserved .local/)"
 
+  vendor:clean:
+    desc: Remove vendor directory (forces complete reinstall of dependencies)
+    prompt: This will DELETE the entire vendor directory. Continue?
+    preconditions:
+    - sh: test -z "$(docker compose volumes -q)"
+      msg: |
+        ❌ Docker volumes still exist. You must run 'task dev:purge' first.
+
+        Reason: OpenEMR stores crypto keys in both the database (volume) and filesystem (vendor).
+        Removing vendor without removing volumes will break encryption and make the database unusable.
+
+        Run: task workflow:nuke (to remove both) or task dev:purge (then task vendor:clean)
+    cmds:
+    - git clean -fdx vendor/
+    - echo "✅ Vendor directory removed"
+
   # === Quick Workflows ===
 
   setup:
@@ -261,3 +290,11 @@ tasks:
     - echo ""
     - echo "✅ Environment reset complete"
     - task: dev:port
+
+  workflow:nuke:
+    desc: Nuclear reset (removes vendor + database volumes, forces complete reinstall)
+    cmds:
+    - task: dev:purge
+    - task: vendor:clean
+    - echo "✅ Complete reset done. Vendor removed, Docker volumes deleted."
+    - echo "   Run 'task setup' to rebuild from scratch."
