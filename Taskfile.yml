@@ -81,6 +81,27 @@ tasks:
     - echo "Access OpenEMR at http://localhost:[PORT]"
     - echo "Login - admin / pass"
 
+  dev:browse:
+    desc: Open OpenEMR in your default browser
+    cmds:
+    - |
+      HTTPS_PORT=$(docker compose port openemr 443 | cut -d: -f2)
+      if [ -z "$HTTPS_PORT" ]; then
+        echo "❌ Could not detect HTTPS port. Is Docker running?"
+        exit 1
+      fi
+      URL="https://localhost:$HTTPS_PORT"
+      echo "Opening OpenEMR at $URL"
+      echo "Login credentials: admin / pass"
+      if command -v open > /dev/null 2>&1; then
+        open "$URL"
+      elif command -v xdg-open > /dev/null 2>&1; then
+        xdg-open "$URL"
+      else
+        echo "❌ Could not find 'open' or 'xdg-open' command"
+        echo "Please open this URL manually: $URL"
+      fi
+
   dev:shell:
     desc: Access OpenEMR container shell
     cmds:
