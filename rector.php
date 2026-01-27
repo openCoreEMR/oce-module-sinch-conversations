@@ -19,7 +19,7 @@ use Rector\Php80\Rector\Identical\StrEndsWithRector;
 use Rector\Php80\Rector\Identical\StrStartsWithRector;
 use Rector\Php80\Rector\NotIdentical\StrContainsRector;
 use Rector\Php80\Rector\Switch_\ChangeSwitchToMatchRector;
-use Rector\Php81\Rector\Array_\FirstClassCallableRector;
+// ArrayToFirstClassCallableRector removed - included in level sets and causes deprecation warning
 use Rector\Php81\Rector\FuncCall\NullToStrictStringFuncCallArgRector;
 use Rector\Php81\Rector\Property\ReadOnlyPropertyRector;
 use Rector\Php82\Rector\Class_\ReadOnlyClassRector;
@@ -59,7 +59,7 @@ return RectorConfig::configure()
         ConsistentImplodeRector::class,
         FilesystemIteratorSkipDotsRector::class,
         FinalPrivateToPrivateVisibilityRector::class,
-        FirstClassCallableRector::class,
+        // ArrayToFirstClassCallableRector removed - causes deprecation warning
         NullToStrictStringFuncCallArgRector::class,
         OptionalParametersAfterRequiredRector::class,
         ReadOnlyClassRector::class,

@@ -16,12 +16,23 @@ use OpenEMR\Common\Crypto\CryptoGen;
 
 class GlobalConfig
 {
+    private readonly bool $isEnvConfigMode;
+
     public function __construct(
-        private readonly GlobalsAccessor $globals = new GlobalsAccessor()
+        private readonly ConfigAccessorInterface $configAccessor = new GlobalsAccessor()
     ) {
+        $this->isEnvConfigMode = ConfigFactory::isEnvConfigMode();
     }
 
     public const CONFIG_OPTION_ENABLED = 'oce_sinch_conversations_enabled';
+
+    /**
+     * Check if configuration is managed via environment variables
+     */
+    public function isEnvConfigMode(): bool
+    {
+        return $this->isEnvConfigMode;
+    }
     public const CONFIG_OPTION_PROJECT_ID = 'oce_sinch_conversations_project_id';
     public const CONFIG_OPTION_APP_ID = 'oce_sinch_conversations_app_id';
     public const CONFIG_OPTION_API_KEY = 'oce_sinch_conversations_api_key';
@@ -33,12 +44,12 @@ class GlobalConfig
 
     public function isEnabled(): bool
     {
-        return $this->globals->getBoolean(self::CONFIG_OPTION_ENABLED, false);
+        return $this->configAccessor->getBoolean(self::CONFIG_OPTION_ENABLED, false);
     }
 
     public function getProjectId(): string
     {
-        return $this->globals->getString(self::CONFIG_OPTION_PROJECT_ID, '');
+        return $this->configAccessor->getString(self::CONFIG_OPTION_PROJECT_ID, '');
     }
 
     public function getSinchProjectId(): string
@@ -48,7 +59,7 @@ class GlobalConfig
 
     public function getAppId(): string
     {
-        return $this->globals->getString(self::CONFIG_OPTION_APP_ID, '');
+        return $this->configAccessor->getString(self::CONFIG_OPTION_APP_ID, '');
     }
 
     public function getSinchAppId(): string
@@ -58,7 +69,7 @@ class GlobalConfig
 
     public function getApiKey(): string
     {
-        return $this->globals->getString(self::CONFIG_OPTION_API_KEY, '');
+        return $this->configAccessor->getString(self::CONFIG_OPTION_API_KEY, '');
     }
 
     public function getSinchApiKey(): string
@@ -68,8 +79,12 @@ class GlobalConfig
 
     public function getApiSecret(): string
     {
-        $value = $this->globals->getString(self::CONFIG_OPTION_API_SECRET, '');
-        if (!empty($value)) {
+        $value = $this->configAccessor->getString(self::CONFIG_OPTION_API_SECRET, '');
+        if ($value !== '' && $value !== '0') {
+            // In env config mode, secrets are stored as plaintext (no encryption)
+            if ($this->isEnvConfigMode) {
+                return $value;
+            }
             $cryptoGen = new CryptoGen();
             $decrypted = $cryptoGen->decryptStandard($value);
             return $decrypted !== false ? $decrypted : '';
@@ -84,7 +99,7 @@ class GlobalConfig
 
     public function getRegion(): string
     {
-        return $this->globals->getString(self::CONFIG_OPTION_REGION, 'us');
+        return $this->configAccessor->getString(self::CONFIG_OPTION_REGION, 'us');
     }
 
     public function getSinchRegion(): string
@@ -94,17 +109,17 @@ class GlobalConfig
 
     public function getDefaultChannel(): string
     {
-        return $this->globals->getString(self::CONFIG_OPTION_DEFAULT_CHANNEL, 'SMS');
+        return $this->configAccessor->getString(self::CONFIG_OPTION_DEFAULT_CHANNEL, 'SMS');
     }
 
     public function getClinicName(): string
     {
-        return $this->globals->getString(self::CONFIG_OPTION_CLINIC_NAME, '');
+        return $this->configAccessor->getString(self::CONFIG_OPTION_CLINIC_NAME, '');
     }
 
     public function getClinicPhone(): string
     {
-        return $this->globals->getString(self::CONFIG_OPTION_CLINIC_PHONE, '');
+        return $this->configAccessor->getString(self::CONFIG_OPTION_CLINIC_PHONE, '');
     }
 
     /**

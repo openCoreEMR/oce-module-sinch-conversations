@@ -279,7 +279,8 @@ class Bootstrap
             $this->globalsConfig,
             $this->getMessagePollingService(),
             $this->session,
-            $this->twig
+            $this->twig,
+            $this->logger
         );
     }
 
@@ -293,7 +294,8 @@ class Bootstrap
             $this->getMessagePollingService(),
             $this->getMessageService(),
             $this->session,
-            $this->twig
+            $this->twig,
+            $this->logger
         );
     }
 
@@ -327,7 +329,8 @@ class Bootstrap
             $this->getConversationApiClient(),
             $this->getTemplateSyncService(),
             $this->session,
-            $this->twig
+            $this->twig,
+            $this->logger
         );
     }
 }

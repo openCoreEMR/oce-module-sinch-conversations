@@ -20,7 +20,7 @@ use OpenCoreEMR\Sinch\Conversation\Client\ConversationApiClient;
 use OpenCoreEMR\Sinch\Conversation\Exception\AccessDeniedException;
 use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
 use OpenEMR\Common\Csrf\CsrfUtils;
-use OpenEMR\Common\Logging\SystemLogger;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -29,17 +29,15 @@ use Twig\Environment;
 
 class SettingsController
 {
-    private readonly SystemLogger $logger;
-
     public function __construct(
         private readonly GlobalConfig $config,
         private readonly ConfigService $configService,
         private readonly ConversationApiClient $apiClient,
         private readonly TemplateSyncService $templateSyncService,
         private readonly SessionAccessor $session,
-        private readonly Environment $twig
+        private readonly Environment $twig,
+        private readonly LoggerInterface $logger
     ) {
-        $this->logger = new SystemLogger();
     }
 
     /**
@@ -176,18 +174,44 @@ class SettingsController
                 ], Response::HTTP_BAD_REQUEST);
             }
 
+            if (empty($this->config->getSinchApiSecret())) {
+                $this->logger->warning("API Secret is not configured");
+                return new JsonResponse([
+                    'success' => false,
+                    'message' => 'API Secret is not configured. ' .
+                        'OAuth2 authentication requires both API Key and API Secret.',
+                ], Response::HTTP_BAD_REQUEST);
+            }
+
             // Test the connection
             $this->logger->info("Testing Sinch API connection");
             $this->apiClient->testConnection();
             $this->logger->info("Sinch API connection test successful");
 
+            // Get app configuration details
+            $appConfig = $this->apiClient->getApp();
+
             $result = [
                 'success' => true,
                 'message' => 'API connection successful! Your Sinch configuration is working correctly.',
+                'app_config' => [
+                    'display_name' => $appConfig['display_name'] ?? 'N/A',
+                    'conversation_metadata_report_view' => $appConfig['conversation_metadata_report_view'] ?? 'NONE',
+                    'channel_credentials' => $appConfig['channel_credentials'] ?? [],
+                    'dispatch_retention_policy' => $appConfig['dispatch_retention_policy'] ?? null,
+                ],
             ];
             return new JsonResponse($result);
         } catch (\Throwable $e) {
-            $this->logger->error("API test failed: " . $e->getMessage());
+            $this->logger->error(
+                sprintf(
+                    "API test failed [%s]: %s\nFile: %s:%d",
+                    $e::class,
+                    $e->getMessage(),
+                    $e->getFile(),
+                    $e->getLine()
+                )
+            );
             return new JsonResponse([
                 'success' => false,
                 'message' => 'Connection failed: ' . $e->getMessage(),
@@ -245,24 +269,32 @@ class SettingsController
         }
 
         try {
-            // Create a temporary contact and send message
-            $contactResponse = $this->apiClient->createContact($phoneNumber, 'SMS');
-            $contactId = $contactResponse['id'] ?? '';
+            // Get configured clinic phone to use as sender
+            $senderPhone = $this->config->getClinicPhone();
 
-            if (empty($contactId)) {
-                throw new ValidationException('Failed to create contact');
+            // Send message using channel identity (works with DISPATCH mode)
+            // In DISPATCH mode, Sinch automatically creates/finds contacts
+            $options = [];
+            if (!empty($senderPhone)) {
+                $options['sender'] = $senderPhone;
+                $this->logger->info("Using configured sender: {$senderPhone}");
+            } else {
+                $this->logger->warning("No clinic phone configured - using default sender from Sinch app");
             }
 
-            // Send the test message
-            $this->apiClient->sendMessage($contactId, $message, [
-                'channel' => 'SMS',
-            ]);
+            $this->apiClient->sendMessageByChannelIdentity(
+                $phoneNumber,
+                $message,
+                'SMS',
+                $options
+            );
 
             $this->logger->info("Test SMS sent successfully to {$phoneNumber}");
 
             return new JsonResponse([
                 'success' => true,
-                'message' => 'Test SMS sent successfully to ' . $phoneNumber,
+                'message' => 'Test SMS sent successfully to ' . $phoneNumber .
+                    (!empty($senderPhone) ? " from {$senderPhone}" : ''),
             ]);
         } catch (\Throwable $e) {
             $this->logger->error("Failed to send test SMS: " . $e->getMessage());
@@ -304,9 +336,10 @@ class SettingsController
             $results = $this->templateSyncService->syncAllTemplates();
 
             $message = sprintf(
-                'Template sync completed: %d created, %d updated, %d failed out of %d total',
+                'Template sync completed: %d created, %d updated, %d skipped, %d failed out of %d total',
                 $results['created'],
                 $results['updated'],
+                $results['skipped'] ?? 0,
                 $results['failed'],
                 $results['total']
             );

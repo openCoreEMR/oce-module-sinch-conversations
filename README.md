@@ -71,6 +71,34 @@ This will drop all module tables and allow a clean reinstallation.
 2. Extract to `interface/modules/custom_modules/oce-module-sinch-conversations` (relative to your OpenEMR root directory)
 3. Follow steps 3-7 from the Composer installation
 
+## Sinch Provisioning CLI
+
+The module includes a CLI tool for managing Sinch configuration programmatically (apps, webhooks, channels). This is useful for:
+- Initial setup and inspection
+- Multi-tenant configurations
+- CI/CD automation
+- Avoiding manual dashboard configuration
+
+**Quick Start:**
+
+```bash
+# Inspect your Sinch configuration
+export SINCH_PROJECT_ID="your-project-id"
+export SINCH_APP_ID="your-app-id"
+export SINCH_API_KEY="your-api-key"
+export SINCH_API_SECRET="your-api-secret"
+
+./cli.php sinch:inspect
+
+# List all apps
+./cli.php sinch:app:list
+
+# Create a webhook
+./cli.php sinch:webhook:create "https://your-openemr.com/webhook.php"
+```
+
+**📖 Full documentation:** See [CLI-PROVISIONING.md](./CLI-PROVISIONING.md) for complete CLI documentation and API client usage.
+
 ## Configuration
 
 1. Navigate to **Administration > Globals > OpenCoreEMR Sinch Conversations Module**

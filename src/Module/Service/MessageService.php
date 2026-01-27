@@ -49,6 +49,16 @@ class MessageService
 
         $conversationId = $this->getOrCreateConversation($contactId, $patientId);
 
+        // Add configured clinic phone as sender if not already set
+        if (!isset($options['sender'])) {
+            $senderPhone = $this->config->getClinicPhone();
+            if (!empty($senderPhone)) {
+                $options['sender'] = $senderPhone;
+                $options['channel'] = 'SMS'; // Required for sender to work
+                $this->logger->debug("Using configured sender: {$senderPhone}");
+            }
+        }
+
         try {
             $response = $this->apiClient->sendMessage($contactId, $message, $options);
         } catch (\Throwable $e) {

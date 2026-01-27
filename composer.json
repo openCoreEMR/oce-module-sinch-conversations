@@ -34,16 +34,20 @@
     "ext-json": "*",
     "guzzlehttp/guzzle": "^7.0",
     "openemr/oe-module-installer-plugin": "^0.1.5",
+    "psr/http-message": "^2.0",
+    "psr/log": "^1.0 || ^2.0 || ^3.0",
+    "symfony/console": "^6.4",
     "symfony/event-dispatcher": "^6.4",
     "symfony/http-foundation": "^6.4",
     "twig/twig": "^3.0"
   },
   "require-dev": {
     "ergebnis/composer-normalize": "^2.44",
-    "maglnet/composer-require-checker": "~4.7.1",
+    "maglnet/composer-require-checker": "^4.0",
     "openemr/openemr": ">=7.0.3.4 || 7.0.4.x-dev || dev-master",
-    "phpstan/phpstan": "^1.10",
-    "rector/rector": "^1.0",
+    "phpstan/phpstan": "^2.1",
+    "phpunit/phpunit": "^11.0",
+    "rector/rector": "^2.0",
     "squizlabs/php_codesniffer": "^4.0"
   },
   "repositories": [
@@ -107,6 +111,11 @@
       "OpenCoreEMR\\Sinch\\Conversation\\": "src/Sinch/Conversation/"
     }
   },
+  "autoload-dev": {
+    "psr-4": {
+      "OpenCoreEMR\\Modules\\SinchConversations\\Tests\\": "tests/"
+    }
+  },
   "config": {
     "allow-plugins": {
       "ergebnis/composer-normalize": true,
@@ -135,8 +144,11 @@
     "phpcbf": "phpcbf",
     "phpcs": "phpcs",
     "phpstan": "phpstan --memory-limit=1g analyse",
+    "phpunit": "phpunit --testdox",
+    "phpunit-coverage": "phpunit --coverage-html htmlcov --coverage-text",
     "rector": "rector process --dry-run",
     "rector-fix": "rector process",
-    "require-checker": "composer-require-checker check --config-file=.composer-require-checker.json"
+    "require-checker": "composer-require-checker check --config-file=.composer-require-checker.json",
+    "test": "@phpunit"
   }
 }
