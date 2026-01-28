@@ -85,6 +85,38 @@ OpenEMR uses Bootstrap modals:
 - Target elements within modal context
 - Close button typically in top-right corner
 
+## Critical Testing Behaviors
+
+### Module Enable/Disable Requires Re-login
+
+**IMPORTANT:** When the module's enabled status changes (either via Admin > Config checkbox or environment variable), the user must **log out and log back in** for the change to take effect.
+
+This is because:
+- The menu system reads the module's enabled global at login time
+- Changing the enabled setting doesn't update the current session's menu
+- The module menu item only appears after a fresh login with the setting enabled
+
+**Testing workflow:**
+1. Enable module in Admin > Config > OpenCoreEMR Sinch Conversations
+2. Click Save
+3. Log out (user menu > Logout)
+4. Log back in
+5. Module now appears in Modules menu
+
+### Never Navigate Directly to URLs
+
+**CRITICAL:** Never navigate directly to OpenEMR URLs. Always use the menu system.
+
+OpenEMR uses session tokens in URLs. Direct navigation:
+- Bypasses the tab/iframe system
+- Can trigger alerts or security errors
+- Breaks the navigation state
+
+**Always:**
+- Navigate via menu clicks
+- Close tabs using the X button
+- Re-open pages through the menu
+
 ## Common Navigation Issues
 
 **Issue: Menu item not clickable**
@@ -103,6 +135,16 @@ OpenEMR uses Bootstrap modals:
 - Look for "Save" or "Submit" button
 - Check for validation errors
 - Verify CSRF token is present
+
+**Issue: Module not appearing in menu**
+- Check if module is enabled in Admin > Config
+- Log out and log back in after enabling
+- Verify `OCE_SINCH_CONVERSATIONS_ENABLED=1` if using env config
+
+**Issue: Page refresh needed but can't refresh**
+- Close the current tab (click X on the tab)
+- Re-navigate through the menu
+- Never use browser refresh (Cmd+R) in OpenEMR
 
 ## URL Patterns
 

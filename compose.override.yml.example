@@ -1,0 +1,12 @@
+# Docker Compose override for local testing
+# Copy to compose.override.yml (which is gitignored and auto-loaded by docker compose)
+#
+# Usage:
+#   cp compose.override.yml.example compose.override.yml
+#   # Ensure .env has your Sinch credentials
+#   docker compose up -d --wait
+
+services:
+  openemr:
+    env_file:
+      - .env

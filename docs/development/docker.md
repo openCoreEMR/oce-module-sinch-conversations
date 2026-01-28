@@ -167,6 +167,50 @@ docker compose exec mysql mariadb-dump -uroot -proot openemr oce_sinch_conversat
 docker compose exec -T mysql mariadb-dump -uroot -proot openemr < module_backup.sql
 ```
 
+## Environment-Based Configuration
+
+For local development and testing, you can configure the module entirely via environment variables instead of database globals.
+
+### Setup
+
+1. **Copy the example file:**
+   ```bash
+   cp compose.override.yml.example compose.override.yml
+   ```
+
+2. **Create `.env` with your Sinch credentials:**
+   ```bash
+   OCE_SINCH_CONVERSATIONS_ENV_CONFIG=1
+   OCE_SINCH_CONVERSATIONS_ENABLED=1
+   OCE_SINCH_CONVERSATIONS_PROJECT_ID=your-project-id
+   OCE_SINCH_CONVERSATIONS_APP_ID=your-app-id
+   OCE_SINCH_CONVERSATIONS_API_KEY=your-api-key
+   OCE_SINCH_CONVERSATIONS_API_SECRET=your-api-secret
+   OCE_SINCH_CONVERSATIONS_REGION=us
+   OCE_SINCH_CONVERSATIONS_DEFAULT_CHANNEL=SMS
+   OCE_SINCH_CONVERSATIONS_CLINIC_NAME=Your Clinic Name
+   OCE_SINCH_CONVERSATIONS_CLINIC_PHONE=10907
+   ```
+
+3. **Restart containers:**
+   ```bash
+   docker compose down && docker compose up -d --wait
+   ```
+
+### Key Points
+
+- `OCE_SINCH_CONVERSATIONS_ENV_CONFIG=1` enables environment mode
+- When enabled, the module reads from env vars instead of database globals
+- The Settings page will show env var values (currently still editable - future improvement to make read-only)
+- Both `.env` and `compose.override.yml` are gitignored
+
+### Verifying Configuration
+
+```bash
+# Check env vars are loaded in container
+docker compose exec openemr printenv | grep OCE_SINCH
+```
+
 ## Environment Details
 
 **Services:**

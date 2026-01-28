@@ -54,7 +54,7 @@ class BootstrapTest extends TestCase
             GlobalConfig::CONFIG_OPTION_CLINIC_PHONE => '+15551234567',
         ]);
 
-        $this->bootstrap = new Bootstrap($this->eventDispatcher, globals: $mockGlobals);
+        $this->bootstrap = new Bootstrap($this->eventDispatcher, configAccessor: $mockGlobals);
     }
 
     protected function tearDown(): void
@@ -177,7 +177,7 @@ class BootstrapTest extends TestCase
             GlobalConfig::CONFIG_OPTION_REGION => 'us',
         ]);
 
-        $bootstrap = new Bootstrap($this->eventDispatcher, globals: $mockGlobals);
+        $bootstrap = new Bootstrap($this->eventDispatcher, configAccessor: $mockGlobals);
 
         SystemLogger::clearLogs();
         $bootstrap->subscribeToEvents();

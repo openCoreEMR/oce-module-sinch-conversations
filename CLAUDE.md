@@ -69,7 +69,31 @@ task check
 task module:cleanup
 ```
 
-### Module Configuration Notes
+### Configuration Modes
+
+The module supports two configuration modes:
+
+1. **Database Globals** (default): Configure via Admin > Config > OpenCoreEMR Sinch Conversations
+2. **Environment Variables**: Set `OCE_SINCH_CONVERSATIONS_ENV_CONFIG=1` and provide credentials via env vars
+
+For local development, use the env var approach:
+```bash
+cp compose.override.yml.example compose.override.yml
+# Edit .env with your Sinch credentials
+docker compose up -d --wait
+```
+
+See [Docker docs](docs/development/docker.md#environment-based-configuration) for details.
+
+### Testing Tips
+
+**CRITICAL:** When the module's enabled status changes, you must **log out and log back in** for the menu to update. The module menu item won't appear/disappear until after re-login.
+
+**Never refresh pages in OpenEMR** - close tabs and re-navigate through menus instead.
+
+See [Navigation docs](docs/browser-automation/openemr-navigation.md#critical-testing-behaviors) for browser automation guidelines.
+
+### CLI Commands
 
 This module includes CLI commands for debugging and automation:
 
