@@ -353,6 +353,11 @@
             const alertDiv = document.getElementById('test-sms-alert');
             const formData = new FormData(this);
 
+            // Append timestamp to message for test identification
+            const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
+            const originalMessage = formData.get('message');
+            formData.set('message', originalMessage + ' [' + timestamp + ']');
+
             btn.disabled = true;
             btn.textContent = {{ 'Sending...'|xlj }};
 

@@ -32,9 +32,14 @@ class Bootstrap
     public function __construct(
         private readonly EventDispatcherInterface $eventDispatcher,
         private readonly Kernel $kernel = new Kernel(),
-        private readonly GlobalsAccessor $globals = new GlobalsAccessor()
+        private readonly ConfigAccessorInterface $configAccessor = new GlobalsAccessor()
     ) {
-        $this->globalsConfig = new GlobalConfig($this->globals);
+        // Use ConfigFactory to determine the appropriate accessor
+        // When OCE_SINCH_CONVERSATIONS_ENV_CONFIG=1 is set, use EnvironmentConfigAccessor
+        $accessor = ConfigFactory::isEnvConfigMode()
+            ? ConfigFactory::createConfigAccessor()
+            : $this->configAccessor;
+        $this->globalsConfig = new GlobalConfig($accessor);
         $this->session = new SessionAccessor();
 
         $templatePath = \dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . "templates" . DIRECTORY_SEPARATOR;

@@ -16,6 +16,7 @@ Thumbs.db
 *.log
 .local
 .env
+compose.override.yml
 
 # PHPUnit
 .phpunit.cache/
