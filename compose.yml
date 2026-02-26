@@ -68,6 +68,8 @@ services:
       # Enable REST APIs for testing
       OPENEMR_SETTING_rest_api: 1
       OPENEMR_SETTING_rest_fhir_api: 1
+      # Disable telemetry in development
+      OPENEMR_DISABLE_TELEMETRY: 'true'
     depends_on:
       mysql:
         condition: service_healthy
