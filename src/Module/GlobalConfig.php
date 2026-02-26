@@ -16,22 +16,22 @@ use OpenEMR\Common\Crypto\CryptoGen;
 
 class GlobalConfig
 {
-    private readonly bool $isEnvConfigMode;
+    private readonly bool $isExternalConfigMode;
 
     public function __construct(
         private readonly ConfigAccessorInterface $configAccessor = new GlobalsAccessor()
     ) {
-        $this->isEnvConfigMode = ConfigFactory::isEnvConfigMode();
+        $this->isExternalConfigMode = ConfigFactory::isExternalConfigMode();
     }
 
     public const CONFIG_OPTION_ENABLED = 'oce_sinch_conversations_enabled';
 
     /**
-     * Check if configuration is managed via environment variables
+     * Check if configuration is managed externally (file or env vars)
      */
-    public function isEnvConfigMode(): bool
+    public function isExternalConfigMode(): bool
     {
-        return $this->isEnvConfigMode;
+        return $this->isExternalConfigMode;
     }
     public const CONFIG_OPTION_PROJECT_ID = 'oce_sinch_conversations_project_id';
     public const CONFIG_OPTION_APP_ID = 'oce_sinch_conversations_app_id';
@@ -81,8 +81,8 @@ class GlobalConfig
     {
         $value = $this->configAccessor->getString(self::CONFIG_OPTION_API_SECRET, '');
         if ($value !== '' && $value !== '0') {
-            // In env config mode, secrets are stored as plaintext (no encryption)
-            if ($this->isEnvConfigMode) {
+            // In external config mode, secrets are stored as plaintext (no encryption)
+            if ($this->isExternalConfigMode) {
                 return $value;
             }
             $cryptoGen = new CryptoGen();

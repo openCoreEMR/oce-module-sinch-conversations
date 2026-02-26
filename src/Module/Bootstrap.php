@@ -35,8 +35,8 @@ class Bootstrap
         private readonly ConfigAccessorInterface $configAccessor = new GlobalsAccessor()
     ) {
         // Use ConfigFactory to determine the appropriate accessor
-        // When OCE_SINCH_CONVERSATIONS_ENV_CONFIG=1 is set, use EnvironmentConfigAccessor
-        $accessor = ConfigFactory::isEnvConfigMode()
+        // When external config mode is active (file or env), use the appropriate accessor
+        $accessor = ConfigFactory::isExternalConfigMode()
             ? ConfigFactory::createConfigAccessor()
             : $this->configAccessor;
         $this->globalsConfig = new GlobalConfig($accessor);
