@@ -211,6 +211,68 @@ For local development and testing, you can configure the module entirely via env
 docker compose exec openemr printenv | grep OCE_SINCH
 ```
 
+## YAML File-Based Configuration
+
+For Kubernetes-style deployments, the module supports YAML config files mounted via ConfigMap and Secret volumes. This is the preferred approach for K8s because it maps directly to volume mounts.
+
+**Config files:**
+- `/etc/oce/sinch-conversations/config.yaml` — non-sensitive settings (from ConfigMap)
+- `/etc/oce/sinch-conversations/secrets.yaml` — sensitive settings (from Secret)
+
+**Override paths via env vars:**
+- `OCE_SINCH_CONVERSATIONS_CONFIG_FILE` — custom path to config file
+- `OCE_SINCH_CONVERSATIONS_SECRETS_FILE` — custom path to secrets file
+
+**Example config.yaml:**
+```yaml
+enabled: true
+project_id: "abc123"
+app_id: "app-456"
+region: us
+default_channel: SMS
+clinic_name: "Example Clinic"
+clinic_phone: "555-1234"
+api_key: "your-api-key"
+```
+
+**Example secrets.yaml:**
+```yaml
+api_secret: "your-api-secret"
+```
+
+**Precedence:** env vars > YAML files > database globals
+
+The module auto-detects file presence — no activation flag needed. When config files are present, the admin UI shows "Configuration Managed Externally" instead of editable fields.
+
+**Imports:** Config files support Symfony-style imports for splitting across files:
+```yaml
+imports:
+  - { resource: secrets.yaml }
+enabled: true
+```
+
+**Testing locally with Docker:**
+```bash
+# Create config files
+mkdir -p tmp/oce-config
+cat > tmp/oce-config/config.yaml <<'EOF'
+enabled: true
+project_id: "test-project"
+app_id: "test-app"
+api_key: "test-key"
+EOF
+
+cat > tmp/oce-config/secrets.yaml <<'EOF'
+api_secret: "test-secret"
+EOF
+
+# Mount into container via compose.override.yml:
+# services:
+#   openemr:
+#     volumes:
+#       - ./tmp/oce-config:/etc/oce/sinch-conversations:ro
+```
+
 ## Environment Details
 
 **Services:**
