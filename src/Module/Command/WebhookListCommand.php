@@ -23,7 +23,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 
 class WebhookListCommand extends Command
 {
-    protected static $defaultName = 'sinch:webhook:list';
+    protected static ?string $defaultName = 'sinch:webhook:list';
 
     protected function configure(): void
     {

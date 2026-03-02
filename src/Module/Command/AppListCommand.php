@@ -23,7 +23,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 
 class AppListCommand extends Command
 {
-    protected static $defaultName = 'sinch:app:list';
+    protected static ?string $defaultName = 'sinch:app:list';
 
     protected function configure(): void
     {
