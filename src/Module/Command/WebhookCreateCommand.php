@@ -24,7 +24,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 
 class WebhookCreateCommand extends Command
 {
-    protected static $defaultName = 'sinch:webhook:create';
+    protected static ?string $defaultName = 'sinch:webhook:create';
 
     protected function configure(): void
     {

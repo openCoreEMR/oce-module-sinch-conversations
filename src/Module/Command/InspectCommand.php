@@ -23,7 +23,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 
 class InspectCommand extends Command
 {
-    protected static $defaultName = 'sinch:inspect';
+    protected static ?string $defaultName = 'sinch:inspect';
 
     protected function configure(): void
     {
