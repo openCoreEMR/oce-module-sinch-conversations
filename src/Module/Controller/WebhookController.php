@@ -13,7 +13,9 @@
 namespace OpenCoreEMR\Modules\SinchConversations\Controller;
 
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
+use OpenCoreEMR\Modules\SinchConversations\Service\ConsentService;
 use OpenCoreEMR\Modules\SinchConversations\Service\KeywordHandlerService;
+use OpenCoreEMR\Modules\SinchConversations\Service\MessageOptions;
 use OpenCoreEMR\Modules\SinchConversations\Service\MessageService;
 use OpenCoreEMR\Sinch\Conversation\Exception\AccessDeniedException;
 use OpenCoreEMR\Sinch\Conversation\Exception\UnauthorizedException;
@@ -30,7 +32,8 @@ class WebhookController
     public function __construct(
         private readonly GlobalConfig $globalConfig,
         private readonly KeywordHandlerService $keywordHandler,
-        private readonly MessageService $messageService
+        private readonly MessageService $messageService,
+        private readonly ConsentService $consentService
     ) {
         $this->logger = new SystemLogger();
     }
@@ -89,6 +92,8 @@ class WebhookController
         return match ($eventTypeRaw) {
             'MESSAGE_INBOUND' => $this->handleMessageInbound($payload),
             'MESSAGE_DELIVERY' => $this->handleMessageDelivery($payload),
+            'OPT_OUT' => $this->handleOptOut($payload),
+            'OPT_IN' => $this->handleOptIn($payload),
             default => $this->handleUnknownEvent($eventTypeRaw),
         };
     }
@@ -248,6 +253,108 @@ class WebhookController
     }
 
     /**
+     * Handle OPT_OUT callback from Sinch consent management
+     *
+     * Fires on channels with native opt-out support (e.g. Viber BM).
+     * SMS opt-outs arrive as MESSAGE_INBOUND and are handled by KeywordHandlerService.
+     *
+     * @param array<string, mixed> $payload
+     */
+    private function handleOptOut(array $payload): Response
+    {
+        $notification = $payload['opt_out_notification'] ?? [];
+        $identity = $this->extractString($notification, 'identity', '');
+        $channel = $this->extractString($notification, 'channel', '');
+        $status = $this->extractString($notification, 'status', '');
+        $contactId = $this->extractString($notification, 'contact_id', '');
+
+        $this->logger->info("Processing OPT_OUT: identity={$identity}, channel={$channel}, status={$status}");
+
+        if ($status !== 'OPT_OUT_SUCCEEDED') {
+            $this->logger->warning("OPT_OUT did not succeed (status={$status}), skipping");
+            return new JsonResponse(['status' => 'ignored'], Response::HTTP_OK);
+        }
+
+        $patientId = $this->lookupPatientByContactOrIdentity($contactId, $identity);
+        if ($patientId === null) {
+            $this->logger->warning("No patient found for OPT_OUT: identity={$identity}, contact={$contactId}");
+            return new JsonResponse(['status' => 'no_patient'], Response::HTTP_OK);
+        }
+
+        try {
+            $this->consentService->optOut($patientId, $identity, "sinch_{$channel}");
+            $this->logger->info("Recorded OPT_OUT for patient {$patientId} on {$channel}");
+        } catch (\Throwable $e) {
+            $this->logger->error("Failed to record OPT_OUT for patient {$patientId}: " . $e->getMessage());
+        }
+
+        return new JsonResponse(['status' => 'success'], Response::HTTP_OK);
+    }
+
+    /**
+     * Handle OPT_IN callback from Sinch consent management
+     *
+     * Fires on channels with native opt-in support (e.g. Viber BM).
+     * SMS opt-ins arrive as MESSAGE_INBOUND and are handled by KeywordHandlerService.
+     *
+     * @param array<string, mixed> $payload
+     */
+    private function handleOptIn(array $payload): Response
+    {
+        $notification = $payload['opt_in_notification'] ?? [];
+        $identity = $this->extractString($notification, 'identity', '');
+        $channel = $this->extractString($notification, 'channel', '');
+        $status = $this->extractString($notification, 'status', '');
+        $contactId = $this->extractString($notification, 'contact_id', '');
+
+        $this->logger->info("Processing OPT_IN: identity={$identity}, channel={$channel}, status={$status}");
+
+        if ($status !== 'OPT_IN_SUCCEEDED') {
+            $this->logger->warning("OPT_IN did not succeed (status={$status}), skipping");
+            return new JsonResponse(['status' => 'ignored'], Response::HTTP_OK);
+        }
+
+        $patientId = $this->lookupPatientByContactOrIdentity($contactId, $identity);
+        if ($patientId === null) {
+            $this->logger->warning("No patient found for OPT_IN: identity={$identity}, contact={$contactId}");
+            return new JsonResponse(['status' => 'no_patient'], Response::HTTP_OK);
+        }
+
+        try {
+            $this->consentService->optIn($patientId, $identity, "sinch_{$channel}");
+            $this->logger->info("Recorded OPT_IN for patient {$patientId} on {$channel}");
+        } catch (\Throwable $e) {
+            $this->logger->error("Failed to record OPT_IN for patient {$patientId}: " . $e->getMessage());
+        }
+
+        return new JsonResponse(['status' => 'success'], Response::HTTP_OK);
+    }
+
+    /**
+     * Look up patient ID by Sinch contact ID or channel identity (phone number)
+     */
+    private function lookupPatientByContactOrIdentity(string $contactId, string $identity): ?int
+    {
+        if ($contactId !== '') {
+            $sql = "SELECT patient_id FROM oce_sinch_contacts WHERE contact_id = ? LIMIT 1";
+            $result = QueryUtils::querySingleRow($sql, [$contactId]);
+            if ($result) {
+                return (int) $result['patient_id'];
+            }
+        }
+
+        if ($identity !== '') {
+            $sql = "SELECT patient_id FROM oce_sinch_contacts WHERE channel_identity = ? LIMIT 1";
+            $result = QueryUtils::querySingleRow($sql, [$identity]);
+            if ($result) {
+                return (int) $result['patient_id'];
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Handle unknown event types gracefully
      */
     private function handleUnknownEvent(string $eventType): Response
@@ -389,7 +496,7 @@ class WebhookController
                 (int) $contact['patient_id'],
                 $phoneNumber,
                 $responseMessage,
-                ['template_key' => 'keyword_response']
+                new MessageOptions(templateKey: 'keyword_response', skipConsentCheck: true)
             );
 
             $this->logger->info("Sent keyword auto-response to: {$phoneNumber}");

@@ -144,8 +144,9 @@ class ConsentService
 
         $message = $this->templateService->render('opt_in_confirmation', $variables);
 
-        $this->messageService->sendToPatient($patientId, $phoneNumber, $message, [
-            'template_key' => 'opt_in_confirmation',
-        ]);
+        $this->messageService->sendToPatient($patientId, $phoneNumber, $message, new MessageOptions(
+            templateKey: 'opt_in_confirmation',
+            skipConsentCheck: true,
+        ));
     }
 }

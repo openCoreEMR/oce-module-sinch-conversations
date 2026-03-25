@@ -36,6 +36,12 @@ This document describes the architectural patterns and conventions for OpenEMR m
 |----------|-------------|
 | [API Reference](docs/sinch/api-reference.md) | Sinch API documentation links and usage guidance |
 
+### Regulatory
+
+| Document | Description |
+|----------|-------------|
+| [Regulatory Considerations](docs/regulatory.md) | TCPA, HIPAA, FCC rules, healthcare exemptions, consent model |
+
 ## Quick Reference
 
 ### Key Patterns

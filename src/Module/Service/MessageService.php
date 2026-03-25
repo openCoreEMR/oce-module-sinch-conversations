@@ -12,6 +12,7 @@
 
 namespace OpenCoreEMR\Modules\SinchConversations\Service;
 
+use OpenCoreEMR\Modules\SinchConversations\Channel;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Sinch\Conversation\Client\ConversationApiClient;
 use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
@@ -32,10 +33,6 @@ class MessageService
     /**
      * Send message to a patient
      *
-     * @param int $patientId
-     * @param string $phoneNumber
-     * @param string $message
-     * @param array<string, mixed> $options
      * @return array<string, mixed> Message data
      * @throws ValidationException
      */
@@ -43,24 +40,36 @@ class MessageService
         int $patientId,
         string $phoneNumber,
         string $message,
-        array $options = []
+        ?MessageOptions $options = null
     ): array {
+        $options ??= new MessageOptions();
+
+        if (!$options->skipConsentCheck) {
+            $this->assertPatientEligible($patientId, $phoneNumber);
+        }
+
         $contactId = $this->getOrCreateContact($patientId, $phoneNumber);
 
         $conversationId = $this->getOrCreateConversation($contactId, $patientId);
 
         // Add configured clinic phone as sender if not already set
-        if (!isset($options['sender'])) {
+        if ($options->sender === null) {
             $senderPhone = $this->config->getClinicPhone();
-            if (!empty($senderPhone)) {
-                $options['sender'] = $senderPhone;
-                $options['channel'] = 'SMS'; // Required for sender to work
+            if ($senderPhone !== '') {
+                $options = new MessageOptions(
+                    sender: $senderPhone,
+                    channel: Channel::SMS,
+                    templateKey: $options->templateKey,
+                    metadata: $options->metadata,
+                    channelPriority: $options->channelPriority,
+                    skipConsentCheck: $options->skipConsentCheck,
+                );
                 $this->logger->debug("Using configured sender: {$senderPhone}");
             }
         }
 
         try {
-            $response = $this->apiClient->sendMessage($contactId, $message, $options);
+            $response = $this->apiClient->sendMessage($contactId, $message, $options->toApiOptions());
         } catch (\Throwable $e) {
             $this->logger->error("Failed to send message: " . $e->getMessage());
             throw new ValidationException("Failed to send message: " . $e->getMessage());
@@ -74,12 +83,10 @@ class MessageService
     /**
      * Send batch messages to multiple patients
      *
-     * @param array<int, int> $patientIds
-     * @param string $message
-     * @param array<string, mixed> $options
+     * @param list<int> $patientIds
      * @return array<string, mixed> Results
      */
-    public function sendBatch(array $patientIds, string $message, array $options = []): array
+    public function sendBatch(array $patientIds, string $message, ?MessageOptions $options = null): array
     {
         $results = [
             'sent' => 0,
@@ -90,7 +97,7 @@ class MessageService
         foreach ($patientIds as $patientId) {
             $phoneNumber = $this->getPatientPhone($patientId);
 
-            if (!$phoneNumber) {
+            if ($phoneNumber === null) {
                 $results['failed']++;
                 $results['errors'][] = "Patient {$patientId}: No phone number";
                 continue;
@@ -110,10 +117,6 @@ class MessageService
 
     /**
      * Get or create a Sinch contact for patient
-     *
-     * @param int $patientId
-     * @param string $phoneNumber
-     * @return string Contact ID
      */
     private function getOrCreateContact(int $patientId, string $phoneNumber): string
     {
@@ -144,10 +147,6 @@ class MessageService
 
     /**
      * Get or create a conversation
-     *
-     * @param string $contactId
-     * @param int $patientId
-     * @return string Conversation ID
      */
     private function getOrCreateConversation(string $contactId, int $patientId): string
     {
@@ -174,16 +173,13 @@ class MessageService
     /**
      * Store outbound message in database
      *
-     * @param string $conversationId
      * @param array<string, mixed> $response
-     * @param string $message
-     * @param array<string, mixed> $options
      */
     private function storeOutboundMessage(
         string $conversationId,
         array $response,
         string $message,
-        array $options
+        MessageOptions $options
     ): void {
         $sql = "INSERT INTO oce_sinch_messages (
             conversation_id, message_id, direction, channel,
@@ -195,8 +191,8 @@ class MessageService
             $conversationId,
             $response['id'] ?? uniqid('msg_'),
             $message,
-            $options['template_key'] ?? null,
-            json_encode($options['metadata'] ?? []),
+            $options->templateKey,
+            json_encode($options->metadata ?: []),
         ]);
 
         $sql = "UPDATE oce_sinch_conversations
@@ -206,10 +202,39 @@ class MessageService
     }
 
     /**
-     * Get patient phone number
+     * Assert patient is eligible to receive messages
      *
-     * @param int $patientId
-     * @return string|null
+     * Check both OpenEMR's hipaa_allowsms field and module-level consent.
+     * Query consent directly to avoid circular dependency (ConsentService depends on MessageService).
+     *
+     * @throws ValidationException
+     */
+    private function assertPatientEligible(int $patientId, string $phoneNumber): void
+    {
+        $sql = "SELECT hipaa_allowsms FROM patient_data WHERE pid = ?";
+        $result = QueryUtils::querySingleRow($sql, [$patientId]);
+        $hipaaAllowSms = $result['hipaa_allowsms'] ?? '';
+
+        if ($hipaaAllowSms !== 'YES') {
+            throw new ValidationException(
+                "Patient {$patientId} has not allowed SMS (hipaa_allowsms is not YES)"
+            );
+        }
+
+        $sql = "SELECT opted_in, opted_out
+                FROM oce_sinch_patient_consent
+                WHERE patient_id = ? AND phone_number = ?";
+        $consent = QueryUtils::querySingleRow($sql, [$patientId, $phoneNumber]);
+
+        if (!$consent || !($consent['opted_in'] ?? false) || ($consent['opted_out'] ?? false)) {
+            throw new ValidationException(
+                "Patient {$patientId} has not consented to messages at {$phoneNumber}"
+            );
+        }
+    }
+
+    /**
+     * Get patient phone number
      */
     private function getPatientPhone(int $patientId): ?string
     {

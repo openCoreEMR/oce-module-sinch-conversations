@@ -14,7 +14,9 @@ namespace OpenCoreEMR\Modules\SinchConversations\Tests\Unit\Controller;
 
 use OpenCoreEMR\Modules\SinchConversations\Controller\WebhookController;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
+use OpenCoreEMR\Modules\SinchConversations\Service\ConsentService;
 use OpenCoreEMR\Modules\SinchConversations\Service\KeywordHandlerService;
+use OpenCoreEMR\Modules\SinchConversations\Service\MessageOptions;
 use OpenCoreEMR\Modules\SinchConversations\Service\MessageService;
 use OpenEMR\Common\Database\QueryUtils;
 use OpenEMR\Common\Logging\SystemLogger;
@@ -29,6 +31,7 @@ class WebhookControllerTest extends TestCase
     private GlobalConfig&MockObject $mockConfig;
     private KeywordHandlerService&MockObject $mockKeywordHandler;
     private MessageService&MockObject $mockMessageService;
+    private ConsentService&MockObject $mockConsentService;
     private WebhookController $controller;
 
     protected function setUp(): void
@@ -44,11 +47,13 @@ class WebhookControllerTest extends TestCase
 
         $this->mockKeywordHandler = $this->createMock(KeywordHandlerService::class);
         $this->mockMessageService = $this->createMock(MessageService::class);
+        $this->mockConsentService = $this->createMock(ConsentService::class);
 
         $this->controller = new WebhookController(
             $this->mockConfig,
             $this->mockKeywordHandler,
-            $this->mockMessageService
+            $this->mockMessageService,
+            $this->mockConsentService
         );
     }
 
@@ -84,7 +89,8 @@ class WebhookControllerTest extends TestCase
         $controller = new WebhookController(
             $mockConfig,
             $this->mockKeywordHandler,
-            $this->mockMessageService
+            $this->mockMessageService,
+            $this->mockConsentService
         );
 
         $request = $this->makeRequest('POST', ['trigger' => 'MESSAGE_INBOUND']);
@@ -103,7 +109,8 @@ class WebhookControllerTest extends TestCase
         $controller = new WebhookController(
             $mockConfig,
             $this->mockKeywordHandler,
-            $this->mockMessageService
+            $this->mockMessageService,
+            $this->mockConsentService
         );
 
         $request = $this->makeRequest('POST', ['trigger' => 'MESSAGE_INBOUND']);
@@ -123,7 +130,8 @@ class WebhookControllerTest extends TestCase
         $controller = new WebhookController(
             $mockConfig,
             $this->mockKeywordHandler,
-            $this->mockMessageService
+            $this->mockMessageService,
+            $this->mockConsentService
         );
 
         $request = $this->makeRequest('POST', ['trigger' => 'MESSAGE_INBOUND'], 'wrong', 'wrong');
@@ -325,7 +333,7 @@ class WebhookControllerTest extends TestCase
 
         $this->mockMessageService->expects($this->once())
             ->method('sendToPatient')
-            ->with(10, '+15551234567', 'You have been unsubscribed.', ['template_key' => 'keyword_response']);
+            ->with(10, '+15551234567', 'You have been unsubscribed.', new MessageOptions(templateKey: 'keyword_response', skipConsentCheck: true));
 
         $response = $this->controller->dispatch($request);
 
@@ -491,6 +499,169 @@ class WebhookControllerTest extends TestCase
                 && !str_contains($q['sql'], 'delivered_at')
         );
         $this->assertNotEmpty($updateQueries);
+    }
+
+    // --- OPT_OUT / OPT_IN tests ---
+
+    public function testOptOutCallsConsentService(): void
+    {
+        QueryUtils::setMockResult(
+            "SELECT patient_id FROM oce_sinch_contacts WHERE contact_id = ? LIMIT 1",
+            ['contact-xyz'],
+            [['patient_id' => 5]]
+        );
+
+        $this->mockConsentService->expects($this->once())
+            ->method('optOut')
+            ->with(5, '+15559876543', 'sinch_VIBERBM');
+
+        $request = $this->makeRequest('POST', [
+            'trigger' => 'OPT_OUT',
+            'opt_out_notification' => [
+                'contact_id' => 'contact-xyz',
+                'channel' => 'VIBERBM',
+                'identity' => '+15559876543',
+                'status' => 'OPT_OUT_SUCCEEDED',
+            ],
+        ]);
+
+        $response = $this->controller->dispatch($request);
+
+        $this->assertEquals(Response::HTTP_OK, $response->getStatusCode());
+        $this->assertResponseContains($response, 'status', 'success');
+    }
+
+    public function testOptOutIgnoresFailedStatus(): void
+    {
+        $this->mockConsentService->expects($this->never())->method('optOut');
+
+        $request = $this->makeRequest('POST', [
+            'trigger' => 'OPT_OUT',
+            'opt_out_notification' => [
+                'contact_id' => 'contact-xyz',
+                'channel' => 'VIBERBM',
+                'identity' => '+15559876543',
+                'status' => 'OPT_OUT_FAILED',
+            ],
+        ]);
+
+        $response = $this->controller->dispatch($request);
+
+        $this->assertEquals(Response::HTTP_OK, $response->getStatusCode());
+        $this->assertResponseContains($response, 'status', 'ignored');
+    }
+
+    public function testOptOutHandlesUnknownPatient(): void
+    {
+        QueryUtils::setMockResult(
+            "SELECT patient_id FROM oce_sinch_contacts WHERE contact_id = ? LIMIT 1",
+            ['contact-unknown'],
+            []
+        );
+        QueryUtils::setMockResult(
+            "SELECT patient_id FROM oce_sinch_contacts WHERE channel_identity = ? LIMIT 1",
+            ['+15559876543'],
+            []
+        );
+
+        $this->mockConsentService->expects($this->never())->method('optOut');
+
+        $request = $this->makeRequest('POST', [
+            'trigger' => 'OPT_OUT',
+            'opt_out_notification' => [
+                'contact_id' => 'contact-unknown',
+                'channel' => 'SMS',
+                'identity' => '+15559876543',
+                'status' => 'OPT_OUT_SUCCEEDED',
+            ],
+        ]);
+
+        $response = $this->controller->dispatch($request);
+
+        $this->assertEquals(Response::HTTP_OK, $response->getStatusCode());
+        $this->assertResponseContains($response, 'status', 'no_patient');
+    }
+
+    public function testOptOutFallsBackToIdentityLookup(): void
+    {
+        // Contact ID lookup fails
+        QueryUtils::setMockResult(
+            "SELECT patient_id FROM oce_sinch_contacts WHERE contact_id = ? LIMIT 1",
+            ['contact-missing'],
+            []
+        );
+        // Identity lookup succeeds
+        QueryUtils::setMockResult(
+            "SELECT patient_id FROM oce_sinch_contacts WHERE channel_identity = ? LIMIT 1",
+            ['+15559876543'],
+            [['patient_id' => 7]]
+        );
+
+        $this->mockConsentService->expects($this->once())
+            ->method('optOut')
+            ->with(7, '+15559876543', 'sinch_SMS');
+
+        $request = $this->makeRequest('POST', [
+            'trigger' => 'OPT_OUT',
+            'opt_out_notification' => [
+                'contact_id' => 'contact-missing',
+                'channel' => 'SMS',
+                'identity' => '+15559876543',
+                'status' => 'OPT_OUT_SUCCEEDED',
+            ],
+        ]);
+
+        $response = $this->controller->dispatch($request);
+
+        $this->assertEquals(Response::HTTP_OK, $response->getStatusCode());
+    }
+
+    public function testOptInCallsConsentService(): void
+    {
+        QueryUtils::setMockResult(
+            "SELECT patient_id FROM oce_sinch_contacts WHERE contact_id = ? LIMIT 1",
+            ['contact-xyz'],
+            [['patient_id' => 5]]
+        );
+
+        $this->mockConsentService->expects($this->once())
+            ->method('optIn')
+            ->with(5, '+15559876543', 'sinch_VIBERBM');
+
+        $request = $this->makeRequest('POST', [
+            'trigger' => 'OPT_IN',
+            'opt_in_notification' => [
+                'contact_id' => 'contact-xyz',
+                'channel' => 'VIBERBM',
+                'identity' => '+15559876543',
+                'status' => 'OPT_IN_SUCCEEDED',
+            ],
+        ]);
+
+        $response = $this->controller->dispatch($request);
+
+        $this->assertEquals(Response::HTTP_OK, $response->getStatusCode());
+        $this->assertResponseContains($response, 'status', 'success');
+    }
+
+    public function testOptInIgnoresFailedStatus(): void
+    {
+        $this->mockConsentService->expects($this->never())->method('optIn');
+
+        $request = $this->makeRequest('POST', [
+            'trigger' => 'OPT_IN',
+            'opt_in_notification' => [
+                'contact_id' => 'contact-xyz',
+                'channel' => 'VIBERBM',
+                'identity' => '+15559876543',
+                'status' => 'OPT_IN_FAILED',
+            ],
+        ]);
+
+        $response = $this->controller->dispatch($request);
+
+        $this->assertEquals(Response::HTTP_OK, $response->getStatusCode());
+        $this->assertResponseContains($response, 'status', 'ignored');
     }
 
     // --- Logging tests ---
