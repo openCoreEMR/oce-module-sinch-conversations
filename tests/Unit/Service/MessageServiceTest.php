@@ -13,6 +13,7 @@
 namespace OpenCoreEMR\Modules\SinchConversations\Tests\Unit\Service;
 
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
+use OpenCoreEMR\Modules\SinchConversations\Service\MessageOptions;
 use OpenCoreEMR\Modules\SinchConversations\Service\MessageService;
 use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockGlobalsAccessor;
 use OpenCoreEMR\Sinch\Conversation\Client\ConversationApiClient;
@@ -41,10 +42,129 @@ class MessageServiceTest extends TestCase
         $this->service = new MessageService($this->config, $this->apiClient);
     }
 
+    /**
+     * Set up mock results so patient passes eligibility checks
+     */
+    private function mockPatientEligible(int $patientId, string $phoneNumber): void
+    {
+        QueryUtils::setMockResult(
+            "SELECT hipaa_allowsms FROM patient_data WHERE pid = ?",
+            [$patientId],
+            [['hipaa_allowsms' => 'YES']]
+        );
+        QueryUtils::setMockResult(
+            "SELECT opted_in, opted_out
+                FROM oce_sinch_patient_consent
+                WHERE patient_id = ? AND phone_number = ?",
+            [$patientId, $phoneNumber],
+            [['opted_in' => true, 'opted_out' => false]]
+        );
+    }
+
+    // --- consent and hipaa gating ---
+
+    public function testSendToPatientThrowsWhenHipaaDisallowsSms(): void
+    {
+        QueryUtils::setMockResult(
+            "SELECT hipaa_allowsms FROM patient_data WHERE pid = ?",
+            [1],
+            [['hipaa_allowsms' => 'NO']]
+        );
+
+        $this->expectException(ValidationException::class);
+        $this->expectExceptionMessage('hipaa_allowsms is not YES');
+
+        $this->service->sendToPatient(1, '+15559999999', 'Hello');
+    }
+
+    public function testSendToPatientThrowsWhenHipaaFieldMissing(): void
+    {
+        QueryUtils::setMockResult(
+            "SELECT hipaa_allowsms FROM patient_data WHERE pid = ?",
+            [1],
+            []
+        );
+
+        $this->expectException(ValidationException::class);
+        $this->expectExceptionMessage('hipaa_allowsms is not YES');
+
+        $this->service->sendToPatient(1, '+15559999999', 'Hello');
+    }
+
+    public function testSendToPatientThrowsWhenNoConsent(): void
+    {
+        QueryUtils::setMockResult(
+            "SELECT hipaa_allowsms FROM patient_data WHERE pid = ?",
+            [1],
+            [['hipaa_allowsms' => 'YES']]
+        );
+        QueryUtils::setMockResult(
+            "SELECT opted_in, opted_out
+                FROM oce_sinch_patient_consent
+                WHERE patient_id = ? AND phone_number = ?",
+            [1, '+15559999999'],
+            []
+        );
+
+        $this->expectException(ValidationException::class);
+        $this->expectExceptionMessage('has not consented');
+
+        $this->service->sendToPatient(1, '+15559999999', 'Hello');
+    }
+
+    public function testSendToPatientThrowsWhenOptedOut(): void
+    {
+        QueryUtils::setMockResult(
+            "SELECT hipaa_allowsms FROM patient_data WHERE pid = ?",
+            [1],
+            [['hipaa_allowsms' => 'YES']]
+        );
+        QueryUtils::setMockResult(
+            "SELECT opted_in, opted_out
+                FROM oce_sinch_patient_consent
+                WHERE patient_id = ? AND phone_number = ?",
+            [1, '+15559999999'],
+            [['opted_in' => true, 'opted_out' => true]]
+        );
+
+        $this->expectException(ValidationException::class);
+        $this->expectExceptionMessage('has not consented');
+
+        $this->service->sendToPatient(1, '+15559999999', 'Hello');
+    }
+
+    public function testSendToPatientSkipsConsentCheckWhenOptionSet(): void
+    {
+        // No eligibility mocks — would fail if checked
+        QueryUtils::setMockResult(
+            "SELECT contact_id FROM oce_sinch_contacts
+                WHERE patient_id = ? AND channel_identity = ?",
+            [1, '+15559999999'],
+            [['contact_id' => 'contact-abc']]
+        );
+        QueryUtils::setMockResult(
+            "SELECT conversation_id FROM oce_sinch_conversations
+                WHERE contact_id = ? AND patient_id = ?",
+            ['contact-abc', 1],
+            [['conversation_id' => 'conv-123']]
+        );
+
+        $this->apiClient->method('sendMessage')
+            ->willReturn(['id' => 'msg-skip']);
+
+        $result = $this->service->sendToPatient(1, '+15559999999', 'Hello', new MessageOptions(
+            skipConsentCheck: true,
+        ));
+
+        $this->assertEquals('msg-skip', $result['id']);
+    }
+
     // --- sendToPatient ---
 
     public function testSendToPatientWithExistingContact(): void
     {
+        $this->mockPatientEligible(1, '+15559999999');
+
         // Existing contact
         QueryUtils::setMockResult(
             "SELECT contact_id FROM oce_sinch_contacts
@@ -76,6 +196,8 @@ class MessageServiceTest extends TestCase
 
     public function testSendToPatientCreatesNewContact(): void
     {
+        $this->mockPatientEligible(1, '+15559999999');
+
         // No existing contact
         QueryUtils::setMockResult(
             "SELECT contact_id FROM oce_sinch_contacts
@@ -111,6 +233,8 @@ class MessageServiceTest extends TestCase
 
     public function testSendToPatientThrowsWhenCreateContactFails(): void
     {
+        $this->mockPatientEligible(1, '+15559999999');
+
         QueryUtils::setMockResult(
             "SELECT contact_id FROM oce_sinch_contacts
                 WHERE patient_id = ? AND channel_identity = ?",
@@ -127,6 +251,8 @@ class MessageServiceTest extends TestCase
 
     public function testSendToPatientAddsSenderFromConfig(): void
     {
+        $this->mockPatientEligible(1, '+15559999999');
+
         QueryUtils::setMockResult(
             "SELECT contact_id FROM oce_sinch_contacts
                 WHERE patient_id = ? AND channel_identity = ?",
@@ -154,6 +280,8 @@ class MessageServiceTest extends TestCase
 
     public function testSendToPatientPreservesExplicitSender(): void
     {
+        $this->mockPatientEligible(1, '+15559999999');
+
         QueryUtils::setMockResult(
             "SELECT contact_id FROM oce_sinch_contacts
                 WHERE patient_id = ? AND channel_identity = ?",
@@ -176,11 +304,15 @@ class MessageServiceTest extends TestCase
             )
             ->willReturn(['id' => 'msg-004']);
 
-        $this->service->sendToPatient(1, '+15559999999', 'Hello', ['sender' => '+15550000000']);
+        $this->service->sendToPatient(1, '+15559999999', 'Hello', new MessageOptions(
+            sender: '+15550000000',
+        ));
     }
 
     public function testSendToPatientThrowsOnApiFailure(): void
     {
+        $this->mockPatientEligible(1, '+15559999999');
+
         QueryUtils::setMockResult(
             "SELECT contact_id FROM oce_sinch_contacts
                 WHERE patient_id = ? AND channel_identity = ?",
@@ -220,6 +352,9 @@ class MessageServiceTest extends TestCase
             []
         );
 
+        // Patient 1 eligibility
+        $this->mockPatientEligible(1, '+15551111111');
+
         // Patient 1 send flow
         QueryUtils::setMockResult(
             "SELECT contact_id FROM oce_sinch_contacts
@@ -243,10 +378,54 @@ class MessageServiceTest extends TestCase
         $this->assertStringContainsString('No phone number', $results['errors'][0]);
     }
 
+    public function testSendBatchSkipsIneligiblePatient(): void
+    {
+        // Patient 1: has phone but hipaa_allowsms is NO
+        QueryUtils::setMockResult(
+            "SELECT phone_cell FROM patient_data WHERE pid = ?",
+            [1],
+            [['phone_cell' => '+15551111111']]
+        );
+        QueryUtils::setMockResult(
+            "SELECT hipaa_allowsms FROM patient_data WHERE pid = ?",
+            [1],
+            [['hipaa_allowsms' => 'NO']]
+        );
+
+        // Patient 2: eligible
+        QueryUtils::setMockResult(
+            "SELECT phone_cell FROM patient_data WHERE pid = ?",
+            [2],
+            [['phone_cell' => '+15552222222']]
+        );
+        $this->mockPatientEligible(2, '+15552222222');
+        QueryUtils::setMockResult(
+            "SELECT contact_id FROM oce_sinch_contacts
+                WHERE patient_id = ? AND channel_identity = ?",
+            [2, '+15552222222'],
+            [['contact_id' => 'c2']]
+        );
+        QueryUtils::setMockResult(
+            "SELECT conversation_id FROM oce_sinch_conversations
+                WHERE contact_id = ? AND patient_id = ?",
+            ['c2', 2],
+            [['conversation_id' => 'conv-2']]
+        );
+        $this->apiClient->method('sendMessage')->willReturn(['id' => 'msg-batch-2']);
+
+        $results = $this->service->sendBatch([1, 2], 'Batch message');
+
+        $this->assertEquals(1, $results['sent']);
+        $this->assertEquals(1, $results['failed']);
+        $this->assertStringContainsString('hipaa_allowsms', $results['errors'][0]);
+    }
+
     // --- getOrCreateConversation (tested indirectly) ---
 
     public function testCreatesNewConversationWhenNoneExists(): void
     {
+        $this->mockPatientEligible(1, '+15559999999');
+
         QueryUtils::setMockResult(
             "SELECT contact_id FROM oce_sinch_contacts
                 WHERE patient_id = ? AND channel_identity = ?",

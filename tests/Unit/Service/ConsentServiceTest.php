@@ -14,6 +14,7 @@ namespace OpenCoreEMR\Modules\SinchConversations\Tests\Unit\Service;
 
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Service\ConsentService;
+use OpenCoreEMR\Modules\SinchConversations\Service\MessageOptions;
 use OpenCoreEMR\Modules\SinchConversations\Service\MessageService;
 use OpenCoreEMR\Modules\SinchConversations\Service\TemplateService;
 use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockGlobalsAccessor;
@@ -112,7 +113,10 @@ class ConsentServiceTest extends TestCase
 
         $this->messageService->expects($this->once())
             ->method('sendToPatient')
-            ->with(1, '+15551234567', 'Welcome!', ['template_key' => 'opt_in_confirmation']);
+            ->with(1, '+15551234567', 'Welcome!', new MessageOptions(
+                templateKey: 'opt_in_confirmation',
+                skipConsentCheck: true,
+            ));
 
         $this->service->optIn(1, '+15551234567', 'web_form', '192.168.1.1');
 

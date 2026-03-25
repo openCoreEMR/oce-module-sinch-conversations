@@ -367,7 +367,8 @@ class Bootstrap
         return new Controller\WebhookController(
             $this->globalsConfig,
             $this->getKeywordHandlerService(),
-            $this->getMessageService()
+            $this->getMessageService(),
+            $this->getConsentService()
         );
     }
 
