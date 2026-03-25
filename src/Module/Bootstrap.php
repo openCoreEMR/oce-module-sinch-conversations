@@ -4,7 +4,7 @@
  * Initializes the OpenCoreEmr Sinch Conversations Module
  *
  * @package   OpenCoreEMR
- * @link      http://www.open-emr.org
+ * @link      https://opencoreemr.com
  * @author    Michael A. Smith <michael@opencoreemr.com>
  * @copyright Copyright (c) 2025 OpenCoreEMR Inc
  * @license   GNU General Public License 3
