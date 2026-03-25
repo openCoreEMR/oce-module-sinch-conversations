@@ -13,6 +13,7 @@
 namespace OpenCoreEMR\Modules\SinchConversations\Tests\Unit;
 
 use OpenCoreEMR\Modules\SinchConversations\GlobalsAccessor;
+use OpenEMR\Core\Kernel;
 use PHPUnit\Framework\TestCase;
 
 class GlobalsAccessorTest extends TestCase
@@ -133,5 +134,37 @@ class GlobalsAccessorTest extends TestCase
         $this->assertIsArray($all);
         $this->assertArrayHasKey('test_string', $all);
         $this->assertEquals('hello', $all['test_string']);
+    }
+
+    public function testGetKernelReturnsKernel(): void
+    {
+        $kernel = new Kernel();
+        $GLOBALS['kernel'] = $kernel;
+
+        $this->assertSame($kernel, $this->accessor->getKernel());
+
+        unset($GLOBALS['kernel']);
+    }
+
+    public function testGetKernelThrowsWhenNotAvailable(): void
+    {
+        unset($GLOBALS['kernel']);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('OpenEMR Kernel not available');
+
+        $this->accessor->getKernel();
+    }
+
+    public function testGetKernelThrowsWhenWrongType(): void
+    {
+        $GLOBALS['kernel'] = 'not a kernel';
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('OpenEMR Kernel not available');
+
+        $this->accessor->getKernel();
+
+        unset($GLOBALS['kernel']);
     }
 }

@@ -22,8 +22,7 @@ use Symfony\Component\HttpFoundation\Response;
 $logger = new SystemLogger();
 $globalsAccessor = new GlobalsAccessor();
 
-/** @var \OpenEMR\Core\Kernel $kernel */
-$kernel = $globalsAccessor->get('kernel');
+$kernel = $globalsAccessor->getKernel();
 $bootstrap = new Bootstrap($kernel->getEventDispatcher(), $kernel, $globalsAccessor);
 
 $controller = $bootstrap->getSettingsController();

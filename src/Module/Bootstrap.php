@@ -179,6 +179,42 @@ class Bootstrap
                     GlobalConfig::CONFIG_OPTION_CLINIC_PHONE,
                     $setting
                 );
+
+                $setting = new GlobalSetting(
+                    xlt('Webhook Username'),
+                    'text',
+                    '',
+                    xlt('Username for webhook HTTP Basic Auth')
+                );
+                $event->getGlobalsService()->appendToSection(
+                    'OpenCoreEMR Sinch Conversations',
+                    GlobalConfig::CONFIG_OPTION_WEBHOOK_USERNAME,
+                    $setting
+                );
+
+                $setting = new GlobalSetting(
+                    xlt('Webhook Password'),
+                    'encrypted_hash',
+                    '',
+                    xlt('Password for webhook HTTP Basic Auth (stored as hash)')
+                );
+                $event->getGlobalsService()->appendToSection(
+                    'OpenCoreEMR Sinch Conversations',
+                    GlobalConfig::CONFIG_OPTION_WEBHOOK_PASSWORD,
+                    $setting
+                );
+
+                $setting = new GlobalSetting(
+                    xlt('Webhook IP Allowlist'),
+                    'text',
+                    '',
+                    xlt('Allowed IPs for webhooks (one per line, supports CIDR). Empty = allow all.')
+                );
+                $event->getGlobalsService()->appendToSection(
+                    'OpenCoreEMR Sinch Conversations',
+                    GlobalConfig::CONFIG_OPTION_WEBHOOK_IP_ALLOWLIST,
+                    $setting
+                );
             }
         );
     }
@@ -320,6 +356,18 @@ class Bootstrap
         return new Service\TemplateSyncService(
             $this->globalsConfig,
             $this->getConversationApiClient()
+        );
+    }
+
+    /**
+     * Get Webhook Controller
+     */
+    public function getWebhookController(): Controller\WebhookController
+    {
+        return new Controller\WebhookController(
+            $this->globalsConfig,
+            $this->getKeywordHandlerService(),
+            $this->getMessageService()
         );
     }
 
