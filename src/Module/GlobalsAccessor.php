@@ -12,6 +12,8 @@
 
 namespace OpenCoreEMR\Modules\SinchConversations;
 
+use OpenEMR\Core\Kernel;
+
 /**
  * Provides centralized access to OpenEMR globals.
  * This class serves as a single point of abstraction for globals access,
@@ -80,6 +82,20 @@ class GlobalsAccessor implements ConfigAccessorInterface
             return $value;
         }
         return is_numeric($value) ? (int)$value : $default;
+    }
+
+    /**
+     * Get the OpenEMR Kernel instance from globals
+     *
+     * @throws \RuntimeException If the kernel is not available
+     */
+    public function getKernel(): Kernel
+    {
+        $kernel = $this->get('kernel');
+        if (!$kernel instanceof Kernel) {
+            throw new \RuntimeException('OpenEMR Kernel not available');
+        }
+        return $kernel;
     }
 
     /**
