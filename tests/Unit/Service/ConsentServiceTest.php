@@ -123,6 +123,13 @@ class ConsentServiceTest extends TestCase
         $queries = QueryUtils::getQueries();
         $insertQueries = array_filter($queries, fn($q) => str_contains($q['sql'], 'INSERT INTO oce_sinch_patient_consent'));
         $this->assertNotEmpty($insertQueries);
+
+        // Verify hipaa_allowsms is synced to YES
+        $hipaaQueries = array_filter($queries, fn($q) => str_contains($q['sql'], 'UPDATE patient_data SET hipaa_allowsms'));
+        $this->assertNotEmpty($hipaaQueries);
+        $hipaaUpdate = array_values($hipaaQueries)[0];
+        $this->assertEquals('YES', $hipaaUpdate['binds'][0]);
+        $this->assertEquals(1, $hipaaUpdate['binds'][1]);
     }
 
     public function testOptInContinuesWhenConfirmationFails(): void
@@ -152,6 +159,13 @@ class ConsentServiceTest extends TestCase
         // Verify the method param is first bind
         $update = array_values($updateQueries)[0];
         $this->assertEquals('sms_stop', $update['binds'][0]);
+
+        // Verify hipaa_allowsms is synced to NO
+        $hipaaQueries = array_filter($queries, fn($q) => str_contains($q['sql'], 'UPDATE patient_data SET hipaa_allowsms'));
+        $this->assertNotEmpty($hipaaQueries);
+        $hipaaUpdate = array_values($hipaaQueries)[0];
+        $this->assertEquals('NO', $hipaaUpdate['binds'][0]);
+        $this->assertEquals(1, $hipaaUpdate['binds'][1]);
     }
 
     // --- getConsent ---

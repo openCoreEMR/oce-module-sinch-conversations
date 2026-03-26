@@ -264,7 +264,9 @@ class Bootstrap
     {
         return new Service\MessagePollingService(
             $this->globalsConfig,
-            $this->getConversationApiClient()
+            $this->getConversationApiClient(),
+            $this->getKeywordHandlerService(),
+            $this->getMessageService()
         );
     }
 

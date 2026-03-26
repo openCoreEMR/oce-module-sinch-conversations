@@ -290,7 +290,7 @@ class InboxControllerTest extends TestCase
 
         $this->pollingService->expects($this->once())
             ->method('pollAllConversations')
-            ->willReturn(5);
+            ->willReturn(['total_messages' => 5, 'keyword_failures' => []]);
 
         $this->session->expects($this->once())
             ->method('setFlash')
@@ -308,7 +308,7 @@ class InboxControllerTest extends TestCase
 
         $this->pollingService->expects($this->once())
             ->method('pollAllConversations')
-            ->willReturn(0);
+            ->willReturn(['total_messages' => 0, 'keyword_failures' => []]);
 
         $this->session->expects($this->once())
             ->method('setFlash')
@@ -345,7 +345,7 @@ class InboxControllerTest extends TestCase
 
         $this->pollingService->expects($this->once())
             ->method('pollAllConversations')
-            ->willReturn(0);
+            ->willReturn(['total_messages' => 0, 'keyword_failures' => []]);
 
         $response = $this->controller->dispatch('refresh');
 
@@ -365,7 +365,7 @@ class InboxControllerTest extends TestCase
 
         $this->pollingService->expects($this->once())
             ->method('pollAllConversations')
-            ->willReturn(0);
+            ->willReturn(['total_messages' => 0, 'keyword_failures' => []]);
 
         $response = $this->controller->dispatch('refresh');
 
