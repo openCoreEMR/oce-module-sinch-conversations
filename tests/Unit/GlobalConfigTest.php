@@ -142,6 +142,27 @@ class GlobalConfigTest extends TestCase
         $this->assertEquals('+15551234567', $this->config->getClinicPhone());
     }
 
+    public function testIsPortalEnabled(): void
+    {
+        $config = new GlobalConfig(new MockGlobalsAccessor([
+            'portal_onsite_two_enable' => true,
+        ]));
+        $this->assertTrue($config->isPortalEnabled());
+    }
+
+    public function testIsPortalEnabledDefaultFalse(): void
+    {
+        $this->assertFalse($this->config->isPortalEnabled());
+    }
+
+    public function testGetPortalUrl(): void
+    {
+        $config = new GlobalConfig(new MockGlobalsAccessor([
+            'portal_onsite_two_address' => 'https://example.com/portal',
+        ]));
+        $this->assertEquals('https://example.com/portal', $config->getPortalUrl());
+    }
+
     public function testGetApiBaseUrlUs(): void
     {
         $this->assertEquals('https://us.conversation.api.sinch.com', $this->config->getApiBaseUrl());

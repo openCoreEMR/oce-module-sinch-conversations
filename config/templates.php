@@ -37,13 +37,35 @@ return [
         'compliance_confidence' => 100,
     ],
 
-    // Appointment Templates
+    // Appointment Templates — Sinch-approved campaign language
+    [
+        'template_key' => 'appointment_reminder_portal',
+        'template_name' => 'Appointment Reminder (Portal)',
+        'category' => 'appointments',
+        'communication_type' => 'individual',
+        'description' => 'Appointment reminder with portal link (when patient portal is enabled)',
+        'body' => 'OpenCoreEMR: You have an upcoming appointment with {{ clinic_name }} on {{ appt_time }}. For details, or to reschedule/cancel, please log in to your patient portal: {{ portal_link }}. {{ opt_out }}.',
+        'required_variables' => ['clinic_name', 'appt_time', 'portal_link', 'opt_out'],
+        'compliance_confidence' => 100,
+    ],
+
+    [
+        'template_key' => 'appointment_reminder_no_portal',
+        'template_name' => 'Appointment Reminder (No Portal)',
+        'category' => 'appointments',
+        'communication_type' => 'individual',
+        'description' => 'Appointment reminder without portal link (when patient portal is not enabled)',
+        'body' => 'OpenCoreEMR: You have an upcoming appointment with {{ clinic_name }} on {{ appt_time }}. {{ opt_out }}.',
+        'required_variables' => ['clinic_name', 'appt_time', 'opt_out'],
+        'compliance_confidence' => 100,
+    ],
+
     [
         'template_key' => 'appointment_reminder',
-        'template_name' => 'Appointment Reminder',
+        'template_name' => 'Appointment Reminder (Legacy)',
         'category' => 'appointments',
         'communication_type' => 'batch',
-        'description' => 'Reminds patient of upcoming appointment',
+        'description' => 'Legacy appointment reminder template',
         'body' => 'Hi {{ patient_name }}, this is {{ clinic_name }}. Reminder: You have an appointment on {{ appointment_date }} at {{ appointment_time }}. Reply C to confirm or call {{ clinic_phone }}.',
         'required_variables' => ['patient_name', 'clinic_name', 'appointment_date', 'appointment_time', 'clinic_phone'],
         'compliance_confidence' => 98,
