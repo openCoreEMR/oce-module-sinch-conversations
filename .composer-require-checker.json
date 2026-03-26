@@ -43,7 +43,8 @@
     "xlj",
     "attr",
     "text",
-    "date"
+    "date",
+    "random_bytes"
   ],
   "php-core-extensions": [
     "Core",

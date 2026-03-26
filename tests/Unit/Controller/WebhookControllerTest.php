@@ -368,6 +368,10 @@ class WebhookControllerTest extends TestCase
 
         // Inbound message was stored — webhook should still succeed
         $this->assertEquals(Response::HTTP_OK, $response->getStatusCode());
+
+        $body = json_decode((string) $response->getContent(), true);
+        $this->assertArrayHasKey('autoResponseError', $body);
+        $this->assertStringStartsWith('Failed to send auto-response (ref: ', $body['autoResponseError']);
     }
 
     public function testKeywordResponseSkippedWhenNoContact(): void
