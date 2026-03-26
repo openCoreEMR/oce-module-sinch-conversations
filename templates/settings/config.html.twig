@@ -58,10 +58,17 @@
             </div>
         {% endif %}
 
+        {% if is_external_config %}
+        <div class="alert alert-warning" role="alert">
+            <strong>{{ 'External Configuration Active'|xlt }}</strong>
+            {{ 'Sinch API credentials are managed via environment variables or configuration files. The API fields below are read-only. Only Messaging Configuration can be changed here.'|xlt }}
+        </div>
+        {% else %}
         <div class="alert alert-info" role="alert">
             <strong>{{ 'Note:'|xlt }}</strong>
             {{ 'The Sinch API Configuration (Project ID, App ID, API Key, API Secret, Region) can also be configured via Administration > Globals > OpenCoreEMR Sinch Conversations. The Messaging Configuration settings are only available here.'|xlt }}
         </div>
+        {% endif %}
 
         <form method="post" action="?action=save">
             <input type="hidden" name="csrf_token" value="{{ csrf_token|attr }}">
@@ -82,7 +89,7 @@
                     id="project_id"
                     name="project_id"
                     value="{{ settings.project_id|attr }}"
-                    required
+                    {% if is_external_config %}disabled readonly{% else %}required{% endif %}
                 >
                 <div class="help-text">{{ 'Your Sinch project ID from the Sinch dashboard'|xlt }}</div>
             </div>
@@ -95,7 +102,7 @@
                     id="app_id"
                     name="app_id"
                     value="{{ settings.app_id|attr }}"
-                    required
+                    {% if is_external_config %}disabled readonly{% else %}required{% endif %}
                 >
                 <div class="help-text">{{ 'Your Sinch app ID for the Conversations API'|xlt }}</div>
             </div>
@@ -108,7 +115,7 @@
                     id="api_key"
                     name="api_key"
                     value="{{ settings.api_key|attr }}"
-                    required
+                    {% if is_external_config %}disabled readonly{% else %}required{% endif %}
                 >
                 <div class="help-text">{{ 'Your Sinch API key (Access Key ID)'|xlt }}</div>
             </div>
@@ -121,6 +128,7 @@
                     id="api_secret"
                     name="api_secret"
                     placeholder="{{ 'Leave blank to keep existing secret'|xlt }}"
+                    {% if is_external_config %}disabled readonly{% endif %}
                 >
                 <div class="help-text">
                     {{ 'Your Sinch API secret (Access Key Secret). Leave blank to keep the existing secret.'|xlt }}
@@ -129,7 +137,7 @@
 
             <div class="mb-3">
                 <label for="region" class="form-label">{{ 'API Region'|xlt }} <span class="text-danger">*</span></label>
-                <select class="form-select" id="region" name="region" required>
+                <select class="form-select" id="region" name="region" {% if is_external_config %}disabled{% else %}required{% endif %}>
                     <option value="us" {% if settings.region == 'us' %}selected{% endif %}>
                         {{ 'United States (us)'|xlt }}
                     </option>

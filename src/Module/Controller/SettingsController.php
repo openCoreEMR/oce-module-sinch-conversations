@@ -12,6 +12,7 @@
 
 namespace OpenCoreEMR\Modules\SinchConversations\Controller;
 
+use OpenCoreEMR\Modules\SinchConversations\ConfigFactory;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Service\ConfigService;
 use OpenCoreEMR\Modules\SinchConversations\Service\TemplateSyncService;
@@ -79,6 +80,7 @@ class SettingsController
 
         $content = $this->twig->render('settings/config.html.twig', [
             'settings' => $settings,
+            'is_external_config' => ConfigFactory::isExternalConfigMode(),
             'success_message' => $this->session->getFlash('settings_message'),
             'csrf_token' => CsrfUtils::collectCsrfToken(),
         ]);
@@ -105,21 +107,23 @@ class SettingsController
         }
 
         try {
-            // Collect settings from form
             $settings = [
-                'project_id' => (string)$request->request->get('project_id', ''),
-                'app_id' => (string)$request->request->get('app_id', ''),
-                'api_key' => (string)$request->request->get('api_key', ''),
-                'region' => (string)$request->request->get('region', 'us'),
                 'default_channel' => (string)$request->request->get('default_channel', 'SMS'),
                 'clinic_name' => (string)$request->request->get('clinic_name', ''),
                 'clinic_phone' => (string)$request->request->get('clinic_phone', ''),
             ];
 
-            // Only include API secret if it was provided
-            $apiSecret = $request->request->get('api_secret', '');
-            if (!empty($apiSecret)) {
-                $settings['api_secret'] = (string)$apiSecret;
+            // Only collect API fields when not managed externally
+            if (!ConfigFactory::isExternalConfigMode()) {
+                $settings['project_id'] = (string)$request->request->get('project_id', '');
+                $settings['app_id'] = (string)$request->request->get('app_id', '');
+                $settings['api_key'] = (string)$request->request->get('api_key', '');
+                $settings['region'] = (string)$request->request->get('region', 'us');
+
+                $apiSecret = $request->request->get('api_secret', '');
+                if ($apiSecret !== null && $apiSecret !== '') {
+                    $settings['api_secret'] = (string)$apiSecret;
+                }
             }
 
             // Save settings
