@@ -61,6 +61,13 @@ This document describes the architectural patterns and conventions for OpenEMR m
 
 **Error Handling:**
 - Always catch `\Throwable`, not `\Exception`
+- Never expose `$e->getMessage()` to users (flash messages, JSON responses) — use traceable error IDs
+- Never swallow exceptions (catch-log-continue) — surface failures to callers
+
+**Logging:**
+- Use PSR-3 context arrays — never string concatenation or interpolation in log messages
+- Pass exceptions as `'exception' => $e` in context
+- See [Exceptions](docs/development/exceptions.md) for full patterns
 
 ### Common Commands
 

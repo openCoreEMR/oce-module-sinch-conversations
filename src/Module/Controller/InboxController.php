@@ -102,12 +102,15 @@ class InboxController
         }
 
         try {
-            $newMessageCount = $this->pollingService->pollAllConversations();
+            $result = $this->pollingService->pollAllConversations();
+            $count = $result['total_messages'];
+            $failures = $result['keyword_failures'];
 
-            $this->session->setFlash(
-                'inbox_message',
-                $newMessageCount > 0 ? "Found {$newMessageCount} new message(s)" : "No new messages"
-            );
+            $flash = $count > 0 ? "Found {$count} new message(s)" : "No new messages";
+            if ($failures !== []) {
+                $flash .= sprintf('. %d keyword response(s) failed to send', count($failures));
+            }
+            $this->session->setFlash('inbox_message', $flash);
         } catch (\Throwable $e) {
             $this->logger->error("Failed to refresh messages: " . $e->getMessage());
             $this->session->setFlash('inbox_message', "Error refreshing messages: " . $e->getMessage());

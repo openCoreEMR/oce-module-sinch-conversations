@@ -83,6 +83,7 @@ class ConsentService
             $ipAddress,
         ]);
 
+        $this->syncHipaaAllowSms($patientId, 'YES');
         $this->logger->debug("Patient {$patientId} opted in via {$method}");
 
         try {
@@ -110,6 +111,7 @@ class ConsentService
 
         QueryUtils::sqlStatementThrowException($sql, [$method, $patientId, $phoneNumber]);
 
+        $this->syncHipaaAllowSms($patientId, 'NO');
         $this->logger->debug("Patient {$patientId} opted out via {$method}");
     }
 
@@ -127,6 +129,15 @@ class ConsentService
         $result = QueryUtils::querySingleRow($sql, [$patientId, $phoneNumber]);
 
         return $result ?: null;
+    }
+
+    /**
+     * Sync hipaa_allowsms on the patient chart to keep a single source of truth
+     */
+    private function syncHipaaAllowSms(int $patientId, string $value): void
+    {
+        $sql = "UPDATE patient_data SET hipaa_allowsms = ? WHERE pid = ?";
+        QueryUtils::sqlStatementThrowException($sql, [$value, $patientId]);
     }
 
     /**
