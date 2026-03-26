@@ -129,9 +129,6 @@ class GlobalConfig
     }
 
     /**
-     * Get the base URL for the Sinch Conversations API
-     */
-    /**
      * Check if the patient portal is enabled
      */
     public function isPortalEnabled(): bool
@@ -147,6 +144,9 @@ class GlobalConfig
         return $this->configAccessor->getString('portal_onsite_two_address', '');
     }
 
+    /**
+     * Get the base URL for the Sinch Conversations API
+     */
     public function getApiBaseUrl(): string
     {
         $region = $this->getRegion();
