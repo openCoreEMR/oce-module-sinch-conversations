@@ -118,8 +118,9 @@ class ConsentServiceTest extends TestCase
                 skipConsentCheck: true,
             ));
 
-        $this->service->optIn(1, '+15551234567', 'web_form', '192.168.1.1');
+        $result = $this->service->optIn(1, '+15551234567', 'web_form', '192.168.1.1');
 
+        $this->assertTrue($result);
         $queries = QueryUtils::getQueries();
         $insertQueries = array_filter($queries, fn($q) => str_contains($q['sql'], 'INSERT INTO oce_sinch_patient_consent'));
         $this->assertNotEmpty($insertQueries);
@@ -138,8 +139,15 @@ class ConsentServiceTest extends TestCase
         $this->messageService->method('sendToPatient')
             ->willThrowException(new \RuntimeException('API error'));
 
-        // Should not throw — logs error instead
-        $this->service->optIn(1, '+15551234567', 'web_form');
+        // Should not throw — opt-in succeeds but returns false to indicate confirmation failed
+        $result = $this->service->optIn(1, '+15551234567', 'web_form');
+
+        $this->assertFalse($result);
+
+        // Consent record is still persisted even when confirmation fails
+        $queries = QueryUtils::getQueries();
+        $insertQueries = array_filter($queries, fn($q) => str_contains($q['sql'], 'INSERT INTO oce_sinch_patient_consent'));
+        $this->assertNotEmpty($insertQueries);
 
         $logs = SystemLogger::getLogs();
         $errorLogs = array_filter($logs, fn($log) => $log['level'] === 'error');

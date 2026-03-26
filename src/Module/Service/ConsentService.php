@@ -6,7 +6,7 @@
  * @package   OpenCoreEMR
  * @link      https://opencoreemr.com
  * @author    Michael A. Smith <michael@opencoreemr.com>
- * @copyright Copyright (c) 2025 OpenCoreEMR Inc
+ * @copyright Copyright (c) 2026 OpenCoreEMR Inc
  * @license   GNU General Public License 3
  */
 
@@ -56,13 +56,15 @@ class ConsentService
      * @param string $phoneNumber
      * @param string $method web_form, portal, in_person, etc
      * @param string|null $ipAddress
+     * @return bool True if opt-in confirmation was sent, false if it failed.
+     *               Consent is always recorded regardless of return value.
      */
     public function optIn(
         int $patientId,
         string $phoneNumber,
         string $method,
         ?string $ipAddress = null
-    ): void {
+    ): bool {
         $sql = "INSERT INTO oce_sinch_patient_consent (
             patient_id, phone_number, opted_in, opt_in_method,
             opt_in_date, opt_in_ip_address, opted_out,
@@ -84,13 +86,20 @@ class ConsentService
         ]);
 
         $this->syncHipaaAllowSms($patientId, 'YES');
-        $this->logger->debug("Patient {$patientId} opted in via {$method}");
+        $this->logger->debug('Patient opted in', ['patientId' => $patientId, 'method' => $method]);
 
         try {
             $this->sendOptInConfirmation($patientId, $phoneNumber);
         } catch (\Throwable $e) {
-            $this->logger->error("Failed to send opt-in confirmation: " . $e->getMessage());
+            $this->logger->error('Failed to send opt-in confirmation', [
+                'patientId' => $patientId,
+                'phone' => $phoneNumber,
+                'exception' => $e,
+            ]);
+            return false;
         }
+
+        return true;
     }
 
     /**

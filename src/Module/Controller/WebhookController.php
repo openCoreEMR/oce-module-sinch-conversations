@@ -192,24 +192,32 @@ class WebhookController
             );
 
             // Check for keyword responses (STOP, START, HELP)
+            $autoResponseError = null;
             if ($messageBody !== '' && $channelIdentity !== '') {
                 $keywordResponse = $this->keywordHandler->handleInboundMessage($channelIdentity, $messageBody);
                 if ($keywordResponse !== null) {
-                    $this->sendKeywordResponse($channelIdentity, $keywordResponse);
+                    $autoResponseError = $this->sendKeywordResponse($channelIdentity, $keywordResponse);
                 }
             }
 
-            $this->logger->info("Successfully processed inbound message: {$messageId}");
+            $this->logger->info('Successfully processed inbound message', ['messageId' => $messageId]);
 
-            return new JsonResponse(
-                ['status' => 'success', 'messageId' => $messageId],
-                Response::HTTP_OK
-            );
+            $responseBody = ['status' => 'success', 'messageId' => $messageId];
+            if ($autoResponseError !== null) {
+                $responseBody['autoResponseError'] = $autoResponseError;
+            }
+
+            return new JsonResponse($responseBody, Response::HTTP_OK);
         } catch (\Throwable $e) {
-            $this->logger->error("Failed to process inbound message {$messageId}: " . $e->getMessage());
+            $errorId = bin2hex(random_bytes(4));
+            $this->logger->error('Failed to process inbound message', [
+                'messageId' => $messageId,
+                'errorId' => $errorId,
+                'exception' => $e,
+            ]);
 
             return new JsonResponse(
-                ['error' => 'Failed to process message', 'messageId' => $messageId],
+                ['error' => "Failed to process message (ref: $errorId)", 'messageId' => $messageId],
                 Response::HTTP_INTERNAL_SERVER_ERROR
             );
         }
@@ -477,33 +485,40 @@ class WebhookController
 
     /**
      * Send an auto-response for a detected keyword
+     *
+     * @return string|null Generic error message on failure, null on success or no matching contact
      */
     private function sendKeywordResponse(
         string $phoneNumber,
         string $responseMessage
-    ): void {
+    ): ?string {
+        $sql = "SELECT patient_id FROM oce_sinch_contacts WHERE channel_identity = ? LIMIT 1";
+        $contact = QueryUtils::querySingleRow($sql, [$phoneNumber]);
+
+        if (!$contact) {
+            $this->logger->debug('No contact found for keyword response', ['phone' => $phoneNumber]);
+            return null;
+        }
+
         try {
-            // Find patient by contact identity to use MessageService
-            $sql = "SELECT patient_id FROM oce_sinch_contacts WHERE channel_identity = ? LIMIT 1";
-            $contact = QueryUtils::querySingleRow($sql, [$phoneNumber]);
-
-            if (!$contact) {
-                $this->logger->debug("No contact found for keyword response to: {$phoneNumber}");
-                return;
-            }
-
             $this->messageService->sendToPatient(
                 (int) $contact['patient_id'],
                 $phoneNumber,
                 $responseMessage,
                 new MessageOptions(templateKey: 'keyword_response', skipConsentCheck: true)
             );
-
-            $this->logger->info("Sent keyword auto-response to: {$phoneNumber}");
         } catch (\Throwable $e) {
-            // Log but don't fail the webhook - the inbound message was already stored
-            $this->logger->error("Failed to send keyword response to {$phoneNumber}: " . $e->getMessage());
+            $errorId = bin2hex(random_bytes(4));
+            $this->logger->error('Failed to send keyword response', [
+                'phone' => $phoneNumber,
+                'errorId' => $errorId,
+                'exception' => $e,
+            ]);
+            return "Failed to send auto-response (ref: $errorId)";
         }
+
+        $this->logger->info('Sent keyword auto-response', ['phone' => $phoneNumber]);
+        return null;
     }
 
     /**
