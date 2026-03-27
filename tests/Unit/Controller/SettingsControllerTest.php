@@ -119,7 +119,7 @@ class SettingsControllerTest extends TestCase
 
         $content = $response->getContent();
         $this->assertIsString($content);
-        // ConfigFactory::isExternalConfigMode() returns false in test environment
+        // GlobalConfig caches isExternalConfigMode at construction; false in test environment
         $this->assertStringContainsString('ext:no', $content);
     }
 
@@ -179,34 +179,59 @@ class SettingsControllerTest extends TestCase
     {
         putenv('OCE_SINCH_CONVERSATIONS_ENV_CONFIG=1');
 
-        $_SERVER['REQUEST_METHOD'] = 'POST';
-        $_POST['csrf_token'] = 'valid';
-        $_POST['project_id'] = 'should-be-ignored';
-        $_POST['app_id'] = 'should-be-ignored';
-        $_POST['api_key'] = 'should-be-ignored';
-        $_POST['region'] = 'eu';
-        $_POST['default_channel'] = 'SMS';
-        $_POST['clinic_name'] = 'New Clinic';
-        $_POST['clinic_phone'] = '+15550000000';
-        CsrfUtils::setVerifyResult(true);
+        try {
+            // Rebuild controller so GlobalConfig caches the env var
+            $this->config = new GlobalConfig(new MockGlobalsAccessor([
+                GlobalConfig::CONFIG_OPTION_PROJECT_ID => 'proj-1',
+                GlobalConfig::CONFIG_OPTION_APP_ID => 'app-1',
+                GlobalConfig::CONFIG_OPTION_API_KEY => 'key-1',
+                GlobalConfig::CONFIG_OPTION_API_SECRET => base64_encode('secret-1'),
+                GlobalConfig::CONFIG_OPTION_REGION => 'us',
+                GlobalConfig::CONFIG_OPTION_DEFAULT_CHANNEL => 'SMS',
+                GlobalConfig::CONFIG_OPTION_CLINIC_NAME => 'Test Clinic',
+                GlobalConfig::CONFIG_OPTION_CLINIC_PHONE => '+15551234567',
+            ]));
+            $this->controller = new SettingsController(
+                $this->config,
+                $this->configService,
+                $this->apiClient,
+                $this->syncService,
+                $this->session,
+                $this->twig,
+                new SystemLogger()
+            );
 
-        $this->configService->expects($this->once())
-            ->method('saveSettings')
-            ->with($this->callback(function (array $settings): bool {
-                // API fields should NOT be present
-                $this->assertArrayNotHasKey('project_id', $settings);
-                $this->assertArrayNotHasKey('app_id', $settings);
-                $this->assertArrayNotHasKey('api_key', $settings);
-                $this->assertArrayNotHasKey('region', $settings);
-                // Messaging fields should be present
-                $this->assertArrayHasKey('default_channel', $settings);
-                $this->assertArrayHasKey('clinic_name', $settings);
-                return true;
-            }));
+            $_SERVER['REQUEST_METHOD'] = 'POST';
+            $_POST['csrf_token'] = 'valid';
+            $_POST['project_id'] = 'should-be-ignored';
+            $_POST['app_id'] = 'should-be-ignored';
+            $_POST['api_key'] = 'should-be-ignored';
+            $_POST['api_secret'] = 'should-be-ignored';
+            $_POST['region'] = 'eu';
+            $_POST['default_channel'] = 'SMS';
+            $_POST['clinic_name'] = 'New Clinic';
+            $_POST['clinic_phone'] = '+15550000000';
+            CsrfUtils::setVerifyResult(true);
 
-        $this->controller->dispatch('save');
+            $this->configService->expects($this->once())
+                ->method('saveSettings')
+                ->with($this->callback(function (array $settings): bool {
+                    // API fields should NOT be present
+                    $this->assertArrayNotHasKey('project_id', $settings);
+                    $this->assertArrayNotHasKey('app_id', $settings);
+                    $this->assertArrayNotHasKey('api_key', $settings);
+                    $this->assertArrayNotHasKey('api_secret', $settings);
+                    $this->assertArrayNotHasKey('region', $settings);
+                    // Messaging fields should be present
+                    $this->assertArrayHasKey('default_channel', $settings);
+                    $this->assertArrayHasKey('clinic_name', $settings);
+                    return true;
+                }));
 
-        putenv('OCE_SINCH_CONVERSATIONS_ENV_CONFIG');
+            $this->controller->dispatch('save');
+        } finally {
+            putenv('OCE_SINCH_CONVERSATIONS_ENV_CONFIG');
+        }
     }
 
     public function testSaveHandlesValidationError(): void

@@ -12,7 +12,6 @@
 
 namespace OpenCoreEMR\Modules\SinchConversations\Controller;
 
-use OpenCoreEMR\Modules\SinchConversations\ConfigFactory;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Service\ConfigService;
 use OpenCoreEMR\Modules\SinchConversations\Service\TemplateSyncService;
@@ -80,7 +79,7 @@ class SettingsController
 
         $content = $this->twig->render('settings/config.html.twig', [
             'settings' => $settings,
-            'is_external_config' => ConfigFactory::isExternalConfigMode(),
+            'is_external_config' => $this->config->isExternalConfigMode(),
             'success_message' => $this->session->getFlash('settings_message'),
             'csrf_token' => CsrfUtils::collectCsrfToken(),
         ]);
@@ -114,7 +113,7 @@ class SettingsController
             ];
 
             // Only collect API fields when not managed externally
-            if (!ConfigFactory::isExternalConfigMode()) {
+            if (!$this->config->isExternalConfigMode()) {
                 $settings['project_id'] = (string)$request->request->get('project_id', '');
                 $settings['app_id'] = (string)$request->request->get('app_id', '');
                 $settings['api_key'] = (string)$request->request->get('api_key', '');
