@@ -336,6 +336,50 @@ tasks:
     - echo "✅ Environment reset complete"
     - task: dev:port
 
+  webhook:url:
+    desc: Show the local webhook URL
+    cmds:
+    - |
+      HTTP_PORT=$(docker compose port openemr 80 2>/dev/null | cut -d: -f2)
+      if [ -z "$HTTP_PORT" ]; then
+        echo "Error: OpenEMR container not running. Start with 'task dev:start'"
+        exit 1
+      fi
+      echo "Local webhook URL:"
+      echo "  http://localhost:$HTTP_PORT/interface/modules/custom_modules/oce-module-sinch-conversations/public/webhook.php"
+
+  webhook:tunnel:
+    desc: Start Tailscale Funnel to expose webhook endpoint (background, port 10000)
+    cmds:
+    - |
+      HTTP_PORT=$(docker compose port openemr 80 2>/dev/null | cut -d: -f2)
+      if [ -z "$HTTP_PORT" ]; then
+        echo "Error: OpenEMR container not running. Start with 'task dev:start'"
+        exit 1
+      fi
+      echo "Starting Tailscale Funnel (HTTPS :10000 -> HTTP :$HTTP_PORT)..."
+      tailscale funnel --bg --https 10000 $HTTP_PORT
+      HOSTNAME=$(tailscale status --json | jq -r '.Self.DNSName' | sed 's/\.$//')
+      echo ""
+      echo "Webhook URL for Sinch dashboard:"
+      echo "  https://$HOSTNAME:10000/interface/modules/custom_modules/oce-module-sinch-conversations/public/webhook.php"
+
+  webhook:tunnel:status:
+    desc: Show Tailscale Funnel status and webhook URL
+    cmds:
+    - tailscale funnel status
+    - |
+      HOSTNAME=$(tailscale status --json | jq -r '.Self.DNSName' | sed 's/\.$//')
+      echo ""
+      echo "Webhook URL for Sinch dashboard:"
+      echo "  https://$HOSTNAME:10000/interface/modules/custom_modules/oce-module-sinch-conversations/public/webhook.php"
+
+  webhook:tunnel:off:
+    desc: Turn off Tailscale Funnel
+    cmds:
+    - tailscale funnel --https=10000 off
+    - echo "Tailscale Funnel stopped"
+
   workflow:nuke:
     desc: Nuclear reset (removes vendor + database volumes, forces complete reinstall)
     cmds:
