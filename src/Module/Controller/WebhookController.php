@@ -330,7 +330,8 @@ class WebhookController
         $failures = 0;
         foreach ($patientIds as $patientId) {
             try {
-                $this->consentService->optOut($patientId, $normalizedIdentity, "sinch_{$channel}", channel: $channelEnum);
+                $method = "sinch_{$channel}";
+                $this->consentService->optOut($patientId, $normalizedIdentity, $method, channel: $channelEnum);
             } catch (\Throwable $e) {
                 $failures++;
                 $errorId = bin2hex(random_bytes(4));
