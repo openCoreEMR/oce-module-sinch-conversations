@@ -15,7 +15,7 @@ The Sinch Build Dashboard uses a hierarchical project structure:
 - **Parent project** — Owns brands, campaigns, and billing
 - **Subprojects** — Per-environment configuration (e.g., dev, staging, production)
 
-## Step 1: Create a Conversation API App
+## Step 1: Create a Conversations API App
 
 1. Navigate to **Conversation API > Apps**
 2. Create a new app with a descriptive name
@@ -33,7 +33,7 @@ The Sinch Build Dashboard uses a hierarchical project structure:
 
 1. Navigate to **SMS > Service APIs**
 2. Verify the number is assigned to an SMS service plan
-3. The service plan callback URL should route to the Conversation API adapter
+3. The service plan callback URL should route to the Conversations API adapter
 
 ## Step 4: Configure Module Credentials
 
@@ -51,8 +51,8 @@ carriers reject messages with **Error 310: Invalid source address**.
 ### Prerequisites
 
 1. A 10-digit US phone number (purchased above)
-2. A registered brand (see Step A below)
-3. Reseller status set (see Step B below)
+2. Reseller status set (see Step A below)
+3. A registered brand (see Step B below)
 
 ### Step A: Set Reseller Status
 
@@ -132,7 +132,7 @@ The module supports two configuration modes:
 
 ### Option 1: Database Globals (default)
 
-Configure via **Admin > Config > OpenCoreEMR Sinch Conversations** in the
+Configure via **Admin > Config > OpenCoreEMR Sinch Conversations Module** in the
 OpenEMR admin interface.
 
 ### Option 2: Environment Variables
@@ -145,7 +145,7 @@ environment variables. This is useful for containerized deployments.
 | Setting | Env Var | Description |
 |---------|---------|-------------|
 | Project ID | `OCE_SINCH_CONVERSATIONS_PROJECT_ID` | Sinch project ID |
-| App ID | `OCE_SINCH_CONVERSATIONS_APP_ID` | Conversation API app ID |
+| App ID | `OCE_SINCH_CONVERSATIONS_APP_ID` | Conversations API app ID |
 | API Key | `OCE_SINCH_CONVERSATIONS_API_KEY` | API key from Sinch dashboard |
 | API Secret | `OCE_SINCH_CONVERSATIONS_API_SECRET` | API secret from Sinch dashboard |
 | Region | `OCE_SINCH_CONVERSATIONS_REGION` | `us` or `eu` |

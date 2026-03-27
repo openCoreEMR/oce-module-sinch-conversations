@@ -5,7 +5,7 @@ Conversations API and how to debug them.
 
 ## Understanding Delivery Status
 
-The Sinch Conversation API returns HTTP 200 when it accepts a message
+The Sinch Conversations API returns HTTP 200 when it accepts a message
 for delivery. This does **not** mean the SMS was delivered — delivery
 is asynchronous. The Sinch dashboard is the definitive source for
 delivery status.
