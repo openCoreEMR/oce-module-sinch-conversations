@@ -1,8 +1,12 @@
 # Appointment Reminders
 
 Appointment reminders are the Phase 1 messaging use case for this module.
-The module sends automated SMS reminders to patients ahead of their
+The module will send automated SMS reminders to patients ahead of their
 scheduled appointments.
+
+> **Status:** This feature is in active development (see #32). The
+> message templates and configuration schema below describe the target
+> design; the scheduling and sending logic is not yet merged.
 
 ## How It Works
 

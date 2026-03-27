@@ -13,13 +13,20 @@ The following keywords, sent as a reply to any message from the module,
 revoke the patient's SMS consent:
 
 - **STOP**
+- **STOPALL**
 - **QUIT**
 - **END**
 - **CANCEL**
 - **UNSUBSCRIBE**
 
-These are the "reasonable means per se" keywords defined by the FCC's
-consent revocation rule (47 CFR 64.1200(a)(10)), effective April 11, 2025.
+These are a subset of the "reasonable means per se" keywords defined by
+the FCC's consent revocation rule (47 CFR 64.1200(a)(10)), effective
+April 11, 2025.
+
+> **Not yet implemented:** The FCC rule also lists **REVOKE** and
+> **OPT OUT** (two words) as per-se revocation keywords. The module does
+> not handle these yet. See [Regulatory Considerations](../regulatory.md)
+> for the full list.
 
 ## Opt-Out Flows
 

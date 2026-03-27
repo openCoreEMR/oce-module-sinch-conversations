@@ -1,8 +1,13 @@
 # Testing Scenarios
 
-This document describes end-to-end testing scenarios for the messaging
-functionality. Run these tests after configuring the module
-(see [Setup Guide](../sinch/setup-guide.md)).
+This document describes target end-to-end testing scenarios for the
+messaging functionality. Run these tests after the feature ships and
+you have configured the module (see [Setup Guide](../sinch/setup-guide.md)).
+
+> **Note:** Appointment reminder sending is in active development
+> (see #32). Scenarios 1, 4, and 5 below require the reminder service,
+> which is not yet merged. Scenarios 2 and 3 (opt-out handling) work
+> today.
 
 ## Scenario 1: Appointment Reminder (Patient Opted In)
 
@@ -28,7 +33,7 @@ functionality. Run these tests after configuring the module
 
 **Steps:**
 
-1. Patient replies with one of: STOP, QUIT, END, CANCEL, UNSUBSCRIBE
+1. Patient replies with one of: STOP, STOPALL, QUIT, END, CANCEL, UNSUBSCRIBE
 2. The module receives the keyword via `MESSAGE_INBOUND` webhook
 
 **Expected result:**
