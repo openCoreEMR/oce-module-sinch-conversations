@@ -175,8 +175,9 @@ class SettingsControllerTest extends TestCase
         $this->assertInstanceOf(RedirectResponse::class, $response);
     }
 
-    public function testSaveExcludesApiFieldsWhenExternalConfig(): void
+    public function testSaveExcludesAllFieldsWhenExternalConfig(): void
     {
+        $previousEnvConfig = getenv('OCE_SINCH_CONVERSATIONS_ENV_CONFIG');
         putenv('OCE_SINCH_CONVERSATIONS_ENV_CONFIG=1');
 
         try {
@@ -213,24 +214,23 @@ class SettingsControllerTest extends TestCase
             $_POST['clinic_phone'] = '+15550000000';
             CsrfUtils::setVerifyResult(true);
 
-            $this->configService->expects($this->once())
-                ->method('saveSettings')
-                ->with($this->callback(function (array $settings): bool {
-                    // API fields should NOT be present
-                    $this->assertArrayNotHasKey('project_id', $settings);
-                    $this->assertArrayNotHasKey('app_id', $settings);
-                    $this->assertArrayNotHasKey('api_key', $settings);
-                    $this->assertArrayNotHasKey('api_secret', $settings);
-                    $this->assertArrayNotHasKey('region', $settings);
-                    // Messaging fields should be present
-                    $this->assertArrayHasKey('default_channel', $settings);
-                    $this->assertArrayHasKey('clinic_name', $settings);
-                    return true;
-                }));
+            // saveSettings should never be called in external config mode
+            $this->configService->expects($this->never())
+                ->method('saveSettings');
 
-            $this->controller->dispatch('save');
+            $this->session->expects($this->once())
+                ->method('setFlash')
+                ->with('settings_message', $this->stringContains('cannot be changed'));
+
+            $response = $this->controller->dispatch('save');
+
+            $this->assertInstanceOf(RedirectResponse::class, $response);
         } finally {
-            putenv('OCE_SINCH_CONVERSATIONS_ENV_CONFIG');
+            if ($previousEnvConfig === false) {
+                putenv('OCE_SINCH_CONVERSATIONS_ENV_CONFIG');
+            } else {
+                putenv('OCE_SINCH_CONVERSATIONS_ENV_CONFIG=' . $previousEnvConfig);
+            }
         }
     }
 

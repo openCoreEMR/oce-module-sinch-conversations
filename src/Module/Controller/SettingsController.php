@@ -106,23 +106,28 @@ class SettingsController
         }
 
         try {
+            // Skip saving when all config is managed externally
+            if ($this->config->isExternalConfigMode()) {
+                $this->session->setFlash(
+                    'settings_message',
+                    "Configuration is managed externally and cannot be changed here."
+                );
+                return $this->redirect($request);
+            }
+
             $settings = [
                 'default_channel' => (string)$request->request->get('default_channel', 'SMS'),
                 'clinic_name' => (string)$request->request->get('clinic_name', ''),
                 'clinic_phone' => (string)$request->request->get('clinic_phone', ''),
+                'project_id' => (string)$request->request->get('project_id', ''),
+                'app_id' => (string)$request->request->get('app_id', ''),
+                'api_key' => (string)$request->request->get('api_key', ''),
+                'region' => (string)$request->request->get('region', 'us'),
             ];
 
-            // Only collect API fields when not managed externally
-            if (!$this->config->isExternalConfigMode()) {
-                $settings['project_id'] = (string)$request->request->get('project_id', '');
-                $settings['app_id'] = (string)$request->request->get('app_id', '');
-                $settings['api_key'] = (string)$request->request->get('api_key', '');
-                $settings['region'] = (string)$request->request->get('region', 'us');
-
-                $apiSecret = $request->request->get('api_secret', '');
-                if ($apiSecret !== null && $apiSecret !== '') {
-                    $settings['api_secret'] = (string)$apiSecret;
-                }
+            $apiSecret = $request->request->get('api_secret', '');
+            if ($apiSecret !== null && $apiSecret !== '') {
+                $settings['api_secret'] = (string)$apiSecret;
             }
 
             // Save settings

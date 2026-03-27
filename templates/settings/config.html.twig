@@ -61,7 +61,7 @@
         {% if is_external_config %}
         <div class="alert alert-warning" role="alert">
             <strong>{{ 'External Configuration Active'|xlt }}</strong>
-            {{ 'Sinch API credentials are managed via environment variables or configuration files. The API fields below are read-only. Only Messaging Configuration can be changed here.'|xlt }}
+            {{ 'All configuration is managed via environment variables or configuration files. Fields below are read-only.'|xlt }}
         </div>
         {% else %}
         <div class="alert alert-info" role="alert">
@@ -154,8 +154,8 @@
             </div>
 
             <div class="mb-3">
-                <label for="default_channel" class="form-label">{{ 'Default Channel'|xlt }} <span class="text-danger">*</span></label>
-                <select class="form-select" id="default_channel" name="default_channel" required>
+                <label for="default_channel" class="form-label">{{ 'Default Channel'|xlt }}{% if not is_external_config %} <span class="text-danger">*</span>{% endif %}</label>
+                <select class="form-select" id="default_channel" name="default_channel" {% if is_external_config %}disabled{% else %}required{% endif %}>
                     <option value="SMS" {% if settings.default_channel == 'SMS' %}selected{% endif %}>
                         {{ 'SMS'|xlt }}
                     </option>
@@ -177,6 +177,7 @@
                     id="clinic_name"
                     name="clinic_name"
                     value="{{ settings.clinic_name|attr }}"
+                    {% if is_external_config %}disabled{% endif %}
                 >
                 <div class="help-text">{{ 'Clinic name to appear in message templates (e.g., "Example Clinic")'|xlt }}</div>
             </div>
@@ -190,6 +191,7 @@
                     name="clinic_phone"
                     value="{{ settings.clinic_phone|attr }}"
                     placeholder="650-123-4567"
+                    {% if is_external_config %}disabled{% endif %}
                 >
                 <div class="help-text">{{ 'Clinic phone number for message templates (e.g., "650-123-4567")'|xlt }}</div>
             </div>
