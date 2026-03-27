@@ -46,7 +46,9 @@ class WebhookController
         $request ??= Request::createFromGlobals();
 
         if (!$request->isMethod('POST')) {
-            $this->logger->warning("Webhook received non-POST request: " . $request->getMethod());
+            $this->logger->warning('Webhook received non-POST request', [
+                'method' => $request->getMethod(),
+            ]);
             return new JsonResponse(
                 ['error' => 'Method not allowed'],
                 Response::HTTP_METHOD_NOT_ALLOWED
@@ -54,7 +56,7 @@ class WebhookController
         }
 
         $clientIp = $request->getClientIp() ?? 'unknown';
-        $this->logger->info("Webhook received from: " . $clientIp);
+        $this->logger->info('Webhook received', ['clientIp' => $clientIp]);
 
         try {
             $this->authenticate($request, $clientIp);
@@ -87,7 +89,7 @@ class WebhookController
             );
         }
 
-        $this->logger->info("Processing webhook event: {$eventTypeRaw}");
+        $this->logger->info('Processing webhook event', ['trigger' => $eventTypeRaw]);
 
         return match ($eventTypeRaw) {
             'MESSAGE_INBOUND' => $this->handleMessageInbound($payload),
@@ -110,7 +112,7 @@ class WebhookController
     private function authenticate(Request $request, string $clientIp): void
     {
         if (!$this->globalConfig->isIpInAllowlist($clientIp)) {
-            $this->logger->warning("Webhook request from unauthorized IP: {$clientIp}");
+            $this->logger->warning('Webhook request from unauthorized IP', ['clientIp' => $clientIp]);
             throw new AccessDeniedException("IP address not in allowlist");
         }
 
@@ -123,7 +125,7 @@ class WebhookController
         $password = $request->getPassword() ?? '';
 
         if (!$this->globalConfig->verifyWebhookAuth($username, $password)) {
-            $this->logger->warning("Webhook request with invalid credentials from: {$clientIp}");
+            $this->logger->warning('Webhook request with invalid credentials', ['clientIp' => $clientIp]);
             throw new UnauthorizedException("Invalid webhook credentials");
         }
     }
@@ -149,7 +151,7 @@ class WebhookController
         $data = json_decode($content, true);
 
         if (json_last_error() !== JSON_ERROR_NONE) {
-            $this->logger->error("Webhook JSON parse error: " . json_last_error_msg());
+            $this->logger->error('Webhook JSON parse error', ['error' => json_last_error_msg()]);
             return [];
         }
 
@@ -179,7 +181,10 @@ class WebhookController
         $textMessage = is_array($contactMessage['text_message'] ?? null) ? $contactMessage['text_message'] : [];
         $messageBody = $this->extractString($textMessage, 'text', '');
 
-        $this->logger->info("Processing inbound message: {$messageId} from {$channelIdentity}");
+        $this->logger->info('Processing inbound message', [
+            'messageId' => $messageId,
+            'channelIdentity' => $channelIdentity,
+        ]);
 
         try {
             $this->storeInboundMessage(
@@ -239,22 +244,30 @@ class WebhookController
         $messageId = $this->extractString($deliveryReport, 'message_id', 'unknown');
         $status = $this->extractString($deliveryReport, 'status', 'UNKNOWN');
 
-        $this->logger->info("Processing delivery report for message: {$messageId}, status: {$status}");
+        $this->logger->info('Processing delivery report', [
+            'messageId' => $messageId,
+            'status' => $status,
+        ]);
 
         try {
             $this->updateMessageDeliveryStatus($messageId, $status);
 
-            $this->logger->info("Successfully processed delivery report for: {$messageId}");
+            $this->logger->info('Successfully processed delivery report', ['messageId' => $messageId]);
 
             return new JsonResponse(
                 ['status' => 'success', 'messageId' => $messageId],
                 Response::HTTP_OK
             );
         } catch (\Throwable $e) {
-            $this->logger->error("Failed to process delivery report {$messageId}: " . $e->getMessage());
+            $errorId = bin2hex(random_bytes(4));
+            $this->logger->error('Failed to process delivery report', [
+                'messageId' => $messageId,
+                'errorId' => $errorId,
+                'exception' => $e,
+            ]);
 
             return new JsonResponse(
-                ['error' => 'Failed to process delivery report', 'messageId' => $messageId],
+                ['error' => "Failed to process delivery report (ref: $errorId)", 'messageId' => $messageId],
                 Response::HTTP_INTERNAL_SERVER_ERROR
             );
         }
@@ -276,25 +289,46 @@ class WebhookController
         $status = $this->extractString($notification, 'status', '');
         $contactId = $this->extractString($notification, 'contact_id', '');
 
-        $this->logger->info("Processing OPT_OUT: identity={$identity}, channel={$channel}, status={$status}");
+        $this->logger->info('Processing OPT_OUT', [
+            'identity' => $identity,
+            'channel' => $channel,
+            'status' => $status,
+        ]);
 
         if ($status !== 'OPT_OUT_SUCCEEDED') {
-            $this->logger->warning("OPT_OUT did not succeed (status={$status}), skipping");
+            $this->logger->warning('OPT_OUT did not succeed, skipping', ['status' => $status]);
             return new JsonResponse(['status' => 'ignored'], Response::HTTP_OK);
         }
 
         $patientId = $this->lookupPatientByContactOrIdentity($contactId, $identity);
         if ($patientId === null) {
-            $this->logger->warning("No patient found for OPT_OUT: identity={$identity}, contact={$contactId}");
+            $this->logger->warning('No patient found for OPT_OUT', [
+                'identity' => $identity,
+                'contactId' => $contactId,
+            ]);
             return new JsonResponse(['status' => 'no_patient'], Response::HTTP_OK);
         }
 
         try {
             $this->consentService->optOut($patientId, $identity, "sinch_{$channel}");
-            $this->logger->info("Recorded OPT_OUT for patient {$patientId} on {$channel}");
         } catch (\Throwable $e) {
-            $this->logger->error("Failed to record OPT_OUT for patient {$patientId}: " . $e->getMessage());
+            $errorId = bin2hex(random_bytes(4));
+            $this->logger->error('Failed to process OPT_OUT', [
+                'identity' => $identity,
+                'errorId' => $errorId,
+                'exception' => $e,
+            ]);
+
+            return new JsonResponse(
+                ['error' => "Failed to process opt-out (ref: $errorId)"],
+                Response::HTTP_INTERNAL_SERVER_ERROR
+            );
         }
+
+        $this->logger->info('Recorded OPT_OUT', [
+            'patientId' => $patientId,
+            'channel' => $channel,
+        ]);
 
         return new JsonResponse(['status' => 'success'], Response::HTTP_OK);
     }
@@ -315,25 +349,46 @@ class WebhookController
         $status = $this->extractString($notification, 'status', '');
         $contactId = $this->extractString($notification, 'contact_id', '');
 
-        $this->logger->info("Processing OPT_IN: identity={$identity}, channel={$channel}, status={$status}");
+        $this->logger->info('Processing OPT_IN', [
+            'identity' => $identity,
+            'channel' => $channel,
+            'status' => $status,
+        ]);
 
         if ($status !== 'OPT_IN_SUCCEEDED') {
-            $this->logger->warning("OPT_IN did not succeed (status={$status}), skipping");
+            $this->logger->warning('OPT_IN did not succeed, skipping', ['status' => $status]);
             return new JsonResponse(['status' => 'ignored'], Response::HTTP_OK);
         }
 
         $patientId = $this->lookupPatientByContactOrIdentity($contactId, $identity);
         if ($patientId === null) {
-            $this->logger->warning("No patient found for OPT_IN: identity={$identity}, contact={$contactId}");
+            $this->logger->warning('No patient found for OPT_IN', [
+                'identity' => $identity,
+                'contactId' => $contactId,
+            ]);
             return new JsonResponse(['status' => 'no_patient'], Response::HTTP_OK);
         }
 
         try {
             $this->consentService->optIn($patientId, $identity, "sinch_{$channel}");
-            $this->logger->info("Recorded OPT_IN for patient {$patientId} on {$channel}");
         } catch (\Throwable $e) {
-            $this->logger->error("Failed to record OPT_IN for patient {$patientId}: " . $e->getMessage());
+            $errorId = bin2hex(random_bytes(4));
+            $this->logger->error('Failed to process OPT_IN', [
+                'identity' => $identity,
+                'errorId' => $errorId,
+                'exception' => $e,
+            ]);
+
+            return new JsonResponse(
+                ['error' => "Failed to process opt-in (ref: $errorId)"],
+                Response::HTTP_INTERNAL_SERVER_ERROR
+            );
         }
+
+        $this->logger->info('Recorded OPT_IN', [
+            'patientId' => $patientId,
+            'channel' => $channel,
+        ]);
 
         return new JsonResponse(['status' => 'success'], Response::HTTP_OK);
     }
@@ -367,7 +422,7 @@ class WebhookController
      */
     private function handleUnknownEvent(string $eventType): Response
     {
-        $this->logger->warning("Received unknown webhook event type: {$eventType}");
+        $this->logger->warning('Received unknown webhook event type', ['eventType' => $eventType]);
 
         return new JsonResponse(
             ['status' => 'ignored', 'message' => "Unknown event type: {$eventType}"],
@@ -390,7 +445,7 @@ class WebhookController
         $sql = "SELECT id FROM oce_sinch_messages WHERE message_id = ?";
         $existing = QueryUtils::querySingleRow($sql, [$messageId]);
         if ($existing) {
-            $this->logger->debug("Message already stored, skipping: {$messageId}");
+            $this->logger->debug('Message already stored, skipping', ['messageId' => $messageId]);
             return;
         }
 

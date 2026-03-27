@@ -699,7 +699,11 @@ class WebhookControllerTest extends TestCase
         $logs = SystemLogger::getLogs();
         $found = false;
         foreach ($logs as $log) {
-            if ($log['level'] === 'info' && str_contains($log['message'], 'Processing webhook event: MESSAGE_DELIVERY')) {
+            if ($log['level'] === 'info' && str_contains($log['message'], 'Processing webhook event')) {
+                $this->assertArrayHasKey('context', $log);
+                $this->assertIsArray($log['context']);
+                $this->assertArrayHasKey('trigger', $log['context']);
+                $this->assertSame('MESSAGE_DELIVERY', $log['context']['trigger']);
                 $found = true;
                 break;
             }

@@ -330,7 +330,16 @@ class InboxControllerTest extends TestCase
 
         $this->session->expects($this->once())
             ->method('setFlash')
-            ->with('inbox_message', 'Error refreshing messages: API error');
+            ->with(
+                'inbox_message',
+                $this->callback(function (string $message): bool {
+                    $this->assertStringContainsString('Error refreshing messages', $message);
+                    $this->assertMatchesRegularExpression('/\(ref: [0-9a-f]{8}\)/', $message);
+                    $this->assertStringNotContainsString('API error', $message);
+
+                    return true;
+                })
+            );
 
         $response = $this->controller->dispatch('refresh');
 

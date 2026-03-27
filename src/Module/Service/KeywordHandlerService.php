@@ -46,7 +46,7 @@ class KeywordHandlerService
         $patient = $this->findPatientByPhone($fromNumber);
 
         if (!$patient) {
-            $this->logger->warning("Received keyword from unknown number: {$fromNumber}");
+            $this->logger->warning('Received keyword from unknown number', ['phone' => $fromNumber]);
             return null;
         }
 

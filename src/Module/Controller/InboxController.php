@@ -112,8 +112,12 @@ class InboxController
             }
             $this->session->setFlash('inbox_message', $flash);
         } catch (\Throwable $e) {
-            $this->logger->error("Failed to refresh messages: " . $e->getMessage());
-            $this->session->setFlash('inbox_message', "Error refreshing messages: " . $e->getMessage());
+            $errorId = bin2hex(random_bytes(4));
+            $this->logger->error('Failed to refresh messages', [
+                'errorId' => $errorId,
+                'exception' => $e,
+            ]);
+            $this->session->setFlash('inbox_message', "Error refreshing messages (ref: $errorId)");
         }
 
         return $this->redirect($request);

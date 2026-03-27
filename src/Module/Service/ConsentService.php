@@ -121,7 +121,7 @@ class ConsentService
         QueryUtils::sqlStatementThrowException($sql, [$method, $patientId, $phoneNumber]);
 
         $this->syncHipaaAllowSms($patientId, 'NO');
-        $this->logger->debug("Patient {$patientId} opted out via {$method}");
+        $this->logger->debug('Patient opted out', ['patientId' => $patientId, 'method' => $method]);
     }
 
     /**

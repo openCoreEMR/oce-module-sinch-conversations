@@ -179,7 +179,14 @@ class SettingsControllerTest extends TestCase
 
         $this->session->expects($this->once())
             ->method('setFlash')
-            ->with('settings_message', $this->stringContains('Error:'));
+            ->with(
+                'settings_message',
+                $this->callback(function (string $message): bool {
+                    return str_contains($message, 'Error saving settings')
+                        && str_contains($message, '(ref:')
+                        && !str_contains($message, 'Project ID is required');
+                })
+            );
 
         $response = $this->controller->dispatch('save');
 
@@ -198,7 +205,14 @@ class SettingsControllerTest extends TestCase
 
         $this->session->expects($this->once())
             ->method('setFlash')
-            ->with('settings_message', 'Error saving settings. Please try again.');
+            ->with(
+                'settings_message',
+                $this->callback(function (string $message): bool {
+                    return str_contains($message, 'Error saving settings')
+                        && str_contains($message, '(ref:')
+                        && !str_contains($message, 'DB error');
+                })
+            );
 
         $response = $this->controller->dispatch('save');
 

@@ -64,15 +64,15 @@ class MessageService
                     channelPriority: $options->channelPriority,
                     skipConsentCheck: $options->skipConsentCheck,
                 );
-                $this->logger->debug("Using configured sender: {$senderPhone}");
+                $this->logger->debug('Using configured sender', ['sender' => $senderPhone]);
             }
         }
 
         try {
             $response = $this->apiClient->sendMessage($contactId, $message, $options->toApiOptions());
         } catch (\Throwable $e) {
-            $this->logger->error("Failed to send message: " . $e->getMessage());
-            throw new ValidationException("Failed to send message: " . $e->getMessage());
+            $this->logger->error('Failed to send message via Sinch API', ['exception' => $e]);
+            throw new ValidationException("Failed to send message", 0, $e);
         }
 
         $this->storeOutboundMessage($conversationId, $response, $message, $options);
