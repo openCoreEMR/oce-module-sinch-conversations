@@ -224,6 +224,10 @@ class Bootstrap
         $this->eventDispatcher->addListener(
             MenuEvent::MENU_UPDATE,
             function (MenuEvent $event): void {
+                if (!$this->globalsConfig->isEnabled()) {
+                    return;
+                }
+
                 $menu = $event->getMenu();
 
                 $menuItem = new \stdClass();
@@ -234,7 +238,6 @@ class Bootstrap
                 $menuItem->url = '/interface/modules/custom_modules/' . self::MODULE_NAME . '/public/index.php';
                 $menuItem->children = [];
                 $menuItem->acl_req = [];
-                $menuItem->global_req = [GlobalConfig::CONFIG_OPTION_ENABLED];
 
                 // Add to the modules section
                 foreach ($menu as $section) {
