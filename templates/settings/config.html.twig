@@ -58,10 +58,17 @@
             </div>
         {% endif %}
 
+        {% if is_external_config %}
+        <div class="alert alert-warning" role="alert">
+            <strong>{{ 'External Configuration Active'|xlt }}</strong>
+            {{ 'All configuration is managed via environment variables or configuration files. Fields below are read-only.'|xlt }}
+        </div>
+        {% else %}
         <div class="alert alert-info" role="alert">
             <strong>{{ 'Note:'|xlt }}</strong>
             {{ 'The Sinch API Configuration (Project ID, App ID, API Key, API Secret, Region) can also be configured via Administration > Globals > OpenCoreEMR Sinch Conversations. The Messaging Configuration settings are only available here.'|xlt }}
         </div>
+        {% endif %}
 
         <form method="post" action="?action=save">
             <input type="hidden" name="csrf_token" value="{{ csrf_token|attr }}">
@@ -75,40 +82,40 @@
             </div>
 
             <div class="mb-3">
-                <label for="project_id" class="form-label">{{ 'Project ID'|xlt }} <span class="text-danger">*</span></label>
+                <label for="project_id" class="form-label">{{ 'Project ID'|xlt }}{% if not is_external_config %} <span class="text-danger">*</span>{% endif %}</label>
                 <input
                     type="text"
                     class="form-control"
                     id="project_id"
                     name="project_id"
                     value="{{ settings.project_id|attr }}"
-                    required
+                    {% if is_external_config %}disabled{% else %}required{% endif %}
                 >
                 <div class="help-text">{{ 'Your Sinch project ID from the Sinch dashboard'|xlt }}</div>
             </div>
 
             <div class="mb-3">
-                <label for="app_id" class="form-label">{{ 'App ID'|xlt }} <span class="text-danger">*</span></label>
+                <label for="app_id" class="form-label">{{ 'App ID'|xlt }}{% if not is_external_config %} <span class="text-danger">*</span>{% endif %}</label>
                 <input
                     type="text"
                     class="form-control"
                     id="app_id"
                     name="app_id"
                     value="{{ settings.app_id|attr }}"
-                    required
+                    {% if is_external_config %}disabled{% else %}required{% endif %}
                 >
                 <div class="help-text">{{ 'Your Sinch app ID for the Conversations API'|xlt }}</div>
             </div>
 
             <div class="mb-3">
-                <label for="api_key" class="form-label">{{ 'API Key'|xlt }} <span class="text-danger">*</span></label>
+                <label for="api_key" class="form-label">{{ 'API Key'|xlt }}{% if not is_external_config %} <span class="text-danger">*</span>{% endif %}</label>
                 <input
                     type="text"
                     class="form-control password-field"
                     id="api_key"
                     name="api_key"
                     value="{{ settings.api_key|attr }}"
-                    required
+                    {% if is_external_config %}disabled{% else %}required{% endif %}
                 >
                 <div class="help-text">{{ 'Your Sinch API key (Access Key ID)'|xlt }}</div>
             </div>
@@ -121,6 +128,7 @@
                     id="api_secret"
                     name="api_secret"
                     placeholder="{{ 'Leave blank to keep existing secret'|xlt }}"
+                    {% if is_external_config %}disabled{% endif %}
                 >
                 <div class="help-text">
                     {{ 'Your Sinch API secret (Access Key Secret). Leave blank to keep the existing secret.'|xlt }}
@@ -128,8 +136,8 @@
             </div>
 
             <div class="mb-3">
-                <label for="region" class="form-label">{{ 'API Region'|xlt }} <span class="text-danger">*</span></label>
-                <select class="form-select" id="region" name="region" required>
+                <label for="region" class="form-label">{{ 'API Region'|xlt }}{% if not is_external_config %} <span class="text-danger">*</span>{% endif %}</label>
+                <select class="form-select" id="region" name="region" {% if is_external_config %}disabled{% else %}required{% endif %}>
                     <option value="us" {% if settings.region == 'us' %}selected{% endif %}>
                         {{ 'United States (us)'|xlt }}
                     </option>
@@ -146,8 +154,8 @@
             </div>
 
             <div class="mb-3">
-                <label for="default_channel" class="form-label">{{ 'Default Channel'|xlt }} <span class="text-danger">*</span></label>
-                <select class="form-select" id="default_channel" name="default_channel" required>
+                <label for="default_channel" class="form-label">{{ 'Default Channel'|xlt }}{% if not is_external_config %} <span class="text-danger">*</span>{% endif %}</label>
+                <select class="form-select" id="default_channel" name="default_channel" {% if is_external_config %}disabled{% else %}required{% endif %}>
                     <option value="SMS" {% if settings.default_channel == 'SMS' %}selected{% endif %}>
                         {{ 'SMS'|xlt }}
                     </option>
@@ -169,6 +177,7 @@
                     id="clinic_name"
                     name="clinic_name"
                     value="{{ settings.clinic_name|attr }}"
+                    {% if is_external_config %}disabled{% endif %}
                 >
                 <div class="help-text">{{ 'Clinic name to appear in message templates (e.g., "Example Clinic")'|xlt }}</div>
             </div>
@@ -182,6 +191,7 @@
                     name="clinic_phone"
                     value="{{ settings.clinic_phone|attr }}"
                     placeholder="650-123-4567"
+                    {% if is_external_config %}disabled{% endif %}
                 >
                 <div class="help-text">{{ 'Clinic phone number for message templates (e.g., "650-123-4567")'|xlt }}</div>
             </div>

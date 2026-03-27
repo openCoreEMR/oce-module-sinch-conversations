@@ -78,6 +78,7 @@ class SettingsController
 
         $content = $this->twig->render('settings/config.html.twig', [
             'settings' => $settings,
+            'is_external_config' => $this->config->isExternalConfigMode(),
             'success_message' => $this->session->getFlash('settings_message'),
             'csrf_token' => CsrfUtils::collectCsrfToken(),
         ]);
@@ -104,20 +105,27 @@ class SettingsController
         }
 
         try {
-            // Collect settings from form
+            // Skip saving when all config is managed externally
+            if ($this->config->isExternalConfigMode()) {
+                $this->session->setFlash(
+                    'settings_message',
+                    "Configuration is managed externally and cannot be changed here."
+                );
+                return $this->redirect($request);
+            }
+
             $settings = [
+                'default_channel' => (string)$request->request->get('default_channel', 'SMS'),
+                'clinic_name' => (string)$request->request->get('clinic_name', ''),
+                'clinic_phone' => (string)$request->request->get('clinic_phone', ''),
                 'project_id' => (string)$request->request->get('project_id', ''),
                 'app_id' => (string)$request->request->get('app_id', ''),
                 'api_key' => (string)$request->request->get('api_key', ''),
                 'region' => (string)$request->request->get('region', 'us'),
-                'default_channel' => (string)$request->request->get('default_channel', 'SMS'),
-                'clinic_name' => (string)$request->request->get('clinic_name', ''),
-                'clinic_phone' => (string)$request->request->get('clinic_phone', ''),
             ];
 
-            // Only include API secret if it was provided
             $apiSecret = $request->request->get('api_secret', '');
-            if (!empty($apiSecret)) {
+            if ($apiSecret !== null && $apiSecret !== '') {
                 $settings['api_secret'] = (string)$apiSecret;
             }
 

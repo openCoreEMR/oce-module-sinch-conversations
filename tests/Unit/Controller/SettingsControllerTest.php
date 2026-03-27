@@ -76,7 +76,7 @@ class SettingsControllerTest extends TestCase
         $this->session = $this->createMock(SessionAccessor::class);
 
         $loader = new ArrayLoader([
-            'settings/config.html.twig' => '<html>{{ settings.project_id }}|{{ success_message }}</html>',
+            'settings/config.html.twig' => '<html>{{ settings.project_id }}|{{ success_message }}|ext:{{ is_external_config ? "yes" : "no" }}</html>',
         ]);
         $this->twig = new Environment($loader);
 
@@ -111,6 +111,16 @@ class SettingsControllerTest extends TestCase
         $content = $response->getContent();
         $this->assertIsString($content);
         $this->assertStringContainsString('proj-1', $content);
+    }
+
+    public function testShowSettingsPassesExternalConfigFlag(): void
+    {
+        $response = $this->controller->dispatch('show');
+
+        $content = $response->getContent();
+        $this->assertIsString($content);
+        // GlobalConfig caches isExternalConfigMode at construction; false in test environment
+        $this->assertStringContainsString('ext:no', $content);
     }
 
     public function testDefaultActionShowsSettings(): void
@@ -163,6 +173,65 @@ class SettingsControllerTest extends TestCase
         $response = $this->controller->dispatch('save');
 
         $this->assertInstanceOf(RedirectResponse::class, $response);
+    }
+
+    public function testSaveExcludesAllFieldsWhenExternalConfig(): void
+    {
+        $previousEnvConfig = getenv('OCE_SINCH_CONVERSATIONS_ENV_CONFIG');
+        putenv('OCE_SINCH_CONVERSATIONS_ENV_CONFIG=1');
+
+        try {
+            // Rebuild controller so GlobalConfig caches the env var
+            $this->config = new GlobalConfig(new MockGlobalsAccessor([
+                GlobalConfig::CONFIG_OPTION_PROJECT_ID => 'proj-1',
+                GlobalConfig::CONFIG_OPTION_APP_ID => 'app-1',
+                GlobalConfig::CONFIG_OPTION_API_KEY => 'key-1',
+                GlobalConfig::CONFIG_OPTION_API_SECRET => base64_encode('secret-1'),
+                GlobalConfig::CONFIG_OPTION_REGION => 'us',
+                GlobalConfig::CONFIG_OPTION_DEFAULT_CHANNEL => 'SMS',
+                GlobalConfig::CONFIG_OPTION_CLINIC_NAME => 'Test Clinic',
+                GlobalConfig::CONFIG_OPTION_CLINIC_PHONE => '+15551234567',
+            ]));
+            $this->controller = new SettingsController(
+                $this->config,
+                $this->configService,
+                $this->apiClient,
+                $this->syncService,
+                $this->session,
+                $this->twig,
+                new SystemLogger()
+            );
+
+            $_SERVER['REQUEST_METHOD'] = 'POST';
+            $_POST['csrf_token'] = 'valid';
+            $_POST['project_id'] = 'should-be-ignored';
+            $_POST['app_id'] = 'should-be-ignored';
+            $_POST['api_key'] = 'should-be-ignored';
+            $_POST['api_secret'] = 'should-be-ignored';
+            $_POST['region'] = 'eu';
+            $_POST['default_channel'] = 'SMS';
+            $_POST['clinic_name'] = 'New Clinic';
+            $_POST['clinic_phone'] = '+15550000000';
+            CsrfUtils::setVerifyResult(true);
+
+            // saveSettings should never be called in external config mode
+            $this->configService->expects($this->never())
+                ->method('saveSettings');
+
+            $this->session->expects($this->once())
+                ->method('setFlash')
+                ->with('settings_message', $this->stringContains('cannot be changed'));
+
+            $response = $this->controller->dispatch('save');
+
+            $this->assertInstanceOf(RedirectResponse::class, $response);
+        } finally {
+            if ($previousEnvConfig === false) {
+                putenv('OCE_SINCH_CONVERSATIONS_ENV_CONFIG');
+            } else {
+                putenv('OCE_SINCH_CONVERSATIONS_ENV_CONFIG=' . $previousEnvConfig);
+            }
+        }
     }
 
     public function testSaveHandlesValidationError(): void
