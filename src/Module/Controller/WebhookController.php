@@ -12,6 +12,7 @@
 
 namespace OpenCoreEMR\Modules\SinchConversations\Controller;
 
+use OpenCoreEMR\Modules\SinchConversations\Channel;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Service\ConsentService;
 use OpenCoreEMR\Modules\SinchConversations\Service\KeywordHandlerService;
@@ -319,10 +320,12 @@ class WebhookController
             return new JsonResponse(['status' => 'invalid_identity'], Response::HTTP_OK);
         }
 
+        $channelEnum = Channel::tryFrom($channel);
+
         $failures = 0;
         foreach ($patientIds as $patientId) {
             try {
-                $this->consentService->optOut($patientId, $normalizedIdentity, "sinch_{$channel}");
+                $this->consentService->optOut($patientId, $normalizedIdentity, "sinch_{$channel}", channel: $channelEnum);
             } catch (\Throwable $e) {
                 $failures++;
                 $errorId = bin2hex(random_bytes(4));
@@ -393,9 +396,11 @@ class WebhookController
             return new JsonResponse(['status' => 'invalid_identity'], Response::HTTP_OK);
         }
 
+        $channelEnum = Channel::tryFrom($channel);
+
         $patientId = $patientIds[0];
         try {
-            $this->consentService->optIn($patientId, $normalizedIdentity, "sinch_{$channel}");
+            $this->consentService->optIn($patientId, $normalizedIdentity, "sinch_{$channel}", channel: $channelEnum);
         } catch (\Throwable $e) {
             $errorId = bin2hex(random_bytes(4));
             $this->logger->error('Failed to process OPT_IN', [

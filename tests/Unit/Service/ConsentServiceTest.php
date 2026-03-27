@@ -12,6 +12,7 @@
 
 namespace OpenCoreEMR\Modules\SinchConversations\Tests\Unit\Service;
 
+use OpenCoreEMR\Modules\SinchConversations\Channel;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Service\ConsentService;
 use OpenCoreEMR\Modules\SinchConversations\Service\MessageOptions;
@@ -156,9 +157,9 @@ class ConsentServiceTest extends TestCase
 
     // --- optOut ---
 
-    public function testOptOutUpdatesConsent(): void
+    public function testOptOutSmsSyncsHipaaAllowSms(): void
     {
-        $this->service->optOut(1, '+15551234567', 'sms_stop');
+        $this->service->optOut(1, '+15551234567', 'sms_stop', Channel::SMS);
 
         $queries = QueryUtils::getQueries();
         $updateQueries = array_filter($queries, fn($q) => str_contains($q['sql'], 'UPDATE oce_sinch_patient_consent'));
@@ -168,12 +169,71 @@ class ConsentServiceTest extends TestCase
         $update = array_values($updateQueries)[0];
         $this->assertEquals('sms_stop', $update['binds'][0]);
 
-        // Verify hipaa_allowsms is synced to NO
+        // Verify hipaa_allowsms is synced to NO for SMS channel
         $hipaaQueries = array_filter($queries, fn($q) => str_contains($q['sql'], 'UPDATE patient_data SET hipaa_allowsms'));
         $this->assertNotEmpty($hipaaQueries);
         $hipaaUpdate = array_values($hipaaQueries)[0];
         $this->assertEquals('NO', $hipaaUpdate['binds'][0]);
         $this->assertEquals(1, $hipaaUpdate['binds'][1]);
+    }
+
+    public function testOptOutDefaultsToSmsChannel(): void
+    {
+        $this->service->optOut(1, '+15551234567', 'sms_stop');
+
+        $queries = QueryUtils::getQueries();
+
+        // Default channel is SMS, so hipaa_allowsms should be synced
+        $hipaaQueries = array_filter($queries, fn($q) => str_contains($q['sql'], 'UPDATE patient_data SET hipaa_allowsms'));
+        $this->assertNotEmpty($hipaaQueries);
+        $hipaaUpdate = array_values($hipaaQueries)[0];
+        $this->assertEquals('NO', $hipaaUpdate['binds'][0]);
+    }
+
+    public function testOptOutWhatsAppDoesNotSyncHipaaAllowSms(): void
+    {
+        $this->service->optOut(1, '+15551234567', 'sinch_WHATSAPP', Channel::WHATSAPP);
+
+        $queries = QueryUtils::getQueries();
+
+        // Consent record should still be updated
+        $updateQueries = array_filter($queries, fn($q) => str_contains($q['sql'], 'UPDATE oce_sinch_patient_consent'));
+        $this->assertNotEmpty($updateQueries);
+
+        // hipaa_allowsms must NOT be touched for non-SMS channels
+        $hipaaQueries = array_filter($queries, fn($q) => str_contains($q['sql'], 'UPDATE patient_data SET hipaa_allowsms'));
+        $this->assertEmpty($hipaaQueries);
+    }
+
+    public function testOptOutRcsDoesNotSyncHipaaAllowSms(): void
+    {
+        $this->service->optOut(1, '+15551234567', 'sinch_RCS', Channel::RCS);
+
+        $queries = QueryUtils::getQueries();
+
+        // hipaa_allowsms must NOT be touched for non-SMS channels
+        $hipaaQueries = array_filter($queries, fn($q) => str_contains($q['sql'], 'UPDATE patient_data SET hipaa_allowsms'));
+        $this->assertEmpty($hipaaQueries);
+    }
+
+    // --- optIn channel-awareness ---
+
+    public function testOptInWhatsAppDoesNotSyncHipaaAllowSms(): void
+    {
+        $this->templateService->method('render')->willReturn('Welcome!');
+        $this->messageService->method('sendToPatient');
+
+        $this->service->optIn(1, '+15551234567', 'sinch_WHATSAPP', null, Channel::WHATSAPP);
+
+        $queries = QueryUtils::getQueries();
+
+        // Consent record should still be inserted
+        $insertQueries = array_filter($queries, fn($q) => str_contains($q['sql'], 'INSERT INTO oce_sinch_patient_consent'));
+        $this->assertNotEmpty($insertQueries);
+
+        // hipaa_allowsms must NOT be touched for non-SMS channels
+        $hipaaQueries = array_filter($queries, fn($q) => str_contains($q['sql'], 'UPDATE patient_data SET hipaa_allowsms'));
+        $this->assertEmpty($hipaaQueries);
     }
 
     // --- getConsent ---
