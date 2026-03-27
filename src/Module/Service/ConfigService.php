@@ -100,6 +100,8 @@ class ConfigService
             $this->logger->info('Sinch Conversations settings saved successfully');
         } catch (\Throwable $e) {
             $this->logger->error('Failed to save settings', ['exception' => $e]);
+            // Raw message is for diagnostics in the exception chain; the controller
+            // catches this and shows a generic message with an error ref ID.
             throw new ValidationException("Failed to save settings: " . $e->getMessage(), 0, $e);
         }
     }
