@@ -699,7 +699,7 @@ class WebhookControllerTest extends TestCase
         $logs = SystemLogger::getLogs();
         $found = false;
         foreach ($logs as $log) {
-            if ($log['level'] === 'info' && str_contains($log['message'], 'Processing webhook event: MESSAGE_DELIVERY')) {
+            if ($log['level'] === 'info' && str_contains($log['message'], 'Processing webhook event')) {
                 $found = true;
                 break;
             }

@@ -37,7 +37,7 @@ class TemplateSyncService
      */
     public function syncAllTemplates(): array
     {
-        $this->logger->info("Starting template sync to Sinch");
+        $this->logger->info('Starting template sync to Sinch');
 
         $templateDefinitions = $this->loadTemplateDefinitions();
         $results = [
@@ -59,13 +59,13 @@ class TemplateSyncService
                     $existingByDescription[$desc] = $template;
                 }
             }
-            $this->logger->debug(
-                "Found " . count($existingTemplates) . " existing templates in Sinch"
-            );
+            $this->logger->debug('Found existing templates in Sinch', [
+                'count' => count($existingTemplates),
+            ]);
         } catch (\Throwable $e) {
-            $this->logger->warning(
-                "Could not list existing templates, will attempt to create all: " . $e->getMessage()
-            );
+            $this->logger->warning('Could not list existing templates, will attempt to create all', [
+                'exception' => $e,
+            ]);
             $existingByDescription = [];
         }
 
@@ -78,10 +78,10 @@ class TemplateSyncService
                     $sinchTemplate = $existingByDescription[$description];
                     $sinchTemplateId = $sinchTemplate['id'] ?? null;
 
-                    $this->logger->debug(
-                        "Template already exists in Sinch: {$template['template_key']}",
-                        ['sinch_id' => $sinchTemplateId]
-                    );
+                    $this->logger->debug('Template already exists in Sinch', [
+                        'templateKey' => $template['template_key'],
+                        'sinchId' => $sinchTemplateId,
+                    ]);
 
                     // Save/update locally with existing Sinch ID
                     if ($sinchTemplateId) {
@@ -107,10 +107,10 @@ class TemplateSyncService
                     'template_key' => $template['template_key'],
                     'error' => $e->getMessage(),
                 ];
-                $this->logger->error(
-                    "Failed to sync template: {$template['template_key']}",
-                    ['error' => $e->getMessage()]
-                );
+                $this->logger->error('Failed to sync template', [
+                    'templateKey' => $template['template_key'],
+                    'exception' => $e,
+                ]);
 
                 // Stop on first failure
                 $this->logger->warning("Stopping template sync due to failure");
@@ -118,7 +118,7 @@ class TemplateSyncService
             }
         }
 
-        $this->logger->info("Template sync completed", $results);
+        $this->logger->info('Template sync completed', $results);
         return $results;
     }
 
@@ -131,7 +131,7 @@ class TemplateSyncService
      */
     public function syncTemplate(array $template): void
     {
-        $this->logger->debug("Syncing template: {$template['template_key']}");
+        $this->logger->debug('Syncing template', ['templateKey' => $template['template_key']]);
 
         // First, create the template in Sinch
         $sinchResponse = $this->apiClient->createTemplate($template);
@@ -224,7 +224,7 @@ class TemplateSyncService
                 $template['template_key'],
             ]);
 
-            $this->logger->debug("Updated local template: {$template['template_key']}");
+            $this->logger->debug('Updated local template', ['templateKey' => $template['template_key']]);
         } else {
             // Insert new template
             $sql = "INSERT INTO oce_sinch_message_templates (
@@ -247,7 +247,7 @@ class TemplateSyncService
                 $template['active'] ?? true,
             ]);
 
-            $this->logger->debug("Inserted local template: {$template['template_key']}");
+            $this->logger->debug('Inserted local template', ['templateKey' => $template['template_key']]);
         }
     }
 }

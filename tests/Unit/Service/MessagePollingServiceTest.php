@@ -136,7 +136,7 @@ class MessagePollingServiceTest extends TestCase
         $this->assertEmpty($result['messages']);
     }
 
-    public function testPollConversationHandlesApiError(): void
+    public function testPollConversationThrowsOnApiError(): void
     {
         QueryUtils::setMockResult(
             "SELECT last_polled_at, patient_id
@@ -148,13 +148,9 @@ class MessagePollingServiceTest extends TestCase
         $this->apiClient->method('getConversationMessages')
             ->willThrowException(new \RuntimeException('API error'));
 
-        $result = $this->service->pollConversation('conv-1');
-
-        $this->assertEquals(['messages' => [], 'keyword_failures' => []], $result);
-
-        $logs = SystemLogger::getLogs();
-        $errorLogs = array_filter($logs, fn($log) => $log['level'] === 'error');
-        $this->assertNotEmpty($errorLogs);
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('API error');
+        $this->service->pollConversation('conv-1');
     }
 
     public function testPollConversationSendsStartTimeFilter(): void
@@ -282,13 +278,13 @@ class MessagePollingServiceTest extends TestCase
         $this->assertNotEmpty($updateQueries);
     }
 
-    public function testCheckMessageStatusReturnsEmptyOnApiError(): void
+    public function testCheckMessageStatusThrowsOnApiError(): void
     {
         $this->apiClient->method('getMessage')
             ->willThrowException(new \RuntimeException('Not found'));
 
-        $result = $this->service->checkMessageStatus('msg-missing');
-
-        $this->assertEquals([], $result);
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Not found');
+        $this->service->checkMessageStatus('msg-missing');
     }
 }

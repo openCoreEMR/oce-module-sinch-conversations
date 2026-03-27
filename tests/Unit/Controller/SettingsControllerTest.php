@@ -198,7 +198,7 @@ class SettingsControllerTest extends TestCase
 
         $this->session->expects($this->once())
             ->method('setFlash')
-            ->with('settings_message', 'Error saving settings. Please try again.');
+            ->with('settings_message', $this->stringContains('Error saving settings'));
 
         $response = $this->controller->dispatch('save');
 

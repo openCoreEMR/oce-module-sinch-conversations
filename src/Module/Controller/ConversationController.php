@@ -146,8 +146,13 @@ class ConversationController
 
             $this->session->setFlash('conversation_message', "Message sent successfully");
         } catch (\Throwable $e) {
-            $this->logger->error("Failed to send reply: " . $e->getMessage());
-            $this->session->setFlash('conversation_message', "Error sending message: " . $e->getMessage());
+            $errorId = bin2hex(random_bytes(4));
+            $this->logger->error('Failed to send reply', [
+                'conversationId' => $conversationId,
+                'errorId' => $errorId,
+                'exception' => $e,
+            ]);
+            $this->session->setFlash('conversation_message', "Error sending message (ref: $errorId)");
         }
 
         return $this->redirect($request, $conversationId);

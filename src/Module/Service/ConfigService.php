@@ -97,10 +97,10 @@ class ConfigService
                 );
             }
 
-            $this->logger->info("Sinch Conversations settings saved successfully");
+            $this->logger->info('Sinch Conversations settings saved successfully');
         } catch (\Throwable $e) {
-            $this->logger->error("Failed to save settings: " . $e->getMessage());
-            throw new ValidationException("Failed to save settings: " . $e->getMessage());
+            $this->logger->error('Failed to save settings', ['exception' => $e]);
+            throw new ValidationException("Failed to save settings: " . $e->getMessage(), 0, $e);
         }
     }
 

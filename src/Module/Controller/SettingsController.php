@@ -129,12 +129,16 @@ class SettingsController
 
             return $this->redirect($request);
         } catch (ValidationException $e) {
-            $this->logger->error("Validation error saving settings: " . $e->getMessage());
+            $this->logger->error('Validation error saving settings', ['exception' => $e]);
             $this->session->setFlash('settings_message', "Error: " . $e->getMessage());
             return $this->redirect($request);
         } catch (\Throwable $e) {
-            $this->logger->error("Error saving settings: " . $e->getMessage());
-            $this->session->setFlash('settings_message', "Error saving settings. Please try again.");
+            $errorId = bin2hex(random_bytes(4));
+            $this->logger->error('Error saving settings', [
+                'errorId' => $errorId,
+                'exception' => $e,
+            ]);
+            $this->session->setFlash('settings_message', "Error saving settings (ref: $errorId). Please try again.");
             return $this->redirect($request);
         }
     }
@@ -175,7 +179,7 @@ class SettingsController
             }
 
             if (empty($this->config->getSinchApiSecret())) {
-                $this->logger->warning("API Secret is not configured");
+                $this->logger->warning('API Secret is not configured');
                 return new JsonResponse([
                     'success' => false,
                     'message' => 'API Secret is not configured. ' .
@@ -184,9 +188,9 @@ class SettingsController
             }
 
             // Test the connection
-            $this->logger->info("Testing Sinch API connection");
+            $this->logger->info('Testing Sinch API connection');
             $this->apiClient->testConnection();
-            $this->logger->info("Sinch API connection test successful");
+            $this->logger->info('Sinch API connection test successful');
 
             // Get app configuration details
             $appConfig = $this->apiClient->getApp();
@@ -203,18 +207,14 @@ class SettingsController
             ];
             return new JsonResponse($result);
         } catch (\Throwable $e) {
-            $this->logger->error(
-                sprintf(
-                    "API test failed [%s]: %s\nFile: %s:%d",
-                    $e::class,
-                    $e->getMessage(),
-                    $e->getFile(),
-                    $e->getLine()
-                )
-            );
+            $errorId = bin2hex(random_bytes(4));
+            $this->logger->error('API connection test failed', [
+                'errorId' => $errorId,
+                'exception' => $e,
+            ]);
             return new JsonResponse([
                 'success' => false,
-                'message' => 'Connection failed: ' . $e->getMessage(),
+                'message' => "Connection failed (ref: $errorId). Check logs for details.",
             ], Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
@@ -277,9 +277,9 @@ class SettingsController
             $options = [];
             if (!empty($senderPhone)) {
                 $options['sender'] = $senderPhone;
-                $this->logger->info("Using configured sender: {$senderPhone}");
+                $this->logger->info('Using configured sender', ['sender' => $senderPhone]);
             } else {
-                $this->logger->warning("No clinic phone configured - using default sender from Sinch app");
+                $this->logger->warning('No clinic phone configured, using default sender from Sinch app');
             }
 
             $this->apiClient->sendMessageByChannelIdentity(
@@ -289,7 +289,7 @@ class SettingsController
                 $options
             );
 
-            $this->logger->info("Test SMS sent successfully to {$phoneNumber}");
+            $this->logger->info('Test SMS sent successfully', ['phone' => $phoneNumber]);
 
             return new JsonResponse([
                 'success' => true,
@@ -297,10 +297,15 @@ class SettingsController
                     (!empty($senderPhone) ? " from {$senderPhone}" : ''),
             ]);
         } catch (\Throwable $e) {
-            $this->logger->error("Failed to send test SMS: " . $e->getMessage());
+            $errorId = bin2hex(random_bytes(4));
+            $this->logger->error('Failed to send test SMS', [
+                'phone' => $phoneNumber,
+                'errorId' => $errorId,
+                'exception' => $e,
+            ]);
             return new JsonResponse([
                 'success' => false,
-                'message' => 'Failed to send SMS: ' . $e->getMessage(),
+                'message' => "Failed to send SMS (ref: $errorId). Check logs for details.",
             ], Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
@@ -332,7 +337,7 @@ class SettingsController
         }
 
         try {
-            $this->logger->info("Starting template sync");
+            $this->logger->info('Starting template sync');
             $results = $this->templateSyncService->syncAllTemplates();
 
             $message = sprintf(
@@ -360,10 +365,14 @@ class SettingsController
                 'details' => $results,
             ]);
         } catch (\Throwable $e) {
-            $this->logger->error("Template sync failed: " . $e->getMessage());
+            $errorId = bin2hex(random_bytes(4));
+            $this->logger->error('Template sync failed', [
+                'errorId' => $errorId,
+                'exception' => $e,
+            ]);
             return new JsonResponse([
                 'success' => false,
-                'message' => 'Template sync failed: ' . $e->getMessage(),
+                'message' => "Template sync failed (ref: $errorId). Check logs for details.",
             ], Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }

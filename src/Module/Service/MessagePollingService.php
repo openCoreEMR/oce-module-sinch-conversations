@@ -43,7 +43,7 @@ class MessagePollingService
         $conversation = QueryUtils::querySingleRow($sql, [$conversationId]);
 
         if (!$conversation) {
-            $this->logger->error("Conversation not found: {$conversationId}");
+            $this->logger->error('Conversation not found', ['conversationId' => $conversationId]);
             return ['messages' => [], 'keyword_failures' => []];
         }
 
@@ -55,12 +55,7 @@ class MessagePollingService
             $filters['start_time'] = $lastPolled;
         }
 
-        try {
-            $messages = $this->apiClient->getConversationMessages($conversationId, $filters);
-        } catch (\Throwable $e) {
-            $this->logger->error("Failed to poll conversation {$conversationId}: " . $e->getMessage());
-            return ['messages' => [], 'keyword_failures' => []];
-        }
+        $messages = $this->apiClient->getConversationMessages($conversationId, $filters);
 
         $newMessages = [];
         $keywordFailures = [];
@@ -125,12 +120,7 @@ class MessagePollingService
      */
     public function checkMessageStatus(string $messageId): array
     {
-        try {
-            $message = $this->apiClient->getMessage($messageId);
-        } catch (\Throwable $e) {
-            $this->logger->error("Failed to check message status {$messageId}: " . $e->getMessage());
-            return [];
-        }
+        $message = $this->apiClient->getMessage($messageId);
 
         $sql = "UPDATE oce_sinch_messages
                 SET status = ?,
@@ -174,11 +164,16 @@ class MessagePollingService
                 new MessageOptions(templateKey: 'keyword_response', skipConsentCheck: true)
             );
         } catch (\Throwable $e) {
-            $this->logger->error("Failed to send keyword response to {$phoneNumber}: " . $e->getMessage());
-            return ['phone' => $phoneNumber, 'error' => $e->getMessage()];
+            $errorId = bin2hex(random_bytes(4));
+            $this->logger->error('Failed to send keyword response', [
+                'phone' => $phoneNumber,
+                'errorId' => $errorId,
+                'exception' => $e,
+            ]);
+            return ['phone' => $phoneNumber, 'error' => "Failed (ref: $errorId)"];
         }
 
-        $this->logger->info("Sent keyword auto-response via polling to: {$phoneNumber}");
+        $this->logger->info('Sent keyword auto-response via polling', ['phone' => $phoneNumber]);
         return null;
     }
 
