@@ -74,7 +74,9 @@ class KeywordHandlerServiceTest extends TestCase
      */
     public function testStopKeywordsOptOutAndRespond(string $keyword): void
     {
-        $this->mockPatientLookup('+15559999999', ['pid' => 42, 'fname' => 'John', 'lname' => 'Doe']);
+        $this->mockPatientLookup('+15559999999', [
+            ['pid' => 42, 'fname' => 'John', 'lname' => 'Doe', 'phone_cell' => '555-999-9999'],
+        ]);
 
         $this->consentService->expects($this->once())
             ->method('optOut')
@@ -109,6 +111,31 @@ class KeywordHandlerServiceTest extends TestCase
         ];
     }
 
+    // --- STOP with multiple patients (issue #39) ---
+
+    public function testStopOptsOutAllPatientsSharingPhoneNumber(): void
+    {
+        $this->mockPatientLookup('+15559999999', [
+            ['pid' => 10, 'fname' => 'Parent', 'lname' => 'Smith', 'phone_cell' => '555-999-9999'],
+            ['pid' => 11, 'fname' => 'Child1', 'lname' => 'Smith', 'phone_cell' => '555-999-9999'],
+            ['pid' => 12, 'fname' => 'Child2', 'lname' => 'Smith', 'phone_cell' => '555-999-9999'],
+        ]);
+
+        $this->consentService->expects($this->exactly(3))
+            ->method('optOut')
+            ->willReturnCallback(function (int $pid, string $phone, string $method): void {
+                $this->assertSame('+15559999999', $phone);
+                $this->assertSame('sms_stop', $method);
+                $this->assertContains($pid, [10, 11, 12]);
+            });
+
+        $this->templateService->method('render')->willReturn('Unsubscribed.');
+
+        $result = $this->service->handleInboundMessage('+15559999999', 'STOP');
+
+        $this->assertSame('Unsubscribed.', $result);
+    }
+
     // --- START keywords ---
 
     /**
@@ -116,7 +143,9 @@ class KeywordHandlerServiceTest extends TestCase
      */
     public function testStartKeywordsOptInAndRespond(string $keyword): void
     {
-        $this->mockPatientLookup('+15559999999', ['pid' => 42, 'fname' => 'John', 'lname' => 'Doe']);
+        $this->mockPatientLookup('+15559999999', [
+            ['pid' => 42, 'fname' => 'John', 'lname' => 'Doe', 'phone_cell' => '555-999-9999'],
+        ]);
 
         $this->consentService->expects($this->once())
             ->method('optIn')
@@ -145,6 +174,24 @@ class KeywordHandlerServiceTest extends TestCase
         ];
     }
 
+    public function testStartOnlyOptsInFirstPatientWhenMultipleShareNumber(): void
+    {
+        $this->mockPatientLookup('+15559999999', [
+            ['pid' => 10, 'fname' => 'Parent', 'lname' => 'Smith', 'phone_cell' => '555-999-9999'],
+            ['pid' => 11, 'fname' => 'Child1', 'lname' => 'Smith', 'phone_cell' => '555-999-9999'],
+        ]);
+
+        $this->consentService->expects($this->once())
+            ->method('optIn')
+            ->with(10, '+15559999999', 'sms_start', null);
+
+        $this->templateService->method('render')->willReturn('Re-subscribed.');
+
+        $result = $this->service->handleInboundMessage('+15559999999', 'START');
+
+        $this->assertSame('Re-subscribed.', $result);
+    }
+
     // --- HELP keywords ---
 
     /**
@@ -152,9 +199,9 @@ class KeywordHandlerServiceTest extends TestCase
      */
     public function testHelpKeywordsRespond(string $keyword): void
     {
-        // HELP doesn't need a patient lookup for the response, but the code
-        // checks for the patient first
-        $this->mockPatientLookup('+15559999999', ['pid' => 42, 'fname' => 'Jane', 'lname' => 'Doe']);
+        $this->mockPatientLookup('+15559999999', [
+            ['pid' => 42, 'fname' => 'Jane', 'lname' => 'Doe', 'phone_cell' => '555-999-9999'],
+        ]);
 
         $this->templateService->expects($this->once())
             ->method('render')
@@ -185,7 +232,7 @@ class KeywordHandlerServiceTest extends TestCase
 
     public function testReturnsNullForUnknownPatient(): void
     {
-        $this->mockPatientLookup('+15559999999', null);
+        $this->mockPatientLookup('+15559999999', []);
 
         $result = $this->service->handleInboundMessage('+15559999999', 'STOP');
 
@@ -194,7 +241,7 @@ class KeywordHandlerServiceTest extends TestCase
 
     public function testLogsWarningForUnknownPatient(): void
     {
-        $this->mockPatientLookup('+15559999999', null);
+        $this->mockPatientLookup('+15559999999', []);
 
         $this->service->handleInboundMessage('+15559999999', 'STOP');
 
@@ -213,7 +260,9 @@ class KeywordHandlerServiceTest extends TestCase
 
     public function testKeywordsAreCaseInsensitive(): void
     {
-        $this->mockPatientLookup('+15559999999', ['pid' => 1, 'fname' => 'A', 'lname' => 'B']);
+        $this->mockPatientLookup('+15559999999', [
+            ['pid' => 1, 'fname' => 'A', 'lname' => 'B', 'phone_cell' => '555-999-9999'],
+        ]);
 
         $this->templateService->method('render')->willReturn('response');
 
@@ -224,28 +273,57 @@ class KeywordHandlerServiceTest extends TestCase
 
     public function testWhitespaceIsTrimmed(): void
     {
-        $this->mockPatientLookup('+15559999999', ['pid' => 1, 'fname' => 'A', 'lname' => 'B']);
+        $this->mockPatientLookup('+15559999999', [
+            ['pid' => 1, 'fname' => 'A', 'lname' => 'B', 'phone_cell' => '555-999-9999'],
+        ]);
         $this->templateService->method('render')->willReturn('response');
 
         $this->assertNotNull($this->service->handleInboundMessage('+15559999999', '  STOP  '));
     }
 
+    // --- Phone normalization (issue #43) ---
+
+    public function testNormalizesNonE164PhoneBeforeLookup(): void
+    {
+        // Input is a raw US number, not E.164
+        $this->mockPatientLookup('+15559999999', [
+            ['pid' => 1, 'fname' => 'A', 'lname' => 'B', 'phone_cell' => '555-999-9999'],
+        ]);
+        $this->templateService->method('render')->willReturn('response');
+
+        // Pass raw format -- should still find the patient via normalization
+        $this->assertNotNull($this->service->handleInboundMessage('555-999-9999', 'STOP'));
+    }
+
+    public function testReturnsNullForUnparseablePhone(): void
+    {
+        $result = $this->service->handleInboundMessage('abc', 'STOP');
+        $this->assertNull($result);
+    }
+
     // --- Helpers ---
 
     /**
-     * @param array<string, mixed>|null $patient
+     * Mock the fetchRecords call used by findPatientsByPhone.
+     * The query matches on the last 10 digits of the phone number.
+     *
+     * @param string $phoneNumber E.164 number
+     * @param list<array<string, mixed>> $patients
      */
-    private function mockPatientLookup(string $phoneNumber, ?array $patient): void
+    private function mockPatientLookup(string $phoneNumber, array $patients): void
     {
-        $normalized = preg_replace('/[^0-9]/', '', $phoneNumber);
+        $digits = preg_replace('/[^0-9]/', '', $phoneNumber);
+        $national = substr($digits, -10);
 
         QueryUtils::setMockResult(
             "SELECT pid, fname, lname, phone_cell
                 FROM patient_data
-                WHERE REPLACE(REPLACE(REPLACE(phone_cell, '-', ''), ' ', ''), '+', '') LIKE ?
-                LIMIT 1",
-            ['%' . $normalized],
-            $patient ? [$patient] : []
+                WHERE RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone_cell, '-', ''), ' ', ''), '(', ''), ')', ''), '.', ''), 10) = ?
+                AND phone_cell IS NOT NULL
+                AND phone_cell != ''
+                ORDER BY pid ASC",
+            [$national],
+            $patients
         );
     }
 }

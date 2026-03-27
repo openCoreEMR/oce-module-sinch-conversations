@@ -420,6 +420,79 @@ class MessageServiceTest extends TestCase
         $this->assertStringContainsString('hipaa_allowsms', $results['errors'][0]);
     }
 
+    // --- sendBatch dedup (issue #39) ---
+
+    public function testSendBatchDedupsByPhoneAndMessage(): void
+    {
+        // Two patients share the same phone number
+        QueryUtils::setMockResult(
+            "SELECT phone_cell FROM patient_data WHERE pid = ?",
+            [10],
+            [['phone_cell' => '+15553333333']]
+        );
+        QueryUtils::setMockResult(
+            "SELECT phone_cell FROM patient_data WHERE pid = ?",
+            [11],
+            [['phone_cell' => '+15553333333']]
+        );
+
+        // Patient 10 eligibility and send flow
+        $this->mockPatientEligible(10, '+15553333333');
+        QueryUtils::setMockResult(
+            "SELECT contact_id FROM oce_sinch_contacts
+                WHERE patient_id = ? AND channel_identity = ?",
+            [10, '+15553333333'],
+            [['contact_id' => 'c10']]
+        );
+        QueryUtils::setMockResult(
+            "SELECT conversation_id FROM oce_sinch_conversations
+                WHERE contact_id = ? AND patient_id = ?",
+            ['c10', 10],
+            [['conversation_id' => 'conv-10']]
+        );
+
+        $this->apiClient->expects($this->once())
+            ->method('sendMessage')
+            ->willReturn(['id' => 'msg-dedup']);
+
+        $results = $this->service->sendBatch([10, 11], 'Office closed today');
+
+        $this->assertEquals(1, $results['sent']);
+        $this->assertEquals(0, $results['failed']);
+        $this->assertEquals(1, $results['skipped']);
+    }
+
+    public function testSendBatchNormalizesUserEnteredPhones(): void
+    {
+        // Patient has a user-entered phone format
+        QueryUtils::setMockResult(
+            "SELECT phone_cell FROM patient_data WHERE pid = ?",
+            [1],
+            [['phone_cell' => '(555) 444-5555']]
+        );
+
+        // After normalization, the phone should be +15554445555
+        $this->mockPatientEligible(1, '+15554445555');
+        QueryUtils::setMockResult(
+            "SELECT contact_id FROM oce_sinch_contacts
+                WHERE patient_id = ? AND channel_identity = ?",
+            [1, '+15554445555'],
+            [['contact_id' => 'c-norm']]
+        );
+        QueryUtils::setMockResult(
+            "SELECT conversation_id FROM oce_sinch_conversations
+                WHERE contact_id = ? AND patient_id = ?",
+            ['c-norm', 1],
+            [['conversation_id' => 'conv-norm']]
+        );
+
+        $this->apiClient->method('sendMessage')->willReturn(['id' => 'msg-norm']);
+
+        $results = $this->service->sendBatch([1], 'Test');
+
+        $this->assertEquals(1, $results['sent']);
+    }
+
     // --- getOrCreateConversation (tested indirectly) ---
 
     public function testCreatesNewConversationWhenNoneExists(): void

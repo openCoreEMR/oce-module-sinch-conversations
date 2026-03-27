@@ -563,7 +563,7 @@ class WebhookControllerTest extends TestCase
             []
         );
         QueryUtils::setMockResult(
-            "SELECT patient_id FROM oce_sinch_contacts WHERE channel_identity = ? LIMIT 1",
+            "SELECT patient_id FROM oce_sinch_contacts WHERE channel_identity = ? ORDER BY patient_id ASC",
             ['+15559876543'],
             []
         );
@@ -594,9 +594,9 @@ class WebhookControllerTest extends TestCase
             ['contact-missing'],
             []
         );
-        // Identity lookup succeeds
+        // Identity lookup succeeds (fetchRecords, no LIMIT)
         QueryUtils::setMockResult(
-            "SELECT patient_id FROM oce_sinch_contacts WHERE channel_identity = ? LIMIT 1",
+            "SELECT patient_id FROM oce_sinch_contacts WHERE channel_identity = ? ORDER BY patient_id ASC",
             ['+15559876543'],
             [['patient_id' => 7]]
         );
@@ -618,6 +618,45 @@ class WebhookControllerTest extends TestCase
         $response = $this->controller->dispatch($request);
 
         $this->assertEquals(Response::HTTP_OK, $response->getStatusCode());
+    }
+
+    public function testOptOutAppliesToAllPatientsSharingIdentity(): void
+    {
+        // Contact ID lookup fails
+        QueryUtils::setMockResult(
+            "SELECT patient_id FROM oce_sinch_contacts WHERE contact_id = ? LIMIT 1",
+            ['contact-shared'],
+            []
+        );
+        // Multiple patients share this identity
+        QueryUtils::setMockResult(
+            "SELECT patient_id FROM oce_sinch_contacts WHERE channel_identity = ? ORDER BY patient_id ASC",
+            ['+15559876543'],
+            [['patient_id' => 5], ['patient_id' => 6], ['patient_id' => 7]]
+        );
+
+        $this->mockConsentService->expects($this->exactly(3))
+            ->method('optOut')
+            ->willReturnCallback(function (int $pid, string $phone, string $method): void {
+                $this->assertSame('+15559876543', $phone);
+                $this->assertSame('sinch_SMS', $method);
+                $this->assertContains($pid, [5, 6, 7]);
+            });
+
+        $request = $this->makeRequest('POST', [
+            'trigger' => 'OPT_OUT',
+            'opt_out_notification' => [
+                'contact_id' => 'contact-shared',
+                'channel' => 'SMS',
+                'identity' => '+15559876543',
+                'status' => 'OPT_OUT_SUCCEEDED',
+            ],
+        ]);
+
+        $response = $this->controller->dispatch($request);
+
+        $this->assertEquals(Response::HTTP_OK, $response->getStatusCode());
+        $this->assertResponseContains($response, 'status', 'success');
     }
 
     public function testOptInCallsConsentService(): void
