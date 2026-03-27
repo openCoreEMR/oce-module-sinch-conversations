@@ -54,6 +54,18 @@ class TemplateService
     }
 
     /**
+     * Get the appropriate appointment reminder template key based on portal configuration
+     */
+    public function getAppointmentReminderTemplateKey(): string
+    {
+        if ($this->config->isPortalEnabled()) {
+            return 'appointment_reminder_portal';
+        }
+
+        return 'appointment_reminder_no_portal';
+    }
+
+    /**
      * Validate required variables are present
      *
      * @param string $templateKey

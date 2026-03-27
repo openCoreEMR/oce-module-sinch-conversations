@@ -268,6 +268,36 @@ class TemplateServiceTest extends TestCase
         $this->service->saveTemplate(['template_key' => 'test']);
     }
 
+    // --- getAppointmentReminderTemplateKey ---
+
+    public function testAppointmentReminderTemplateKeyReturnsPortalWhenEnabled(): void
+    {
+        $config = new GlobalConfig(new MockGlobalsAccessor([
+            'portal_onsite_two_enable' => true,
+        ]));
+        $service = new TemplateService($config);
+
+        $this->assertEquals('appointment_reminder_portal', $service->getAppointmentReminderTemplateKey());
+    }
+
+    public function testAppointmentReminderTemplateKeyReturnsNoPortalWhenDisabled(): void
+    {
+        $config = new GlobalConfig(new MockGlobalsAccessor([
+            'portal_onsite_two_enable' => false,
+        ]));
+        $service = new TemplateService($config);
+
+        $this->assertEquals('appointment_reminder_no_portal', $service->getAppointmentReminderTemplateKey());
+    }
+
+    public function testAppointmentReminderTemplateKeyDefaultsToNoPortal(): void
+    {
+        $config = new GlobalConfig(new MockGlobalsAccessor([]));
+        $service = new TemplateService($config);
+
+        $this->assertEquals('appointment_reminder_no_portal', $service->getAppointmentReminderTemplateKey());
+    }
+
     // --- Helpers ---
 
     private function mockTemplate(
