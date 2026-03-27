@@ -31,16 +31,21 @@ class ConsentService
     /**
      * Check if patient has active consent
      *
+     * Normalizes the phone number to E.164 before lookup so that consent
+     * recorded as +15551234567 is found regardless of input format.
+     *
      * @param int $patientId
      * @param string $phoneNumber
      * @return bool
      */
     public function hasConsent(int $patientId, string $phoneNumber): bool
     {
+        $normalized = PhoneNormalizer::toE164($phoneNumber) ?? $phoneNumber;
+
         $sql = "SELECT opted_in, opted_out
                 FROM oce_sinch_patient_consent
                 WHERE patient_id = ? AND phone_number = ?";
-        $result = QueryUtils::querySingleRow($sql, [$patientId, $phoneNumber]);
+        $result = QueryUtils::querySingleRow($sql, [$patientId, $normalized]);
 
         if (!$result) {
             return false;
@@ -65,6 +70,8 @@ class ConsentService
         string $method,
         ?string $ipAddress = null
     ): bool {
+        $phoneNumber = PhoneNormalizer::toE164($phoneNumber) ?? $phoneNumber;
+
         $sql = "INSERT INTO oce_sinch_patient_consent (
             patient_id, phone_number, opted_in, opt_in_method,
             opt_in_date, opt_in_ip_address, opted_out,
@@ -111,6 +118,8 @@ class ConsentService
      */
     public function optOut(int $patientId, string $phoneNumber, string $method): void
     {
+        $phoneNumber = PhoneNormalizer::toE164($phoneNumber) ?? $phoneNumber;
+
         $sql = "UPDATE oce_sinch_patient_consent
                 SET opted_out = TRUE,
                     opt_out_method = ?,
@@ -133,9 +142,11 @@ class ConsentService
      */
     public function getConsent(int $patientId, string $phoneNumber): ?array
     {
+        $normalized = PhoneNormalizer::toE164($phoneNumber) ?? $phoneNumber;
+
         $sql = "SELECT * FROM oce_sinch_patient_consent
                 WHERE patient_id = ? AND phone_number = ?";
-        $result = QueryUtils::querySingleRow($sql, [$patientId, $phoneNumber]);
+        $result = QueryUtils::querySingleRow($sql, [$patientId, $normalized]);
 
         return $result ?: null;
     }

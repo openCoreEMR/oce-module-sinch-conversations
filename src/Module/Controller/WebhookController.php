@@ -17,6 +17,7 @@ use OpenCoreEMR\Modules\SinchConversations\Service\ConsentService;
 use OpenCoreEMR\Modules\SinchConversations\Service\KeywordHandlerService;
 use OpenCoreEMR\Modules\SinchConversations\Service\MessageOptions;
 use OpenCoreEMR\Modules\SinchConversations\Service\MessageService;
+use OpenCoreEMR\Modules\SinchConversations\Service\PhoneNormalizer;
 use OpenCoreEMR\Sinch\Conversation\Exception\AccessDeniedException;
 use OpenCoreEMR\Sinch\Conversation\Exception\UnauthorizedException;
 use OpenEMR\Common\Database\QueryUtils;
@@ -279,6 +280,9 @@ class WebhookController
      * Fires on channels with native opt-out support (e.g. Viber BM).
      * SMS opt-outs arrive as MESSAGE_INBOUND and are handled by KeywordHandlerService.
      *
+     * Opt-out applies to ALL patients sharing the phone number, because the
+     * carrier blocks the number, not a specific person.
+     *
      * @param array<string, mixed> $payload
      */
     private function handleOptOut(array $payload): Response
@@ -300,8 +304,8 @@ class WebhookController
             return new JsonResponse(['status' => 'ignored'], Response::HTTP_OK);
         }
 
-        $patientId = $this->lookupPatientByContactOrIdentity($contactId, $identity);
-        if ($patientId === null) {
+        $patientIds = $this->lookupPatientsByContactOrIdentity($contactId, $identity);
+        if ($patientIds === []) {
             $this->logger->warning('No patient found for OPT_OUT', [
                 'identity' => $identity,
                 'contactId' => $contactId,
@@ -309,28 +313,37 @@ class WebhookController
             return new JsonResponse(['status' => 'no_patient'], Response::HTTP_OK);
         }
 
-        try {
-            $this->consentService->optOut($patientId, $identity, "sinch_{$channel}");
-        } catch (\Throwable $e) {
-            $errorId = bin2hex(random_bytes(4));
-            $this->logger->error('Failed to process OPT_OUT', [
-                'identity' => $identity,
-                'errorId' => $errorId,
-                'exception' => $e,
-            ]);
+        $normalizedIdentity = PhoneNormalizer::toE164($identity) ?? $identity;
+        $failures = 0;
+        foreach ($patientIds as $patientId) {
+            try {
+                $this->consentService->optOut($patientId, $normalizedIdentity, "sinch_{$channel}");
+            } catch (\Throwable $e) {
+                $failures++;
+                $errorId = bin2hex(random_bytes(4));
+                $this->logger->error('Failed to process OPT_OUT for patient', [
+                    'patientId' => $patientId,
+                    'identity' => $identity,
+                    'errorId' => $errorId,
+                    'exception' => $e,
+                ]);
+            }
+        }
 
+        if ($failures === count($patientIds)) {
             return new JsonResponse(
-                ['error' => "Failed to process opt-out (ref: $errorId)"],
+                ['error' => 'Failed to process opt-out for all patients'],
                 Response::HTTP_INTERNAL_SERVER_ERROR
             );
         }
 
         $this->logger->info('Recorded OPT_OUT', [
-            'patientId' => $patientId,
+            'patientCount' => count($patientIds),
             'channel' => $channel,
         ]);
 
-        return new JsonResponse(['status' => 'success'], Response::HTTP_OK);
+        $status = $failures > 0 ? 'partial_failure' : 'success';
+        return new JsonResponse(['status' => $status], Response::HTTP_OK);
     }
 
     /**
@@ -338,6 +351,10 @@ class WebhookController
      *
      * Fires on channels with native opt-in support (e.g. Viber BM).
      * SMS opt-ins arrive as MESSAGE_INBOUND and are handled by KeywordHandlerService.
+     *
+     * Opt-in applies only to the first matched patient. Unlike opt-out (which
+     * must cover all patients at a number for carrier compliance), opt-in is
+     * an affirmative choice that cannot be assumed for other people.
      *
      * @param array<string, mixed> $payload
      */
@@ -360,8 +377,8 @@ class WebhookController
             return new JsonResponse(['status' => 'ignored'], Response::HTTP_OK);
         }
 
-        $patientId = $this->lookupPatientByContactOrIdentity($contactId, $identity);
-        if ($patientId === null) {
+        $patientIds = $this->lookupPatientsByContactOrIdentity($contactId, $identity);
+        if ($patientIds === []) {
             $this->logger->warning('No patient found for OPT_IN', [
                 'identity' => $identity,
                 'contactId' => $contactId,
@@ -369,8 +386,10 @@ class WebhookController
             return new JsonResponse(['status' => 'no_patient'], Response::HTTP_OK);
         }
 
+        $normalizedIdentity = PhoneNormalizer::toE164($identity) ?? $identity;
+        $patientId = $patientIds[0];
         try {
-            $this->consentService->optIn($patientId, $identity, "sinch_{$channel}");
+            $this->consentService->optIn($patientId, $normalizedIdentity, "sinch_{$channel}");
         } catch (\Throwable $e) {
             $errorId = bin2hex(random_bytes(4));
             $this->logger->error('Failed to process OPT_IN', [
@@ -394,27 +413,33 @@ class WebhookController
     }
 
     /**
-     * Look up patient ID by Sinch contact ID or channel identity (phone number)
+     * Look up all patient IDs by Sinch contact ID or channel identity (phone number)
+     *
+     * Prefer contact_id (patient-specific) over identity (phone-level) fallback.
+     * When falling back to identity, return ALL patients sharing the number.
+     *
+     * @return list<int>
      */
-    private function lookupPatientByContactOrIdentity(string $contactId, string $identity): ?int
+    private function lookupPatientsByContactOrIdentity(string $contactId, string $identity): array
     {
         if ($contactId !== '') {
             $sql = "SELECT patient_id FROM oce_sinch_contacts WHERE contact_id = ? LIMIT 1";
             $result = QueryUtils::querySingleRow($sql, [$contactId]);
             if ($result) {
-                return (int) $result['patient_id'];
+                return [(int) $result['patient_id']];
             }
         }
 
         if ($identity !== '') {
-            $sql = "SELECT patient_id FROM oce_sinch_contacts WHERE channel_identity = ? LIMIT 1";
-            $result = QueryUtils::querySingleRow($sql, [$identity]);
-            if ($result) {
-                return (int) $result['patient_id'];
+            $normalized = PhoneNormalizer::toE164($identity) ?? $identity;
+            $sql = "SELECT patient_id FROM oce_sinch_contacts WHERE channel_identity = ?";
+            $results = QueryUtils::fetchRecords($sql, [$normalized]);
+            if ($results !== []) {
+                return array_values(array_map(static fn(array $row): int => (int) $row['patient_id'], $results));
             }
         }
 
-        return null;
+        return [];
     }
 
     /**
@@ -547,32 +572,33 @@ class WebhookController
         string $phoneNumber,
         string $responseMessage
     ): ?string {
+        $normalized = PhoneNormalizer::toE164($phoneNumber) ?? $phoneNumber;
         $sql = "SELECT patient_id FROM oce_sinch_contacts WHERE channel_identity = ? LIMIT 1";
-        $contact = QueryUtils::querySingleRow($sql, [$phoneNumber]);
+        $contact = QueryUtils::querySingleRow($sql, [$normalized]);
 
         if (!$contact) {
-            $this->logger->debug('No contact found for keyword response', ['phone' => $phoneNumber]);
+            $this->logger->debug('No contact found for keyword response', ['phone' => $normalized]);
             return null;
         }
 
         try {
             $this->messageService->sendToPatient(
                 (int) $contact['patient_id'],
-                $phoneNumber,
+                $normalized,
                 $responseMessage,
                 new MessageOptions(templateKey: 'keyword_response', skipConsentCheck: true)
             );
         } catch (\Throwable $e) {
             $errorId = bin2hex(random_bytes(4));
             $this->logger->error('Failed to send keyword response', [
-                'phone' => $phoneNumber,
+                'phone' => $normalized,
                 'errorId' => $errorId,
                 'exception' => $e,
             ]);
             return "Failed to send auto-response (ref: $errorId)";
         }
 
-        $this->logger->info('Sent keyword auto-response', ['phone' => $phoneNumber]);
+        $this->logger->info('Sent keyword auto-response', ['phone' => $normalized]);
         return null;
     }
 

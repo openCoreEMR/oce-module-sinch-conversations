@@ -83,6 +83,11 @@ class MessageService
     /**
      * Send batch messages to multiple patients
      *
+     * Deduplicates by (phone_number, message_text) so that when multiple
+     * patients share a phone number and receive the same message, the
+     * message is sent only once. If the text differs (e.g. different
+     * appointment times), each variant is sent.
+     *
      * @param list<int> $patientIds
      * @return array<string, mixed> Results
      */
@@ -91,8 +96,12 @@ class MessageService
         $results = [
             'sent' => 0,
             'failed' => 0,
+            'skipped' => 0,
             'errors' => [],
         ];
+
+        /** @var array<string, true> $sentMessages phone:messageHash => true */
+        $sentMessages = [];
 
         foreach ($patientIds as $patientId) {
             $phoneNumber = $this->getPatientPhone($patientId);
@@ -103,9 +112,18 @@ class MessageService
                 continue;
             }
 
+            // Dedup: skip if this exact message was already sent to this number
+            $dedupKey = $phoneNumber . ':' . md5($message);
+            if (isset($sentMessages[$dedupKey])) {
+                $results['skipped']++;
+                $this->logger->debug("Skipping duplicate message to {$phoneNumber} for patient {$patientId}");
+                continue;
+            }
+
             try {
                 $this->sendToPatient($patientId, $phoneNumber, $message, $options);
                 $results['sent']++;
+                $sentMessages[$dedupKey] = true;
             } catch (\Throwable $e) {
                 $results['failed']++;
                 $results['errors'][] = "Patient {$patientId}: " . $e->getMessage();
@@ -206,6 +224,8 @@ class MessageService
      *
      * Check both OpenEMR's hipaa_allowsms field and module-level consent.
      * Query consent directly to avoid circular dependency (ConsentService depends on MessageService).
+     * Normalize the phone number to E.164 before checking consent so that
+     * user-entered formats match the E.164 stored by Sinch callbacks.
      *
      * @throws ValidationException
      */
@@ -221,10 +241,12 @@ class MessageService
             );
         }
 
+        $normalized = PhoneNormalizer::toE164($phoneNumber) ?? $phoneNumber;
+
         $sql = "SELECT opted_in, opted_out
                 FROM oce_sinch_patient_consent
                 WHERE patient_id = ? AND phone_number = ?";
-        $consent = QueryUtils::querySingleRow($sql, [$patientId, $phoneNumber]);
+        $consent = QueryUtils::querySingleRow($sql, [$patientId, $normalized]);
 
         if (!$consent || !($consent['opted_in'] ?? false) || ($consent['opted_out'] ?? false)) {
             throw new ValidationException(
@@ -234,13 +256,18 @@ class MessageService
     }
 
     /**
-     * Get patient phone number
+     * Get patient phone number, normalized to E.164
      */
     private function getPatientPhone(int $patientId): ?string
     {
         $sql = "SELECT phone_cell FROM patient_data WHERE pid = ?";
         $result = QueryUtils::querySingleRow($sql, [$patientId]);
+        $raw = $result['phone_cell'] ?? null;
 
-        return $result['phone_cell'] ?? null;
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+
+        return PhoneNormalizer::toE164($raw) ?? $raw;
     }
 }
