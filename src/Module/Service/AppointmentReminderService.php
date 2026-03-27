@@ -1,0 +1,239 @@
+<?php
+
+/**
+ * Appointment Reminder Cron Service
+ *
+ * Query upcoming appointments within the configured notification window,
+ * check patient eligibility, and send reminders via Sinch. Track sent
+ * reminders to avoid duplicates.
+ *
+ * @package   OpenCoreEMR
+ * @link      https://opencoreemr.com
+ * @author    Michael A. Smith <michael@opencoreemr.com>
+ * @copyright Copyright (c) 2026 OpenCoreEMR Inc
+ * @license   GNU General Public License 3
+ */
+
+namespace OpenCoreEMR\Modules\SinchConversations\Service;
+
+use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
+use OpenEMR\Common\Database\QueryUtils;
+use OpenEMR\Common\Logging\SystemLogger;
+
+class AppointmentReminderService
+{
+    private readonly SystemLogger $logger;
+
+    public function __construct(
+        private readonly GlobalConfig $config,
+        private readonly TemplateService $templateService,
+        private readonly MessageService $messageService
+    ) {
+        $this->logger = new SystemLogger();
+    }
+
+    /**
+     * Run the appointment reminder job
+     *
+     * Find upcoming appointments within the notification window, skip patients
+     * who are ineligible or already reminded, and send reminders for the rest.
+     *
+     * @return array{sent: int, skipped: int, failed: int, errors: list<string>}
+     */
+    public function run(): array
+    {
+        $results = [
+            'sent' => 0,
+            'skipped' => 0,
+            'failed' => 0,
+            'errors' => [],
+        ];
+
+        $hours = $this->config->getSmsNotificationHours();
+        if ($hours <= 0) {
+            $this->logger->debug('SMS notification hours is 0 or negative, skipping appointment reminders');
+            return $results;
+        }
+
+        $appointments = $this->getUpcomingAppointments($hours);
+        if ($appointments === []) {
+            $this->logger->debug('No upcoming appointments found within notification window');
+            return $results;
+        }
+
+        $templateKey = $this->templateService->getAppointmentReminderTemplateKey();
+
+        foreach ($appointments as $appointment) {
+            $pcEid = (int) $appointment['pc_eid'];
+            $patientId = (int) $appointment['pc_pid'];
+
+            if ($this->wasReminderAlreadySent($pcEid)) {
+                $results['skipped']++;
+                continue;
+            }
+
+            $phoneNumber = $this->getPatientPhone($patientId);
+            if ($phoneNumber === null) {
+                $results['skipped']++;
+                continue;
+            }
+
+            if (!$this->isPatientEligible($patientId, $phoneNumber)) {
+                $results['skipped']++;
+                continue;
+            }
+
+            $variables = $this->buildTemplateVariables($appointment);
+
+            try {
+                $message = $this->templateService->render($templateKey, $variables);
+            } catch (\Throwable $e) {
+                $results['failed']++;
+                $results['errors'][] = "Event {$pcEid}: template render failed: " . $e->getMessage();
+                $this->logger->error('Appointment reminder template render failed', [
+                    'pc_eid' => $pcEid,
+                    'exception' => $e,
+                ]);
+                continue;
+            }
+
+            try {
+                $this->messageService->sendToPatient(
+                    $patientId,
+                    $phoneNumber,
+                    $message,
+                    new MessageOptions(templateKey: $templateKey)
+                );
+                $this->recordReminderSent($pcEid, $patientId, $templateKey);
+                $results['sent']++;
+            } catch (\Throwable $e) {
+                $results['failed']++;
+                $results['errors'][] = "Event {$pcEid}: send failed: " . $e->getMessage();
+                $this->logger->error('Appointment reminder send failed', [
+                    'pc_eid' => $pcEid,
+                    'patient_id' => $patientId,
+                    'exception' => $e,
+                ]);
+            }
+        }
+
+        $this->logger->info('Appointment reminder job completed', [
+            'sent' => $results['sent'],
+            'skipped' => $results['skipped'],
+            'failed' => $results['failed'],
+        ]);
+
+        return $results;
+    }
+
+    /**
+     * Query upcoming appointments within the notification window
+     *
+     * Find events from openemr_postcalendar_events where the appointment
+     * datetime is between now and now + $hours hours, and the event is
+     * not cancelled (pc_apptstatus != 'x').
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function getUpcomingAppointments(int $hours): array
+    {
+        $sql = "SELECT e.pc_eid, e.pc_pid, e.pc_eventDate, e.pc_startTime,
+                       p.fname, p.lname
+                FROM openemr_postcalendar_events e
+                JOIN patient_data p ON e.pc_pid = p.pid
+                WHERE CONCAT(e.pc_eventDate, ' ', e.pc_startTime) > NOW()
+                  AND CONCAT(e.pc_eventDate, ' ', e.pc_startTime) <= DATE_ADD(NOW(), INTERVAL ? HOUR)
+                  AND e.pc_apptstatus != 'x'
+                  AND e.pc_pid > 0
+                ORDER BY e.pc_eventDate, e.pc_startTime";
+
+        return QueryUtils::fetchRecords($sql, [$hours]);
+    }
+
+    /**
+     * Check if a reminder was already sent for this calendar event
+     */
+    private function wasReminderAlreadySent(int $pcEid): bool
+    {
+        $sql = "SELECT id FROM oce_sinch_appointment_reminders WHERE pc_eid = ?";
+        $result = QueryUtils::querySingleRow($sql, [$pcEid]);
+        return $result !== null;
+    }
+
+    /**
+     * Record that a reminder was sent for this event
+     */
+    private function recordReminderSent(int $pcEid, int $patientId, string $templateKey): void
+    {
+        $sql = "INSERT INTO oce_sinch_appointment_reminders
+                    (pc_eid, patient_id, sent_at, template_key)
+                VALUES (?, ?, NOW(), ?)";
+        QueryUtils::sqlStatementThrowException($sql, [$pcEid, $patientId, $templateKey]);
+    }
+
+    /**
+     * Get patient cell phone number
+     */
+    private function getPatientPhone(int $patientId): ?string
+    {
+        $sql = "SELECT phone_cell FROM patient_data WHERE pid = ?";
+        $result = QueryUtils::querySingleRow($sql, [$patientId]);
+        $phone = $result['phone_cell'] ?? null;
+
+        if ($phone === null || $phone === '') {
+            return null;
+        }
+
+        return $phone;
+    }
+
+    /**
+     * Check if patient is eligible: hipaa_allowsms = YES and has active consent
+     */
+    private function isPatientEligible(int $patientId, string $phoneNumber): bool
+    {
+        $sql = "SELECT hipaa_allowsms FROM patient_data WHERE pid = ?";
+        $result = QueryUtils::querySingleRow($sql, [$patientId]);
+
+        if (($result['hipaa_allowsms'] ?? '') !== 'YES') {
+            return false;
+        }
+
+        $sql = "SELECT opted_in, opted_out
+                FROM oce_sinch_patient_consent
+                WHERE patient_id = ? AND phone_number = ?";
+        $consent = QueryUtils::querySingleRow($sql, [$patientId, $phoneNumber]);
+
+        if ($consent === null) {
+            return false;
+        }
+
+        return (bool) ($consent['opted_in'] ?? false)
+            && !((bool) ($consent['opted_out'] ?? false));
+    }
+
+    /**
+     * Build template variables for an appointment
+     *
+     * @param array<string, mixed> $appointment
+     * @return array<string, string>
+     */
+    private function buildTemplateVariables(array $appointment): array
+    {
+        $date = (string) ($appointment['pc_eventDate'] ?? '');
+        $time = (string) ($appointment['pc_startTime'] ?? '');
+        $apptTime = $date . ' ' . $time;
+
+        $variables = [
+            'clinic_name' => $this->config->getClinicName(),
+            'appt_time' => $apptTime,
+            'opt_out' => 'Reply STOP to opt out',
+        ];
+
+        if ($this->config->isPortalEnabled()) {
+            $variables['portal_url'] = $this->config->getPortalUrl();
+        }
+
+        return $variables;
+    }
+}

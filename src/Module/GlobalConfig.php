@@ -145,6 +145,17 @@ class GlobalConfig
     }
 
     /**
+     * Get the SMS notification hours setting from OpenEMR globals
+     *
+     * This is the number of hours before an appointment to send a reminder.
+     * Configured at Admin > Config > Notifications > SMS Notification Hours.
+     */
+    public function getSmsNotificationHours(): int
+    {
+        return $this->configAccessor->getInt('SMS_NOTIFICATION_HOUR', 0);
+    }
+
+    /**
      * Get the base URL for the Sinch Conversations API
      */
     public function getApiBaseUrl(): string
