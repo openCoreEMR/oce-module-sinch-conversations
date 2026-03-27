@@ -40,7 +40,7 @@ appointment.
 | `{{ clinic_name }}` | Practice display name (from module config) | Yes |
 | `{{ appt_time }}` | Appointment date/time (e.g., "Saturday, Nov 15, 2025 at 2:30 PM EST") | Yes |
 | `{{ opt_out }}` | Opt-out text: "Reply STOP to unsubscribe at any time." | Yes |
-| `{{ portal_link }}` | Patient portal URL | No (used when portal is enabled) |
+| `{{ portal_url }}` | Patient portal URL | No (used when portal is enabled) |
 | `{{ phone }}` | Clinic phone number | No |
 
 ### Portal Enabled
@@ -51,7 +51,7 @@ reminder includes a link:
 ```
 OpenCoreEMR: You have an upcoming appointment with {{ clinic_name }}
 on {{ appt_time }}. For details, or to reschedule/cancel, please log
-in to your patient portal: {{ portal_link }}. {{ opt_out }}.
+in to your patient portal: {{ portal_url }}. {{ opt_out }}.
 ```
 
 ### Portal Disabled

@@ -153,3 +153,16 @@ CREATE TABLE IF NOT EXISTS `oce_sinch_services` (
     INDEX `idx_is_active` (`is_active`),
     INDEX `idx_is_default` (`is_default`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Table to track sent appointment reminders (prevent duplicates)
+CREATE TABLE IF NOT EXISTS `oce_sinch_appointment_reminders` (
+  `id` INT(11) PRIMARY KEY AUTO_INCREMENT NOT NULL,
+  `pc_eid` INT(11) NOT NULL COMMENT 'Calendar event ID from openemr_postcalendar_events',
+  `patient_id` BIGINT(20) NOT NULL COMMENT 'Patient ID',
+  `sent_at` DATETIME NOT NULL COMMENT 'When the reminder was sent',
+  `template_key` VARCHAR(100) NOT NULL COMMENT 'Template used for this reminder',
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT 'When this record was created',
+  UNIQUE KEY `unique_event_reminder` (`pc_eid`),
+  INDEX `idx_patient_id` (`patient_id`),
+  INDEX `idx_sent_at` (`sent_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -15,3 +15,4 @@ DROP TABLE IF EXISTS `oce_sinch_patient_consent`;
 DROP TABLE IF EXISTS `oce_sinch_message_templates`;
 DROP TABLE IF EXISTS `oce_sinch_keyword_responses`;
 DROP TABLE IF EXISTS `oce_sinch_services`;
+DROP TABLE IF EXISTS `oce_sinch_appointment_reminders`;

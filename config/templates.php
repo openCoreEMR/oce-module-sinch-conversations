@@ -65,7 +65,7 @@ return [
         'template_name' => 'Appointment Reminder (Legacy)',
         'category' => 'appointments',
         'communication_type' => 'batch',
-        'description' => 'Reminds patient of upcoming appointment',
+        'description' => 'Legacy appointment reminder template',
         'body' => 'Hi {{ patient_name }}, this is {{ clinic_name }}. Reminder: You have an appointment on {{ appointment_date }} at {{ appointment_time }}. Reply C to confirm or call {{ clinic_phone }}.',
         'required_variables' => ['patient_name', 'clinic_name', 'appointment_date', 'appointment_time', 'clinic_phone'],
         'compliance_confidence' => 98,

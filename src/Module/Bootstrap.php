@@ -389,4 +389,16 @@ class Bootstrap
             $this->logger
         );
     }
+
+    /**
+     * Get Appointment Reminder Service
+     */
+    public function getAppointmentReminderService(): Service\AppointmentReminderService
+    {
+        return new Service\AppointmentReminderService(
+            $this->globalsConfig,
+            $this->getTemplateService(),
+            $this->getMessageService()
+        );
+    }
 }
