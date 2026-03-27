@@ -320,7 +320,8 @@ class KeywordHandlerServiceTest extends TestCase
                 FROM patient_data
                 WHERE RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone_cell, '-', ''), ' ', ''), '(', ''), ')', ''), '.', ''), 10) = ?
                 AND phone_cell IS NOT NULL
-                AND phone_cell != ''",
+                AND phone_cell != ''
+                ORDER BY pid ASC",
             [$national],
             $patients
         );

@@ -241,7 +241,12 @@ class MessageService
             );
         }
 
-        $normalized = PhoneNormalizer::toE164($phoneNumber) ?? $phoneNumber;
+        $normalized = PhoneNormalizer::toE164($phoneNumber);
+        if ($normalized === null) {
+            throw new ValidationException(
+                "Cannot check eligibility: unparseable phone number for patient {$patientId}"
+            );
+        }
 
         $sql = "SELECT opted_in, opted_out
                 FROM oce_sinch_patient_consent
@@ -268,6 +273,15 @@ class MessageService
             return null;
         }
 
-        return PhoneNormalizer::toE164($raw) ?? $raw;
+        $normalized = PhoneNormalizer::toE164($raw);
+        if ($normalized === null) {
+            $this->logger->warning('Cannot normalize patient phone number', [
+                'patientId' => $patientId,
+                'phone' => $raw,
+            ]);
+            return null;
+        }
+
+        return $normalized;
     }
 }

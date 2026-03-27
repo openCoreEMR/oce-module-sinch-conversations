@@ -313,7 +313,12 @@ class WebhookController
             return new JsonResponse(['status' => 'no_patient'], Response::HTTP_OK);
         }
 
-        $normalizedIdentity = PhoneNormalizer::toE164($identity) ?? $identity;
+        $normalizedIdentity = PhoneNormalizer::toE164($identity);
+        if ($normalizedIdentity === null) {
+            $this->logger->warning("Cannot normalize identity for OPT_OUT: {$identity}");
+            return new JsonResponse(['status' => 'invalid_identity'], Response::HTTP_OK);
+        }
+
         $failures = 0;
         foreach ($patientIds as $patientId) {
             try {
@@ -382,7 +387,12 @@ class WebhookController
             return new JsonResponse(['status' => 'no_patient'], Response::HTTP_OK);
         }
 
-        $normalizedIdentity = PhoneNormalizer::toE164($identity) ?? $identity;
+        $normalizedIdentity = PhoneNormalizer::toE164($identity);
+        if ($normalizedIdentity === null) {
+            $this->logger->warning("Cannot normalize identity for OPT_IN: {$identity}");
+            return new JsonResponse(['status' => 'invalid_identity'], Response::HTTP_OK);
+        }
+
         $patientId = $patientIds[0];
         try {
             $this->consentService->optIn($patientId, $normalizedIdentity, "sinch_{$channel}");
@@ -428,7 +438,7 @@ class WebhookController
 
         if ($identity !== '') {
             $normalized = PhoneNormalizer::toE164($identity) ?? $identity;
-            $sql = "SELECT patient_id FROM oce_sinch_contacts WHERE channel_identity = ?";
+            $sql = "SELECT patient_id FROM oce_sinch_contacts WHERE channel_identity = ? ORDER BY patient_id ASC";
             $results = QueryUtils::fetchRecords($sql, [$normalized]);
             if ($results !== []) {
                 return array_values(array_map(static fn(array $row): int => (int) $row['patient_id'], $results));

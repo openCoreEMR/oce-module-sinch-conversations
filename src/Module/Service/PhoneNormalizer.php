@@ -33,6 +33,8 @@ class PhoneNormalizer
      */
     public static function toE164(string $phone): ?string
     {
+        $phone = trim($phone);
+
         // Strip everything except digits
         $digits = preg_replace('/[^0-9]/', '', $phone);
 
@@ -57,8 +59,9 @@ class PhoneNormalizer
             return null;
         }
 
-        // Minimum E.164 length is + plus at least 7 digits
-        if (strlen($normalized) < 8) {
+        // E.164 length: + plus 7..15 digits
+        $digitCount = strlen($normalized) - 1; // exclude the '+'
+        if ($digitCount < 7 || $digitCount > 15) {
             return null;
         }
 

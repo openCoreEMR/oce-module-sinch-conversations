@@ -70,7 +70,15 @@ class ConsentService
         string $method,
         ?string $ipAddress = null
     ): bool {
-        $phoneNumber = PhoneNormalizer::toE164($phoneNumber) ?? $phoneNumber;
+        $normalized = PhoneNormalizer::toE164($phoneNumber);
+        if ($normalized === null) {
+            $this->logger->warning('Cannot opt in with unparseable phone number', [
+                'patientId' => $patientId,
+                'phone' => $phoneNumber,
+            ]);
+            return false;
+        }
+        $phoneNumber = $normalized;
 
         $sql = "INSERT INTO oce_sinch_patient_consent (
             patient_id, phone_number, opted_in, opt_in_method,
@@ -118,7 +126,15 @@ class ConsentService
      */
     public function optOut(int $patientId, string $phoneNumber, string $method): void
     {
-        $phoneNumber = PhoneNormalizer::toE164($phoneNumber) ?? $phoneNumber;
+        $normalized = PhoneNormalizer::toE164($phoneNumber);
+        if ($normalized === null) {
+            $this->logger->warning('Cannot opt out with unparseable phone number', [
+                'patientId' => $patientId,
+                'phone' => $phoneNumber,
+            ]);
+            return;
+        }
+        $phoneNumber = $normalized;
 
         $sql = "UPDATE oce_sinch_patient_consent
                 SET opted_out = TRUE,

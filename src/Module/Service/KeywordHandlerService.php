@@ -181,7 +181,8 @@ class KeywordHandlerService
                 FROM patient_data
                 WHERE RIGHT({$stripPhone}, 10) = ?
                 AND phone_cell IS NOT NULL
-                AND phone_cell != ''";
+                AND phone_cell != ''
+                ORDER BY pid ASC";
 
         return QueryUtils::fetchRecords($sql, [$national]);
     }

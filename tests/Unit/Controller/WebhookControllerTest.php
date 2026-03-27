@@ -563,7 +563,7 @@ class WebhookControllerTest extends TestCase
             []
         );
         QueryUtils::setMockResult(
-            "SELECT patient_id FROM oce_sinch_contacts WHERE channel_identity = ?",
+            "SELECT patient_id FROM oce_sinch_contacts WHERE channel_identity = ? ORDER BY patient_id ASC",
             ['+15559876543'],
             []
         );
@@ -596,7 +596,7 @@ class WebhookControllerTest extends TestCase
         );
         // Identity lookup succeeds (fetchRecords, no LIMIT)
         QueryUtils::setMockResult(
-            "SELECT patient_id FROM oce_sinch_contacts WHERE channel_identity = ?",
+            "SELECT patient_id FROM oce_sinch_contacts WHERE channel_identity = ? ORDER BY patient_id ASC",
             ['+15559876543'],
             [['patient_id' => 7]]
         );
@@ -630,7 +630,7 @@ class WebhookControllerTest extends TestCase
         );
         // Multiple patients share this identity
         QueryUtils::setMockResult(
-            "SELECT patient_id FROM oce_sinch_contacts WHERE channel_identity = ?",
+            "SELECT patient_id FROM oce_sinch_contacts WHERE channel_identity = ? ORDER BY patient_id ASC",
             ['+15559876543'],
             [['patient_id' => 5], ['patient_id' => 6], ['patient_id' => 7]]
         );

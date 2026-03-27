@@ -41,6 +41,9 @@ class PhoneNormalizerTest extends TestCase
             '11-digit with leading 1 and dashes' => ['1-555-123-4567', '+15551234567'],
             'E.164 with extra spaces' => ['+1 555 123 4567', '+15551234567'],
             'international UK' => ['+442071234567', '+442071234567'],
+            'leading whitespace' => ['  +15551234567', '+15551234567'],
+            'trailing whitespace' => ['+15551234567  ', '+15551234567'],
+            'leading and trailing whitespace' => ['  5551234567  ', '+15551234567'],
         ];
     }
 
@@ -65,6 +68,7 @@ class PhoneNormalizerTest extends TestCase
             'plus only' => ['+'],
             'ambiguous 9 digits no plus' => ['123456789'],
             'ambiguous 12 digits no plus' => ['441234567890'],
+            'exceeds E.164 max of 15 digits' => ['+1234567890123456'],
         ];
     }
 
