@@ -330,19 +330,15 @@ class WebhookController
             }
         }
 
-        if ($failures === count($patientIds)) {
-            return new JsonResponse(
-                ['error' => 'Failed to process opt-out for all patients'],
-                Response::HTTP_INTERNAL_SERVER_ERROR
-            );
-        }
-
         $this->logger->info('Recorded OPT_OUT', [
             'patientCount' => count($patientIds),
+            'failures' => $failures,
             'channel' => $channel,
         ]);
 
-        $status = $failures > 0 ? 'partial_failure' : 'success';
+        // The carrier already blocked the number regardless, so we always
+        // return 200 -- but reflect partial failure so callers can alert.
+        $status = $failures === 0 ? 'success' : 'partial_failure';
         return new JsonResponse(['status' => $status], Response::HTTP_OK);
     }
 

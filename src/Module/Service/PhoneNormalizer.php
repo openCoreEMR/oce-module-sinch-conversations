@@ -50,8 +50,11 @@ class PhoneNormalizer
             // 11-digit number already starting with country code (e.g. 15551234567)
             $normalized = '+' . $digits;
         } else {
-            // Assume the digits form a complete international number
-            $normalized = '+' . $digits;
+            // Ambiguous digit count without a '+' prefix -- we cannot
+            // distinguish a mistyped US number from an international one.
+            // Return null so callers can surface the error rather than
+            // silently creating a bogus E.164 number.
+            return null;
         }
 
         // Minimum E.164 length is + plus at least 7 digits

@@ -174,9 +174,12 @@ class KeywordHandlerService
         $digits = preg_replace('/[^0-9]/', '', $phoneNumber);
         $national = substr((string) $digits, -10);
 
+        // Strip common formatting chars and compare last 10 digits
+        $stripPhone = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE("
+            . "phone_cell, '-', ''), ' ', ''), '(', ''), ')', ''), '.', '')";
         $sql = "SELECT pid, fname, lname, phone_cell
                 FROM patient_data
-                WHERE RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(phone_cell, '-', ''), ' ', ''), '(', ''), ')', ''), 10) = ?
+                WHERE RIGHT({$stripPhone}, 10) = ?
                 AND phone_cell IS NOT NULL
                 AND phone_cell != ''";
 

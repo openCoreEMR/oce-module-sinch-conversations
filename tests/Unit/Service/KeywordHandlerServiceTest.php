@@ -318,7 +318,7 @@ class KeywordHandlerServiceTest extends TestCase
         QueryUtils::setMockResult(
             "SELECT pid, fname, lname, phone_cell
                 FROM patient_data
-                WHERE RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(phone_cell, '-', ''), ' ', ''), '(', ''), ')', ''), 10) = ?
+                WHERE RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone_cell, '-', ''), ' ', ''), '(', ''), ')', ''), '.', ''), 10) = ?
                 AND phone_cell IS NOT NULL
                 AND phone_cell != ''",
             [$national],

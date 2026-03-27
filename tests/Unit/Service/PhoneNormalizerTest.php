@@ -63,6 +63,8 @@ class PhoneNormalizerTest extends TestCase
             'letters only' => ['abcdefg'],
             'too short' => ['12345'],
             'plus only' => ['+'],
+            'ambiguous 9 digits no plus' => ['123456789'],
+            'ambiguous 12 digits no plus' => ['441234567890'],
         ];
     }
 
