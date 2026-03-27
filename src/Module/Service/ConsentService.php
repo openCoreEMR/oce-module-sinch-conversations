@@ -12,6 +12,7 @@
 
 namespace OpenCoreEMR\Modules\SinchConversations\Service;
 
+use OpenCoreEMR\Modules\SinchConversations\Channel;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenEMR\Common\Database\QueryUtils;
 use OpenEMR\Common\Logging\SystemLogger;
@@ -57,10 +58,14 @@ class ConsentService
     /**
      * Record opt-in and send confirmation message
      *
+     * Only syncs hipaa_allowsms when the channel is SMS, since that flag
+     * represents SMS consent specifically, not general messaging consent.
+     *
      * @param int $patientId
      * @param string $phoneNumber
      * @param string $method web_form, portal, in_person, etc
-     * @param string|null $ipAddress
+     * @param ?string $ipAddress
+     * @param ?Channel $channel The messaging channel, or null for unrecognized channels
      * @return bool True if opt-in confirmation was sent, false if it failed.
      *               Consent is always recorded regardless of return value.
      */
@@ -68,7 +73,8 @@ class ConsentService
         int $patientId,
         string $phoneNumber,
         string $method,
-        ?string $ipAddress = null
+        ?string $ipAddress = null,
+        ?Channel $channel = Channel::SMS
     ): bool {
         $normalized = PhoneNormalizer::toE164($phoneNumber);
         if ($normalized === null) {
@@ -100,8 +106,14 @@ class ConsentService
             $ipAddress,
         ]);
 
-        $this->syncHipaaAllowSms($patientId, 'YES');
-        $this->logger->debug('Patient opted in', ['patientId' => $patientId, 'method' => $method]);
+        if ($channel === Channel::SMS) {
+            $this->syncHipaaAllowSms($patientId, 'YES');
+        }
+        $this->logger->debug('Patient opted in', [
+            'patientId' => $patientId,
+            'method' => $method,
+            'channel' => $channel?->value,
+        ]);
 
         try {
             $this->sendOptInConfirmation($patientId, $phoneNumber);
@@ -118,14 +130,23 @@ class ConsentService
     }
 
     /**
-     * Record opt-out (STOP keyword)
+     * Record opt-out (STOP keyword or channel-native opt-out)
+     *
+     * Only syncs hipaa_allowsms when the channel is SMS, since that flag
+     * represents SMS consent specifically. Opting out of a non-SMS channel
+     * (e.g., Viber, WhatsApp) must not disable SMS consent.
      *
      * @param int $patientId
      * @param string $phoneNumber
-     * @param string $method sms_stop, web_form, in_person, etc
+     * @param string $method sms_stop, web_form, in_person, sinch_WHATSAPP, etc
+     * @param ?Channel $channel The messaging channel, or null for unrecognized channels
      */
-    public function optOut(int $patientId, string $phoneNumber, string $method): void
-    {
+    public function optOut(
+        int $patientId,
+        string $phoneNumber,
+        string $method,
+        ?Channel $channel = Channel::SMS
+    ): void {
         $normalized = PhoneNormalizer::toE164($phoneNumber);
         if ($normalized === null) {
             $this->logger->warning('Cannot opt out with unparseable phone number', [
@@ -145,8 +166,14 @@ class ConsentService
 
         QueryUtils::sqlStatementThrowException($sql, [$method, $patientId, $phoneNumber]);
 
-        $this->syncHipaaAllowSms($patientId, 'NO');
-        $this->logger->debug('Patient opted out', ['patientId' => $patientId, 'method' => $method]);
+        if ($channel === Channel::SMS) {
+            $this->syncHipaaAllowSms($patientId, 'NO');
+        }
+        $this->logger->debug('Patient opted out', [
+            'patientId' => $patientId,
+            'method' => $method,
+            'channel' => $channel?->value,
+        ]);
     }
 
     /**
