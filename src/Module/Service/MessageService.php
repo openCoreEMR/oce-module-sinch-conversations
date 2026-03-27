@@ -113,7 +113,7 @@ class MessageService
             }
 
             // Dedup: skip if this exact message was already sent to this number
-            $dedupKey = $phoneNumber . ':' . md5($message);
+            $dedupKey = $phoneNumber . ':' . $message;
             if (isset($sentMessages[$dedupKey])) {
                 $results['skipped']++;
                 $this->logger->debug("Skipping duplicate message to {$phoneNumber} for patient {$patientId}");
