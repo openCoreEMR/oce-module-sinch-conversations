@@ -424,6 +424,11 @@ class WebhookController
      * Prefer contact_id (patient-specific) over identity (phone-level) fallback.
      * When falling back to identity, return ALL patients sharing the number.
      *
+     * For OPT_OUT, multi-patient phone-level opt-out is handled by the SMS
+     * STOP keyword flow in KeywordHandlerService. This webhook fires for
+     * channels with native opt-out (Viber BM etc.) where contact_id is the
+     * reliable patient identifier.
+     *
      * @return list<int>
      */
     private function lookupPatientsByContactOrIdentity(string $contactId, string $identity): array
