@@ -72,9 +72,7 @@ class MessageService
             $response = $this->apiClient->sendMessage($contactId, $message, $options->toApiOptions());
         } catch (\Throwable $e) {
             $this->logger->error('Failed to send message via Sinch API', ['exception' => $e]);
-            // Raw message is for diagnostics in the exception chain; callers mask it
-            // with an error ref ID before exposing to users.
-            throw new ValidationException("Failed to send message: " . $e->getMessage(), 0, $e);
+            throw new ValidationException("Failed to send message", 0, $e);
         }
 
         $this->storeOutboundMessage($conversationId, $response, $message, $options);
