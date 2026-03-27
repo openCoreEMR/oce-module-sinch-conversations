@@ -91,11 +91,9 @@ class AppointmentReminderServiceTest extends TestCase
     public function testRunSendsReminderForEligiblePatient(): void
     {
         $this->mockUpcomingAppointments([
-            $this->makeAppointment(100, 42, '2026-04-01', '09:00:00'),
+            $this->makeAppointment(100, 42, '2026-04-01', '09:00:00', '+15559999999', 'YES'),
         ]);
-        $this->mockNoExistingReminder(100);
-        $this->mockPatientPhone(42, '+15559999999');
-        $this->mockPatientEligible(42, '+15559999999');
+        $this->mockActiveConsent(42, '+15559999999');
 
         $this->templateService->method('getAppointmentReminderTemplateKey')
             ->willReturn('appointment_reminder_no_portal');
@@ -113,11 +111,11 @@ class AppointmentReminderServiceTest extends TestCase
         $this->assertSame(0, $results['skipped']);
         $this->assertSame(0, $results['failed']);
 
-        // Verify reminder was recorded
+        // Verify reminder was recorded with INSERT IGNORE
         $queries = QueryUtils::getQueries();
         $insertQueries = array_filter(
             $queries,
-            static fn(array $q): bool => str_contains($q['sql'], 'INSERT INTO oce_sinch_appointment_reminders')
+            static fn(array $q): bool => str_contains($q['sql'], 'INSERT IGNORE INTO oce_sinch_appointment_reminders')
         );
         $this->assertNotEmpty($insertQueries);
     }
@@ -127,17 +125,10 @@ class AppointmentReminderServiceTest extends TestCase
     public function testRunSkipsPatientWhoOptedOut(): void
     {
         $this->mockUpcomingAppointments([
-            $this->makeAppointment(101, 43, '2026-04-01', '10:00:00'),
+            $this->makeAppointment(101, 43, '2026-04-01', '10:00:00', '+15558888888', 'YES'),
         ]);
-        $this->mockNoExistingReminder(101);
-        $this->mockPatientPhone(43, '+15558888888');
 
-        // hipaa_allowsms = YES but opted_out = true
-        QueryUtils::setMockResult(
-            "SELECT hipaa_allowsms FROM patient_data WHERE pid = ?",
-            [43],
-            [['hipaa_allowsms' => 'YES']]
-        );
+        // hipaa_allowsms = YES (from main query) but opted_out = true in consent
         QueryUtils::setMockResult(
             "SELECT opted_in, opted_out
                 FROM oce_sinch_patient_consent
@@ -161,17 +152,10 @@ class AppointmentReminderServiceTest extends TestCase
 
     public function testRunSkipsPatientWithHipaaDisallowSms(): void
     {
+        // hipaa_allowsms = NO comes from the main query result
         $this->mockUpcomingAppointments([
-            $this->makeAppointment(102, 44, '2026-04-01', '11:00:00'),
+            $this->makeAppointment(102, 44, '2026-04-01', '11:00:00', '+15557777777', 'NO'),
         ]);
-        $this->mockNoExistingReminder(102);
-        $this->mockPatientPhone(44, '+15557777777');
-
-        QueryUtils::setMockResult(
-            "SELECT hipaa_allowsms FROM patient_data WHERE pid = ?",
-            [44],
-            [['hipaa_allowsms' => 'NO']]
-        );
 
         $this->templateService->method('getAppointmentReminderTemplateKey')
             ->willReturn('appointment_reminder_no_portal');
@@ -184,20 +168,14 @@ class AppointmentReminderServiceTest extends TestCase
         $this->assertSame(1, $results['skipped']);
     }
 
-    // --- reminder already sent -> no duplicate ---
+    // --- reminder already sent -> excluded by LEFT JOIN (not in results) ---
 
-    public function testRunSkipsAlreadySentReminder(): void
+    public function testRunExcludesAlreadySentReminders(): void
     {
-        $this->mockUpcomingAppointments([
-            $this->makeAppointment(103, 45, '2026-04-01', '12:00:00'),
-        ]);
-
-        // Existing reminder record
-        QueryUtils::setMockResult(
-            "SELECT id FROM oce_sinch_appointment_reminders WHERE pc_eid = ?",
-            [103],
-            [['id' => 1]]
-        );
+        // The LEFT JOIN + r.id IS NULL in the main query filters out appointments
+        // that already have a reminder record. So they simply don't appear in the
+        // result set. Simulate this by returning an empty appointment list.
+        $this->mockUpcomingAppointments([]);
 
         $this->templateService->method('getAppointmentReminderTemplateKey')
             ->willReturn('appointment_reminder_no_portal');
@@ -207,24 +185,17 @@ class AppointmentReminderServiceTest extends TestCase
         $results = $this->service->run();
 
         $this->assertSame(0, $results['sent']);
-        $this->assertSame(1, $results['skipped']);
+        $this->assertSame(0, $results['skipped']);
     }
 
     // --- no phone number -> skipped ---
 
     public function testRunSkipsPatientWithNoPhone(): void
     {
+        // Empty phone_cell from the main query
         $this->mockUpcomingAppointments([
-            $this->makeAppointment(104, 46, '2026-04-01', '13:00:00'),
+            $this->makeAppointment(104, 46, '2026-04-01', '13:00:00', '', 'YES'),
         ]);
-        $this->mockNoExistingReminder(104);
-
-        // No phone number
-        QueryUtils::setMockResult(
-            "SELECT phone_cell FROM patient_data WHERE pid = ?",
-            [46],
-            [['phone_cell' => '']]
-        );
 
         $this->templateService->method('getAppointmentReminderTemplateKey')
             ->willReturn('appointment_reminder_no_portal');
@@ -242,11 +213,9 @@ class AppointmentReminderServiceTest extends TestCase
     public function testRunCountsSendFailure(): void
     {
         $this->mockUpcomingAppointments([
-            $this->makeAppointment(105, 47, '2026-04-01', '14:00:00'),
+            $this->makeAppointment(105, 47, '2026-04-01', '14:00:00', '+15556666666', 'YES'),
         ]);
-        $this->mockNoExistingReminder(105);
-        $this->mockPatientPhone(47, '+15556666666');
-        $this->mockPatientEligible(47, '+15556666666');
+        $this->mockActiveConsent(47, '+15556666666');
 
         $this->templateService->method('getAppointmentReminderTemplateKey')
             ->willReturn('appointment_reminder_no_portal');
@@ -269,11 +238,9 @@ class AppointmentReminderServiceTest extends TestCase
     public function testRunCountsTemplateRenderFailure(): void
     {
         $this->mockUpcomingAppointments([
-            $this->makeAppointment(106, 48, '2026-04-01', '15:00:00'),
+            $this->makeAppointment(106, 48, '2026-04-01', '15:00:00', '+15555555555', 'YES'),
         ]);
-        $this->mockNoExistingReminder(106);
-        $this->mockPatientPhone(48, '+15555555555');
-        $this->mockPatientEligible(48, '+15555555555');
+        $this->mockActiveConsent(48, '+15555555555');
 
         $this->templateService->method('getAppointmentReminderTemplateKey')
             ->willReturn('appointment_reminder_no_portal');
@@ -294,27 +261,25 @@ class AppointmentReminderServiceTest extends TestCase
     public function testRunHandlesMultipleAppointments(): void
     {
         $this->mockUpcomingAppointments([
-            $this->makeAppointment(200, 50, '2026-04-01', '09:00:00'),
-            $this->makeAppointment(201, 51, '2026-04-01', '10:00:00'),
-            $this->makeAppointment(202, 52, '2026-04-01', '11:00:00'),
+            $this->makeAppointment(200, 50, '2026-04-01', '09:00:00', '+15550001111', 'YES'),
+            $this->makeAppointment(201, 51, '2026-04-01', '10:00:00', '+15550002222', 'YES'),
+            $this->makeAppointment(202, 52, '2026-04-01', '11:00:00', '+15550003333', 'YES'),
         ]);
 
         // First: eligible, send succeeds
-        $this->mockNoExistingReminder(200);
-        $this->mockPatientPhone(50, '+15550001111');
-        $this->mockPatientEligible(50, '+15550001111');
+        $this->mockActiveConsent(50, '+15550001111');
 
-        // Second: already reminded
+        // Second: no consent record -> skipped
         QueryUtils::setMockResult(
-            "SELECT id FROM oce_sinch_appointment_reminders WHERE pc_eid = ?",
-            [201],
-            [['id' => 5]]
+            "SELECT opted_in, opted_out
+                FROM oce_sinch_patient_consent
+                WHERE patient_id = ? AND phone_number = ?",
+            [51, '+15550002222'],
+            []
         );
 
         // Third: eligible, send succeeds
-        $this->mockNoExistingReminder(202);
-        $this->mockPatientPhone(52, '+15550003333');
-        $this->mockPatientEligible(52, '+15550003333');
+        $this->mockActiveConsent(52, '+15550003333');
 
         $this->templateService->method('getAppointmentReminderTemplateKey')
             ->willReturn('appointment_reminder_no_portal');
@@ -348,11 +313,9 @@ class AppointmentReminderServiceTest extends TestCase
         );
 
         $this->mockUpcomingAppointments([
-            $this->makeAppointment(300, 60, '2026-04-01', '09:00:00'),
+            $this->makeAppointment(300, 60, '2026-04-01', '09:00:00', '+15554443333', 'YES'),
         ]);
-        $this->mockNoExistingReminder(300);
-        $this->mockPatientPhone(60, '+15554443333');
-        $this->mockPatientEligible(60, '+15554443333');
+        $this->mockActiveConsent(60, '+15554443333');
 
         $this->templateService->method('getAppointmentReminderTemplateKey')
             ->willReturn('appointment_reminder_portal');
@@ -378,6 +341,37 @@ class AppointmentReminderServiceTest extends TestCase
         $this->assertSame(1, $results['sent']);
     }
 
+    // --- appt_time is human-friendly formatted ---
+
+    public function testRunFormatsApptTimeAsHumanReadable(): void
+    {
+        $this->mockUpcomingAppointments([
+            $this->makeAppointment(400, 70, '2026-04-01', '14:30:00', '+15551112222', 'YES'),
+        ]);
+        $this->mockActiveConsent(70, '+15551112222');
+
+        $this->templateService->method('getAppointmentReminderTemplateKey')
+            ->willReturn('appointment_reminder_no_portal');
+
+        $this->templateService->expects($this->once())
+            ->method('render')
+            ->with(
+                'appointment_reminder_no_portal',
+                $this->callback(static function (array $vars): bool {
+                    // 2026-04-01 is a Wednesday
+                    return $vars['appt_time'] === 'Wednesday, Apr 1, 2026 at 2:30 PM';
+                })
+            )
+            ->willReturn('Formatted reminder.');
+
+        $this->messageService->method('sendToPatient')
+            ->willReturn(['id' => 'msg-fmt']);
+
+        $results = $this->service->run();
+
+        $this->assertSame(1, $results['sent']);
+    }
+
     // --- Helpers ---
 
     /**
@@ -387,13 +381,15 @@ class AppointmentReminderServiceTest extends TestCase
     {
         QueryUtils::setMockResult(
             "SELECT e.pc_eid, e.pc_pid, e.pc_eventDate, e.pc_startTime,
-                       p.fname, p.lname
+                       p.phone_cell, p.hipaa_allowsms
                 FROM openemr_postcalendar_events e
                 JOIN patient_data p ON e.pc_pid = p.pid
+                LEFT JOIN oce_sinch_appointment_reminders r ON e.pc_eid = r.pc_eid
                 WHERE CONCAT(e.pc_eventDate, ' ', e.pc_startTime) > NOW()
                   AND CONCAT(e.pc_eventDate, ' ', e.pc_startTime) <= DATE_ADD(NOW(), INTERVAL ? HOUR)
                   AND e.pc_apptstatus != 'x'
                   AND e.pc_pid > 0
+                  AND r.id IS NULL
                 ORDER BY e.pc_eventDate, e.pc_startTime",
             [24],
             $appointments
@@ -403,43 +399,26 @@ class AppointmentReminderServiceTest extends TestCase
     /**
      * @return array<string, mixed>
      */
-    private function makeAppointment(int $pcEid, int $patientId, string $date, string $time): array
-    {
+    private function makeAppointment(
+        int $pcEid,
+        int $patientId,
+        string $date,
+        string $time,
+        string $phoneCell = '+15559999999',
+        string $hipaaAllowSms = 'YES'
+    ): array {
         return [
             'pc_eid' => $pcEid,
             'pc_pid' => $patientId,
             'pc_eventDate' => $date,
             'pc_startTime' => $time,
-            'fname' => 'Test',
-            'lname' => 'Patient',
+            'phone_cell' => $phoneCell,
+            'hipaa_allowsms' => $hipaaAllowSms,
         ];
     }
 
-    private function mockNoExistingReminder(int $pcEid): void
+    private function mockActiveConsent(int $patientId, string $phoneNumber): void
     {
-        QueryUtils::setMockResult(
-            "SELECT id FROM oce_sinch_appointment_reminders WHERE pc_eid = ?",
-            [$pcEid],
-            []
-        );
-    }
-
-    private function mockPatientPhone(int $patientId, string $phone): void
-    {
-        QueryUtils::setMockResult(
-            "SELECT phone_cell FROM patient_data WHERE pid = ?",
-            [$patientId],
-            [['phone_cell' => $phone]]
-        );
-    }
-
-    private function mockPatientEligible(int $patientId, string $phoneNumber): void
-    {
-        QueryUtils::setMockResult(
-            "SELECT hipaa_allowsms FROM patient_data WHERE pid = ?",
-            [$patientId],
-            [['hipaa_allowsms' => 'YES']]
-        );
         QueryUtils::setMockResult(
             "SELECT opted_in, opted_out
                 FROM oce_sinch_patient_consent

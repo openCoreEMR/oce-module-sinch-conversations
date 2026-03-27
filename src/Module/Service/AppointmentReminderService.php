@@ -67,18 +67,19 @@ class AppointmentReminderService
             $pcEid = (int) $appointment['pc_eid'];
             $patientId = (int) $appointment['pc_pid'];
 
-            if ($this->wasReminderAlreadySent($pcEid)) {
+            $phoneNumber = $appointment['phone_cell'] ?? '';
+            if ($phoneNumber === '') {
                 $results['skipped']++;
                 continue;
             }
 
-            $phoneNumber = $this->getPatientPhone($patientId);
-            if ($phoneNumber === null) {
+            $hipaaAllowSms = $appointment['hipaa_allowsms'] ?? '';
+            if ($hipaaAllowSms !== 'YES') {
                 $results['skipped']++;
                 continue;
             }
 
-            if (!$this->isPatientEligible($patientId, $phoneNumber)) {
+            if (!$this->hasActiveConsent($patientId, $phoneNumber)) {
                 $results['skipped']++;
                 continue;
             }
@@ -102,7 +103,7 @@ class AppointmentReminderService
                     $patientId,
                     $phoneNumber,
                     $message,
-                    new MessageOptions(templateKey: $templateKey)
+                    new MessageOptions(templateKey: $templateKey, skipConsentCheck: true)
                 );
                 $this->recordReminderSent($pcEid, $patientId, $templateKey);
                 $results['sent']++;
@@ -138,67 +139,43 @@ class AppointmentReminderService
     private function getUpcomingAppointments(int $hours): array
     {
         $sql = "SELECT e.pc_eid, e.pc_pid, e.pc_eventDate, e.pc_startTime,
-                       p.fname, p.lname
+                       p.phone_cell, p.hipaa_allowsms
                 FROM openemr_postcalendar_events e
                 JOIN patient_data p ON e.pc_pid = p.pid
+                LEFT JOIN oce_sinch_appointment_reminders r ON e.pc_eid = r.pc_eid
                 WHERE CONCAT(e.pc_eventDate, ' ', e.pc_startTime) > NOW()
                   AND CONCAT(e.pc_eventDate, ' ', e.pc_startTime) <= DATE_ADD(NOW(), INTERVAL ? HOUR)
                   AND e.pc_apptstatus != 'x'
                   AND e.pc_pid > 0
+                  AND r.id IS NULL
                 ORDER BY e.pc_eventDate, e.pc_startTime";
 
         return QueryUtils::fetchRecords($sql, [$hours]);
     }
 
     /**
-     * Check if a reminder was already sent for this calendar event
-     */
-    private function wasReminderAlreadySent(int $pcEid): bool
-    {
-        $sql = "SELECT id FROM oce_sinch_appointment_reminders WHERE pc_eid = ?";
-        $result = QueryUtils::querySingleRow($sql, [$pcEid]);
-        return $result !== null;
-    }
-
-    /**
      * Record that a reminder was sent for this event
+     *
+     * Use INSERT IGNORE to handle race conditions where concurrent cron runs
+     * pass the LEFT JOIN check and both attempt to insert. The UNIQUE KEY on
+     * pc_eid ensures only one succeeds; the other is silently ignored.
      */
     private function recordReminderSent(int $pcEid, int $patientId, string $templateKey): void
     {
-        $sql = "INSERT INTO oce_sinch_appointment_reminders
+        $sql = "INSERT IGNORE INTO oce_sinch_appointment_reminders
                     (pc_eid, patient_id, sent_at, template_key)
                 VALUES (?, ?, NOW(), ?)";
         QueryUtils::sqlStatementThrowException($sql, [$pcEid, $patientId, $templateKey]);
     }
 
     /**
-     * Get patient cell phone number
+     * Check if patient has active SMS consent
+     *
+     * The hipaa_allowsms check is handled in run() from the main query result.
+     * This method checks only module-level consent in oce_sinch_patient_consent.
      */
-    private function getPatientPhone(int $patientId): ?string
+    private function hasActiveConsent(int $patientId, string $phoneNumber): bool
     {
-        $sql = "SELECT phone_cell FROM patient_data WHERE pid = ?";
-        $result = QueryUtils::querySingleRow($sql, [$patientId]);
-        $phone = $result['phone_cell'] ?? null;
-
-        if ($phone === null || $phone === '') {
-            return null;
-        }
-
-        return $phone;
-    }
-
-    /**
-     * Check if patient is eligible: hipaa_allowsms = YES and has active consent
-     */
-    private function isPatientEligible(int $patientId, string $phoneNumber): bool
-    {
-        $sql = "SELECT hipaa_allowsms FROM patient_data WHERE pid = ?";
-        $result = QueryUtils::querySingleRow($sql, [$patientId]);
-
-        if (($result['hipaa_allowsms'] ?? '') !== 'YES') {
-            return false;
-        }
-
         $sql = "SELECT opted_in, opted_out
                 FROM oce_sinch_patient_consent
                 WHERE patient_id = ? AND phone_number = ?";
@@ -222,7 +199,14 @@ class AppointmentReminderService
     {
         $date = (string) ($appointment['pc_eventDate'] ?? '');
         $time = (string) ($appointment['pc_startTime'] ?? '');
-        $apptTime = $date . ' ' . $time;
+        $rawDatetime = $date . ' ' . $time;
+
+        try {
+            $dt = new \DateTimeImmutable($rawDatetime);
+            $apptTime = $dt->format('l, M j, Y \a\t g:i A');
+        } catch (\Throwable) {
+            $apptTime = $rawDatetime;
+        }
 
         $variables = [
             'clinic_name' => $this->config->getClinicName(),

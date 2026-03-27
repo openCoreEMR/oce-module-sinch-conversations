@@ -30,6 +30,7 @@
   "require": {
     "php": ">=8.2",
     "ext-curl": "*",
+    "ext-date": "*",
     "ext-filter": "*",
     "ext-json": "*",
     "guzzlehttp/guzzle": "^7.0",
