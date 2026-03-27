@@ -19,8 +19,15 @@ docs/
 │   ├── code-quality.md     # Code standards, security
 │   ├── docker.md           # Docker environment
 │   └── tooling.md          # Taskfile/Composer scripts
-└── sinch/                   # Sinch API documentation
-    └── api-reference.md    # API links and guidance
+├── messaging/               # Messaging use cases and testing
+│   ├── appointment-reminders.md # Phase 1 scope, templates, variables
+│   ├── opt-out.md          # Opt-out keywords, flows, compliance
+│   └── testing.md          # End-to-end testing scenarios
+├── regulatory.md            # TCPA, HIPAA, FCC, carrier requirements
+└── sinch/                   # Sinch platform documentation
+    ├── api-reference.md    # API links and guidance
+    ├── setup-guide.md      # Dashboard setup, 10DLC, module config
+    └── troubleshooting.md  # Debugging delivery, common errors
 ```
 
 ## Quick Reference

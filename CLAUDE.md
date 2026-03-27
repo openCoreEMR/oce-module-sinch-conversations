@@ -35,6 +35,16 @@ This document describes the architectural patterns and conventions for OpenEMR m
 | Document | Description |
 |----------|-------------|
 | [API Reference](docs/sinch/api-reference.md) | Sinch API documentation links and usage guidance |
+| [Setup Guide](docs/sinch/setup-guide.md) | Sinch dashboard setup, 10DLC campaign registration, module configuration |
+| [Troubleshooting](docs/sinch/troubleshooting.md) | Debugging undelivered SMS, common errors, dashboard navigation |
+
+### Messaging
+
+| Document | Description |
+|----------|-------------|
+| [Appointment Reminders](docs/messaging/appointment-reminders.md) | Phase 1 scope, message templates, variables, admin config |
+| [Opt-Out Handling](docs/messaging/opt-out.md) | Opt-out keywords, flows (via text and chart), compliance notes |
+| [Testing Scenarios](docs/messaging/testing.md) | End-to-end testing scenarios for messaging functionality |
 
 ### Regulatory
 
