@@ -18,7 +18,6 @@ use OpenCoreEMR\Modules\SinchConversations\Service\TemplateSyncService;
 use OpenCoreEMR\Modules\SinchConversations\SessionAccessor;
 use OpenCoreEMR\Sinch\Conversation\Client\ConversationApiClient;
 use OpenCoreEMR\Sinch\Conversation\Exception\AccessDeniedException;
-use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
 use OpenEMR\Common\Csrf\CsrfUtils;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -127,10 +126,6 @@ class SettingsController
 
             $this->session->setFlash('settings_message', "Settings saved successfully");
 
-            return $this->redirect($request);
-        } catch (ValidationException $e) {
-            $this->logger->error('Validation error saving settings', ['exception' => $e]);
-            $this->session->setFlash('settings_message', "Error: " . $e->getMessage());
             return $this->redirect($request);
         } catch (\Throwable $e) {
             $errorId = bin2hex(random_bytes(4));

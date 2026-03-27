@@ -102,18 +102,20 @@ class TemplateSyncService
                     $results['created']++;
                 }
             } catch (\Throwable $e) {
+                $errorId = bin2hex(random_bytes(4));
                 $results['failed']++;
                 $results['errors'][] = [
                     'template_key' => $template['template_key'],
-                    'error' => $e->getMessage(),
+                    'errorId' => $errorId,
                 ];
                 $this->logger->error('Failed to sync template', [
                     'templateKey' => $template['template_key'],
+                    'errorId' => $errorId,
                     'exception' => $e,
                 ]);
 
                 // Stop on first failure
-                $this->logger->warning("Stopping template sync due to failure");
+                $this->logger->warning('Stopping template sync due to failure');
                 break;
             }
         }

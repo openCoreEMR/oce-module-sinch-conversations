@@ -309,7 +309,22 @@ class WebhookController
             return new JsonResponse(['status' => 'no_patient'], Response::HTTP_OK);
         }
 
-        $this->consentService->optOut($patientId, $identity, "sinch_{$channel}");
+        try {
+            $this->consentService->optOut($patientId, $identity, "sinch_{$channel}");
+        } catch (\Throwable $e) {
+            $errorId = bin2hex(random_bytes(4));
+            $this->logger->error('Failed to process OPT_OUT', [
+                'identity' => $identity,
+                'errorId' => $errorId,
+                'exception' => $e,
+            ]);
+
+            return new JsonResponse(
+                ['error' => "Failed to process opt-out (ref: $errorId)"],
+                Response::HTTP_INTERNAL_SERVER_ERROR
+            );
+        }
+
         $this->logger->info('Recorded OPT_OUT', [
             'patientId' => $patientId,
             'channel' => $channel,
@@ -354,7 +369,22 @@ class WebhookController
             return new JsonResponse(['status' => 'no_patient'], Response::HTTP_OK);
         }
 
-        $this->consentService->optIn($patientId, $identity, "sinch_{$channel}");
+        try {
+            $this->consentService->optIn($patientId, $identity, "sinch_{$channel}");
+        } catch (\Throwable $e) {
+            $errorId = bin2hex(random_bytes(4));
+            $this->logger->error('Failed to process OPT_IN', [
+                'identity' => $identity,
+                'errorId' => $errorId,
+                'exception' => $e,
+            ]);
+
+            return new JsonResponse(
+                ['error' => "Failed to process opt-in (ref: $errorId)"],
+                Response::HTTP_INTERNAL_SERVER_ERROR
+            );
+        }
+
         $this->logger->info('Recorded OPT_IN', [
             'patientId' => $patientId,
             'channel' => $channel,
