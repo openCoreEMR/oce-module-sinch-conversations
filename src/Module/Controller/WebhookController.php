@@ -321,6 +321,11 @@ class WebhookController
         }
 
         $channelEnum = Channel::tryFrom($channel);
+        if ($channelEnum === null) {
+            $this->logger->warning('Unrecognized channel in OPT_OUT, skipping HIPAA sync', [
+                'channel' => $channel,
+            ]);
+        }
 
         $failures = 0;
         foreach ($patientIds as $patientId) {
@@ -397,6 +402,11 @@ class WebhookController
         }
 
         $channelEnum = Channel::tryFrom($channel);
+        if ($channelEnum === null) {
+            $this->logger->warning('Unrecognized channel in OPT_IN, skipping HIPAA sync', [
+                'channel' => $channel,
+            ]);
+        }
 
         $patientId = $patientIds[0];
         try {

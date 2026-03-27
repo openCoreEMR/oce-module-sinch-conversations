@@ -65,7 +65,7 @@ class ConsentService
      * @param string $phoneNumber
      * @param string $method web_form, portal, in_person, etc
      * @param ?string $ipAddress
-     * @param ?Channel $channel The messaging channel for this consent change
+     * @param ?Channel $channel The messaging channel, or null for unrecognized channels
      * @return bool True if opt-in confirmation was sent, false if it failed.
      *               Consent is always recorded regardless of return value.
      */
@@ -112,7 +112,7 @@ class ConsentService
         $this->logger->debug('Patient opted in', [
             'patientId' => $patientId,
             'method' => $method,
-            'channel' => $channel?->value ?? 'unknown',
+            'channel' => $channel?->value,
         ]);
 
         try {
@@ -139,7 +139,7 @@ class ConsentService
      * @param int $patientId
      * @param string $phoneNumber
      * @param string $method sms_stop, web_form, in_person, sinch_WHATSAPP, etc
-     * @param ?Channel $channel The messaging channel for this consent change
+     * @param ?Channel $channel The messaging channel, or null for unrecognized channels
      */
     public function optOut(
         int $patientId,
@@ -172,7 +172,7 @@ class ConsentService
         $this->logger->debug('Patient opted out', [
             'patientId' => $patientId,
             'method' => $method,
-            'channel' => $channel?->value ?? 'unknown',
+            'channel' => $channel?->value,
         ]);
     }
 
