@@ -32,13 +32,12 @@ class Bootstrap
     public function __construct(
         private readonly EventDispatcherInterface $eventDispatcher,
         private readonly Kernel $kernel = new Kernel(),
-        private readonly ConfigAccessorInterface $configAccessor = new GlobalsAccessor()
+        ?ConfigAccessorInterface $configAccessor = null,
     ) {
-        // Use ConfigFactory to determine the appropriate accessor
-        // When external config mode is active (file or env), use the appropriate accessor
-        $accessor = ConfigFactory::isExternalConfigMode()
-            ? ConfigFactory::createConfigAccessor()
-            : $this->configAccessor;
+        // When no accessor is injected, resolve via ConfigFactory (which
+        // detects file/env/database config mode in one pass).
+        // When an accessor IS injected (e.g., mocks in tests), always honor it.
+        $accessor = $configAccessor ?? ConfigFactory::createConfigAccessor();
         $this->globalsConfig = new GlobalConfig($accessor);
         $this->session = new SessionAccessor();
 
