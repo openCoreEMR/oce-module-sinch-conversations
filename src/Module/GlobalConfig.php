@@ -12,8 +12,6 @@
 
 namespace OpenCoreEMR\Modules\SinchConversations;
 
-use OpenEMR\Common\Auth\AuthGlobal;
-use OpenEMR\Common\Auth\AuthHash;
 use OpenEMR\Common\Crypto\CryptoGen;
 use Symfony\Component\HttpFoundation\IpUtils;
 
@@ -44,8 +42,7 @@ class GlobalConfig
     public const CONFIG_OPTION_DEFAULT_CHANNEL = 'oce_sinch_conversations_default_channel';
     public const CONFIG_OPTION_CLINIC_NAME = 'oce_sinch_conversations_clinic_name';
     public const CONFIG_OPTION_CLINIC_PHONE = 'oce_sinch_conversations_clinic_phone';
-    public const CONFIG_OPTION_WEBHOOK_USERNAME = 'oce_sinch_conversations_webhook_username';
-    public const CONFIG_OPTION_WEBHOOK_PASSWORD = 'oce_sinch_conversations_webhook_password';
+    public const CONFIG_OPTION_WEBHOOK_SECRET = 'oce_sinch_conversations_webhook_secret';
     public const CONFIG_OPTION_WEBHOOK_IP_ALLOWLIST = 'oce_sinch_conversations_webhook_ip_allowlist';
 
     public function isEnabled(): bool
@@ -168,43 +165,26 @@ class GlobalConfig
         };
     }
 
-    public function getWebhookUsername(): string
-    {
-        return $this->configAccessor->getString(self::CONFIG_OPTION_WEBHOOK_USERNAME, '');
-    }
-
     /**
-     * Get the raw stored webhook password value (hash in env mode, encrypted hash in DB mode)
-     */
-    private function getStoredWebhookPassword(): string
-    {
-        return $this->configAccessor->getString(self::CONFIG_OPTION_WEBHOOK_PASSWORD, '');
-    }
-
-    /**
-     * Verify the webhook password
+     * Get the webhook shared secret for HMAC-SHA256 signature validation
      *
-     * In env config mode, supports both bcrypt hash and plaintext password in env var.
-     * In DB mode, uses AuthGlobal::globalVerify() which handles decryption and verification.
+     * In external config mode, return the plaintext secret directly.
+     * In DB mode, decrypt the stored value first.
      */
-    public function verifyWebhookPassword(string $password): bool
+    public function getWebhookSecret(): string
     {
-        $stored = $this->getStoredWebhookPassword();
-        if ($stored === '' || $stored === '0') {
-            return false;
+        $value = $this->configAccessor->getString(self::CONFIG_OPTION_WEBHOOK_SECRET, '');
+        if ($value === '' || $value === '0') {
+            return '';
         }
 
-        // External config mode: check if stored value is a bcrypt hash or plaintext
         if ($this->isExternalConfigMode) {
-            if (AuthHash::hashValid($stored)) {
-                return AuthHash::passwordVerify($password, $stored);
-            }
-            return hash_equals($stored, $password);
+            return $value;
         }
 
-        // DB mode: use AuthGlobal which decrypts and verifies the global setting
-        $authGlobal = new AuthGlobal(self::CONFIG_OPTION_WEBHOOK_PASSWORD);
-        return $authGlobal->globalVerify($password);
+        $cryptoGen = new CryptoGen();
+        $decrypted = $cryptoGen->decryptStandard($value);
+        return $decrypted !== false ? $decrypted : '';
     }
 
     /**
@@ -238,25 +218,27 @@ class GlobalConfig
      */
     public function isWebhookAuthConfigured(): bool
     {
-        return !in_array($this->getWebhookUsername(), ['', '0'], true)
-            && !in_array($this->getStoredWebhookPassword(), ['', '0'], true);
+        $secret = $this->getWebhookSecret();
+        return $secret !== '' && $secret !== '0';
     }
 
     /**
-     * Verify webhook Basic Auth credentials
+     * Verify Sinch webhook HMAC-SHA256 signature
      *
-     * Username uses timing-safe comparison.
-     * Password verification depends on config mode:
-     * - Env mode: timing-safe direct comparison or bcrypt verify
-     * - DB mode: password_verify() against bcrypt hash
+     * Compute HMAC-SHA256 of "$rawBody.$nonce.$timestamp" using the shared secret,
+     * base64-encode, and compare with the provided signature using timing-safe hash_equals.
      */
-    public function verifyWebhookAuth(string $username, string $password): bool
+    public function verifyWebhookSignature(string $rawBody, string $signature, string $timestamp, string $nonce): bool
     {
-        if (!$this->isWebhookAuthConfigured()) {
+        $secret = $this->getWebhookSecret();
+        if ($secret === '' || $secret === '0') {
             return false;
         }
-        return hash_equals($this->getWebhookUsername(), $username)
-            && $this->verifyWebhookPassword($password);
+
+        $signedData = $rawBody . '.' . $nonce . '.' . $timestamp;
+        $expected = base64_encode(hash_hmac('sha256', $signedData, $secret, true));
+
+        return hash_equals($expected, $signature);
     }
 
     /**

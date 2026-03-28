@@ -181,26 +181,14 @@ class Bootstrap
                 );
 
                 $setting = new GlobalSetting(
-                    xlt('Webhook Username'),
-                    'text',
+                    xlt('Webhook Secret'),
+                    'encrypted',
                     '',
-                    xlt('Username for webhook HTTP Basic Auth')
+                    xlt('Shared secret for HMAC-SHA256 webhook signature validation')
                 );
                 $event->getGlobalsService()->appendToSection(
                     'OpenCoreEMR Sinch Conversations',
-                    GlobalConfig::CONFIG_OPTION_WEBHOOK_USERNAME,
-                    $setting
-                );
-
-                $setting = new GlobalSetting(
-                    xlt('Webhook Password'),
-                    'encrypted_hash',
-                    '',
-                    xlt('Password for webhook HTTP Basic Auth (stored as hash)')
-                );
-                $event->getGlobalsService()->appendToSection(
-                    'OpenCoreEMR Sinch Conversations',
-                    GlobalConfig::CONFIG_OPTION_WEBHOOK_PASSWORD,
+                    GlobalConfig::CONFIG_OPTION_WEBHOOK_SECRET,
                     $setting
                 );
 

@@ -28,6 +28,8 @@ use Symfony\Component\HttpFoundation\Response;
 
 class WebhookControllerTest extends TestCase
 {
+    private const TEST_SECRET = 'test_secret';
+
     private GlobalConfig&MockObject $mockConfig;
     private KeywordHandlerService&MockObject $mockKeywordHandler;
     private MessageService&MockObject $mockMessageService;
@@ -43,7 +45,7 @@ class WebhookControllerTest extends TestCase
         $this->mockConfig = $this->createMock(GlobalConfig::class);
         $this->mockConfig->method('isIpInAllowlist')->willReturn(true);
         $this->mockConfig->method('isWebhookAuthConfigured')->willReturn(true);
-        $this->mockConfig->method('verifyWebhookAuth')->willReturn(true);
+        $this->mockConfig->method('verifyWebhookSignature')->willReturn(true);
 
         $this->mockKeywordHandler = $this->createMock(KeywordHandlerService::class);
         $this->mockMessageService = $this->createMock(MessageService::class);
@@ -120,12 +122,12 @@ class WebhookControllerTest extends TestCase
         $this->assertEquals(Response::HTTP_NOT_FOUND, $response->getStatusCode());
     }
 
-    public function testReturns401WhenCredentialsInvalid(): void
+    public function testReturns401WhenSignatureInvalid(): void
     {
         $mockConfig = $this->createMock(GlobalConfig::class);
         $mockConfig->method('isIpInAllowlist')->willReturn(true);
         $mockConfig->method('isWebhookAuthConfigured')->willReturn(true);
-        $mockConfig->method('verifyWebhookAuth')->willReturn(false);
+        $mockConfig->method('verifyWebhookSignature')->willReturn(false);
 
         $controller = new WebhookController(
             $mockConfig,
@@ -134,9 +136,86 @@ class WebhookControllerTest extends TestCase
             $this->mockConsentService
         );
 
-        $request = $this->makeRequest('POST', ['trigger' => 'MESSAGE_INBOUND'], 'wrong', 'wrong');
+        $request = $this->makeRequest('POST', ['trigger' => 'MESSAGE_INBOUND'], 'wrong_secret');
 
         $response = $controller->dispatch($request);
+
+        $this->assertEquals(Response::HTTP_UNAUTHORIZED, $response->getStatusCode());
+    }
+
+    public function testReturns404WhenHmacHeadersMissing(): void
+    {
+        $mockConfig = $this->createMock(GlobalConfig::class);
+        $mockConfig->method('isIpInAllowlist')->willReturn(true);
+        $mockConfig->method('isWebhookAuthConfigured')->willReturn(true);
+
+        $controller = new WebhookController(
+            $mockConfig,
+            $this->mockKeywordHandler,
+            $this->mockMessageService,
+            $this->mockConsentService
+        );
+
+        // Create request without HMAC headers
+        $request = $this->makeRequest('POST', ['trigger' => 'MESSAGE_INBOUND'], null);
+
+        $response = $controller->dispatch($request);
+
+        $this->assertEquals(Response::HTTP_NOT_FOUND, $response->getStatusCode());
+    }
+
+    public function testReturns404WhenAlgorithmUnsupported(): void
+    {
+        $body = json_encode(['trigger' => 'MESSAGE_INBOUND']) ?: '{}';
+        $timestamp = (string) time();
+        $nonce = bin2hex(random_bytes(16));
+
+        $request = Request::create('/webhook', 'POST', [], [], [], [
+            'CONTENT_TYPE' => 'application/json',
+            'HTTP_X_SINCH_WEBHOOK_SIGNATURE' => 'irrelevant',
+            'HTTP_X_SINCH_WEBHOOK_SIGNATURE_TIMESTAMP' => $timestamp,
+            'HTTP_X_SINCH_WEBHOOK_SIGNATURE_NONCE' => $nonce,
+            'HTTP_X_SINCH_WEBHOOK_SIGNATURE_ALGORITHM' => 'HmacSHA512',
+        ], $body);
+
+        $response = $this->controller->dispatch($request);
+
+        $this->assertEquals(Response::HTTP_NOT_FOUND, $response->getStatusCode());
+    }
+
+    public function testReturns404WhenTimestampNonNumeric(): void
+    {
+        $body = json_encode(['trigger' => 'MESSAGE_INBOUND']) ?: '{}';
+        $nonce = bin2hex(random_bytes(16));
+
+        $request = Request::create('/webhook', 'POST', [], [], [], [
+            'CONTENT_TYPE' => 'application/json',
+            'HTTP_X_SINCH_WEBHOOK_SIGNATURE' => 'irrelevant',
+            'HTTP_X_SINCH_WEBHOOK_SIGNATURE_TIMESTAMP' => 'not-a-number',
+            'HTTP_X_SINCH_WEBHOOK_SIGNATURE_NONCE' => $nonce,
+            'HTTP_X_SINCH_WEBHOOK_SIGNATURE_ALGORITHM' => 'HmacSHA256',
+        ], $body);
+
+        $response = $this->controller->dispatch($request);
+
+        $this->assertEquals(Response::HTTP_NOT_FOUND, $response->getStatusCode());
+    }
+
+    public function testReturns401WhenTimestampStale(): void
+    {
+        $body = json_encode(['trigger' => 'MESSAGE_INBOUND']) ?: '{}';
+        $timestamp = (string) (time() - 600); // 10 minutes ago
+        $nonce = bin2hex(random_bytes(16));
+
+        $request = Request::create('/webhook', 'POST', [], [], [], [
+            'CONTENT_TYPE' => 'application/json',
+            'HTTP_X_SINCH_WEBHOOK_SIGNATURE' => 'irrelevant',
+            'HTTP_X_SINCH_WEBHOOK_SIGNATURE_TIMESTAMP' => $timestamp,
+            'HTTP_X_SINCH_WEBHOOK_SIGNATURE_NONCE' => $nonce,
+            'HTTP_X_SINCH_WEBHOOK_SIGNATURE_ALGORITHM' => 'HmacSHA256',
+        ], $body);
+
+        $response = $this->controller->dispatch($request);
 
         $this->assertEquals(Response::HTTP_UNAUTHORIZED, $response->getStatusCode());
     }
@@ -154,11 +233,19 @@ class WebhookControllerTest extends TestCase
 
     public function testReturns400ForEmptyPayload(): void
     {
+        $body = '';
+        $timestamp = (string) time();
+        $nonce = bin2hex(random_bytes(16));
+        $signedData = $body . '.' . $nonce . '.' . $timestamp;
+        $signature = base64_encode(hash_hmac('sha256', $signedData, self::TEST_SECRET, true));
+
         $request = Request::create('/webhook', 'POST', [], [], [], [
             'CONTENT_TYPE' => 'application/json',
-            'PHP_AUTH_USER' => 'user',
-            'PHP_AUTH_PW' => 'pass',
-        ], '');
+            'HTTP_X_SINCH_WEBHOOK_SIGNATURE' => $signature,
+            'HTTP_X_SINCH_WEBHOOK_SIGNATURE_TIMESTAMP' => $timestamp,
+            'HTTP_X_SINCH_WEBHOOK_SIGNATURE_NONCE' => $nonce,
+            'HTTP_X_SINCH_WEBHOOK_SIGNATURE_ALGORITHM' => 'HmacSHA256',
+        ], $body);
 
         $response = $this->controller->dispatch($request);
 
@@ -167,11 +254,19 @@ class WebhookControllerTest extends TestCase
 
     public function testReturns400ForInvalidJson(): void
     {
+        $body = '{invalid json{{{';
+        $timestamp = (string) time();
+        $nonce = bin2hex(random_bytes(16));
+        $signedData = $body . '.' . $nonce . '.' . $timestamp;
+        $signature = base64_encode(hash_hmac('sha256', $signedData, self::TEST_SECRET, true));
+
         $request = Request::create('/webhook', 'POST', [], [], [], [
             'CONTENT_TYPE' => 'application/json',
-            'PHP_AUTH_USER' => 'user',
-            'PHP_AUTH_PW' => 'pass',
-        ], '{invalid json{{{');
+            'HTTP_X_SINCH_WEBHOOK_SIGNATURE' => $signature,
+            'HTTP_X_SINCH_WEBHOOK_SIGNATURE_TIMESTAMP' => $timestamp,
+            'HTTP_X_SINCH_WEBHOOK_SIGNATURE_NONCE' => $nonce,
+            'HTTP_X_SINCH_WEBHOOK_SIGNATURE_ALGORITHM' => 'HmacSHA256',
+        ], $body);
 
         $response = $this->controller->dispatch($request);
 
@@ -753,29 +848,30 @@ class WebhookControllerTest extends TestCase
     // --- Helpers ---
 
     /**
-     * Create a Request with JSON body and Basic Auth
+     * Create a Request with JSON body and HMAC-SHA256 signature headers
      *
      * @param array<string, mixed> $payload
      */
     private function makeRequest(
         string $method,
         array $payload,
-        string $user = 'test_user',
-        string $pass = 'test_pass'
+        ?string $secret = self::TEST_SECRET
     ): Request {
-        return Request::create(
-            '/webhook',
-            $method,
-            [],
-            [],
-            [],
-            [
-                'CONTENT_TYPE' => 'application/json',
-                'PHP_AUTH_USER' => $user,
-                'PHP_AUTH_PW' => $pass,
-            ],
-            json_encode($payload) ?: '{}'
-        );
+        $body = json_encode($payload) ?: '{}';
+        $timestamp = (string) time();
+        $nonce = bin2hex(random_bytes(16));
+
+        $headers = ['CONTENT_TYPE' => 'application/json'];
+        if ($secret !== null) {
+            $signedData = $body . '.' . $nonce . '.' . $timestamp;
+            $signature = base64_encode(hash_hmac('sha256', $signedData, $secret, true));
+            $headers['HTTP_X_SINCH_WEBHOOK_SIGNATURE'] = $signature;
+            $headers['HTTP_X_SINCH_WEBHOOK_SIGNATURE_TIMESTAMP'] = $timestamp;
+            $headers['HTTP_X_SINCH_WEBHOOK_SIGNATURE_NONCE'] = $nonce;
+            $headers['HTTP_X_SINCH_WEBHOOK_SIGNATURE_ALGORITHM'] = 'HmacSHA256';
+        }
+
+        return Request::create('/webhook', $method, [], [], [], $headers, $body);
     }
 
     /**

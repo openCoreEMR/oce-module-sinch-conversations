@@ -29,6 +29,8 @@ use Symfony\Component\HttpFoundation\Response;
 
 class WebhookController
 {
+    private const TIMESTAMP_TOLERANCE_SECONDS = 300;
+
     private readonly SystemLogger $logger;
 
     public function __construct(
@@ -105,11 +107,12 @@ class WebhookController
     /**
      * Authenticate the webhook request
      *
-     * Checks IP allowlist first (if configured), then HTTP Basic Auth (always required).
-     * If Basic Auth is not configured, returns 404 to hide the endpoint.
+     * Checks IP allowlist first (if configured), then verifies the Sinch HMAC-SHA256
+     * webhook signature. If the webhook secret is not configured, returns 404 to hide
+     * the endpoint.
      *
-     * @throws AccessDeniedException If IP is not in allowlist or Basic Auth not configured
-     * @throws UnauthorizedException If Basic Auth credentials are invalid
+     * @throws AccessDeniedException If IP is not in allowlist, secret not configured, or headers missing
+     * @throws UnauthorizedException If HMAC signature verification fails
      */
     private function authenticate(Request $request, string $clientIp): void
     {
@@ -119,16 +122,51 @@ class WebhookController
         }
 
         if (!$this->globalConfig->isWebhookAuthConfigured()) {
-            $this->logger->warning("Webhook request but Basic Auth not configured");
+            $this->logger->warning('Webhook request but webhook secret not configured');
             throw new AccessDeniedException("Webhook authentication not configured");
         }
 
-        $username = $request->getUser() ?? '';
-        $password = $request->getPassword() ?? '';
+        $signature = $request->headers->get('x-sinch-webhook-signature') ?? '';
+        $timestamp = $request->headers->get('x-sinch-webhook-signature-timestamp') ?? '';
+        $nonce = $request->headers->get('x-sinch-webhook-signature-nonce') ?? '';
+        $algorithm = $request->headers->get('x-sinch-webhook-signature-algorithm') ?? '';
 
-        if (!$this->globalConfig->verifyWebhookAuth($username, $password)) {
-            $this->logger->warning('Webhook request with invalid credentials', ['clientIp' => $clientIp]);
-            throw new UnauthorizedException("Invalid webhook credentials");
+        if ($signature === '' || $timestamp === '' || $nonce === '' || $algorithm === '') {
+            $this->logger->warning('Webhook request missing HMAC signature headers', ['clientIp' => $clientIp]);
+            throw new AccessDeniedException("Missing webhook signature headers");
+        }
+
+        if (strcasecmp($algorithm, 'HmacSHA256') !== 0) {
+            $this->logger->warning(
+                'Webhook request with unsupported signature algorithm',
+                ['clientIp' => $clientIp, 'algorithm' => $algorithm]
+            );
+            throw new AccessDeniedException("Invalid webhook signature headers");
+        }
+
+        if (!preg_match('/^\d+$/', $timestamp)) {
+            $this->logger->warning(
+                'Webhook request with invalid timestamp format in signature headers',
+                ['clientIp' => $clientIp, 'timestamp' => $timestamp]
+            );
+            throw new AccessDeniedException("Invalid webhook signature headers");
+        }
+
+        $age = abs(time() - (int) $timestamp);
+        if ($age > self::TIMESTAMP_TOLERANCE_SECONDS) {
+            $this->logger->warning(
+                'Webhook request with stale timestamp',
+                ['clientIp' => $clientIp, 'age' => $age]
+            );
+            throw new UnauthorizedException("Invalid webhook signature");
+        }
+
+        /** @var string $rawBody */
+        $rawBody = $request->getContent();
+
+        if (!$this->globalConfig->verifyWebhookSignature($rawBody, $signature, $timestamp, $nonce)) {
+            $this->logger->warning('Webhook request with invalid HMAC signature', ['clientIp' => $clientIp]);
+            throw new UnauthorizedException("Invalid webhook signature");
         }
     }
 
