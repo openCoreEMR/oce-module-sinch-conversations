@@ -39,6 +39,8 @@ class FileConfigAccessor implements ConfigAccessorInterface
         'default_channel' => GlobalConfig::CONFIG_OPTION_DEFAULT_CHANNEL,
         'clinic_name' => GlobalConfig::CONFIG_OPTION_CLINIC_NAME,
         'clinic_phone' => GlobalConfig::CONFIG_OPTION_CLINIC_PHONE,
+        'webhook_secret' => GlobalConfig::CONFIG_OPTION_WEBHOOK_SECRET,
+        'webhook_ip_allowlist' => GlobalConfig::CONFIG_OPTION_WEBHOOK_IP_ALLOWLIST,
     ];
 
     /**
@@ -57,6 +59,8 @@ class FileConfigAccessor implements ConfigAccessorInterface
         GlobalConfig::CONFIG_OPTION_DEFAULT_CHANNEL => 'OCE_SINCH_CONVERSATIONS_DEFAULT_CHANNEL',
         GlobalConfig::CONFIG_OPTION_CLINIC_NAME => 'OCE_SINCH_CONVERSATIONS_CLINIC_NAME',
         GlobalConfig::CONFIG_OPTION_CLINIC_PHONE => 'OCE_SINCH_CONVERSATIONS_CLINIC_PHONE',
+        GlobalConfig::CONFIG_OPTION_WEBHOOK_SECRET => 'OCE_SINCH_CONVERSATIONS_WEBHOOK_SECRET',
+        GlobalConfig::CONFIG_OPTION_WEBHOOK_IP_ALLOWLIST => 'OCE_SINCH_CONVERSATIONS_WEBHOOK_IP_ALLOWLIST',
     ];
 
     /**
@@ -74,6 +78,8 @@ class FileConfigAccessor implements ConfigAccessorInterface
         GlobalConfig::CONFIG_OPTION_DEFAULT_CHANNEL => 'default_channel',
         GlobalConfig::CONFIG_OPTION_CLINIC_NAME => 'clinic_name',
         GlobalConfig::CONFIG_OPTION_CLINIC_PHONE => 'clinic_phone',
+        GlobalConfig::CONFIG_OPTION_WEBHOOK_SECRET => 'webhook_secret',
+        GlobalConfig::CONFIG_OPTION_WEBHOOK_IP_ALLOWLIST => 'webhook_ip_allowlist',
     ];
 
     /** @var ParameterBag<string, mixed> */

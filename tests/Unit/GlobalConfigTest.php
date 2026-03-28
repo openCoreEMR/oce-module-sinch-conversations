@@ -191,58 +191,46 @@ class GlobalConfigTest extends TestCase
 
     // --- Webhook config tests ---
 
-    public function testGetWebhookUsername(): void
+    public function testGetWebhookSecretReturnsConfiguredSecret(): void
     {
+        // MockCryptoGen uses base64 for encrypt/decrypt, so store as base64
         $mockGlobals = new MockGlobalsAccessor([
-            GlobalConfig::CONFIG_OPTION_WEBHOOK_USERNAME => 'webhook_user',
+            GlobalConfig::CONFIG_OPTION_WEBHOOK_SECRET => base64_encode('my-webhook-secret'),
         ]);
         $config = new GlobalConfig($mockGlobals);
 
-        $this->assertEquals('webhook_user', $config->getWebhookUsername());
+        $this->assertEquals('my-webhook-secret', $config->getWebhookSecret());
     }
 
-    public function testGetWebhookUsernameDefault(): void
+    public function testGetWebhookSecretReturnsEmptyWhenNotSet(): void
     {
         $mockGlobals = new MockGlobalsAccessor([]);
         $config = new GlobalConfig($mockGlobals);
 
-        $this->assertEquals('', $config->getWebhookUsername());
+        $this->assertEquals('', $config->getWebhookSecret());
     }
 
-    public function testIsWebhookAuthConfiguredReturnsTrueWhenBothSet(): void
+    public function testIsWebhookAuthConfiguredReturnsTrueWhenSecretSet(): void
     {
         $mockGlobals = new MockGlobalsAccessor([
-            GlobalConfig::CONFIG_OPTION_WEBHOOK_USERNAME => 'user',
-            GlobalConfig::CONFIG_OPTION_WEBHOOK_PASSWORD => 'hashed_pass',
+            GlobalConfig::CONFIG_OPTION_WEBHOOK_SECRET => base64_encode('some-secret'),
         ]);
         $config = new GlobalConfig($mockGlobals);
 
         $this->assertTrue($config->isWebhookAuthConfigured());
     }
 
-    public function testIsWebhookAuthConfiguredReturnsFalseWhenUsernameEmpty(): void
+    public function testIsWebhookAuthConfiguredReturnsFalseWhenSecretEmpty(): void
     {
         $mockGlobals = new MockGlobalsAccessor([
-            GlobalConfig::CONFIG_OPTION_WEBHOOK_USERNAME => '',
-            GlobalConfig::CONFIG_OPTION_WEBHOOK_PASSWORD => 'hashed_pass',
+            GlobalConfig::CONFIG_OPTION_WEBHOOK_SECRET => '',
         ]);
         $config = new GlobalConfig($mockGlobals);
 
         $this->assertFalse($config->isWebhookAuthConfigured());
     }
 
-    public function testIsWebhookAuthConfiguredReturnsFalseWhenPasswordEmpty(): void
-    {
-        $mockGlobals = new MockGlobalsAccessor([
-            GlobalConfig::CONFIG_OPTION_WEBHOOK_USERNAME => 'user',
-            GlobalConfig::CONFIG_OPTION_WEBHOOK_PASSWORD => '',
-        ]);
-        $config = new GlobalConfig($mockGlobals);
-
-        $this->assertFalse($config->isWebhookAuthConfigured());
-    }
-
-    public function testIsWebhookAuthConfiguredReturnsFalseWhenBothEmpty(): void
+    public function testIsWebhookAuthConfiguredReturnsFalseWhenNotConfigured(): void
     {
         $mockGlobals = new MockGlobalsAccessor([]);
         $config = new GlobalConfig($mockGlobals);
@@ -250,12 +238,76 @@ class GlobalConfigTest extends TestCase
         $this->assertFalse($config->isWebhookAuthConfigured());
     }
 
-    public function testVerifyWebhookAuthReturnsFalseWhenNotConfigured(): void
+    public function testVerifyWebhookSignatureReturnsTrueForValidSignature(): void
+    {
+        $secret = 'test-secret';
+        $mockGlobals = new MockGlobalsAccessor([
+            GlobalConfig::CONFIG_OPTION_WEBHOOK_SECRET => base64_encode($secret),
+        ]);
+        $config = new GlobalConfig($mockGlobals);
+
+        $body = '{"trigger":"MESSAGE_INBOUND"}';
+        $nonce = 'abc123';
+        $timestamp = '1700000000';
+        $signedData = $body . '.' . $nonce . '.' . $timestamp;
+        $signature = base64_encode(hash_hmac('sha256', $signedData, $secret, true));
+
+        $this->assertTrue($config->verifyWebhookSignature($body, $signature, $timestamp, $nonce));
+    }
+
+    public function testVerifyWebhookSignatureReturnsFalseForInvalidSignature(): void
+    {
+        $mockGlobals = new MockGlobalsAccessor([
+            GlobalConfig::CONFIG_OPTION_WEBHOOK_SECRET => base64_encode('test-secret'),
+        ]);
+        $config = new GlobalConfig($mockGlobals);
+
+        $body = '{"trigger":"MESSAGE_INBOUND"}';
+        $nonce = 'abc123';
+        $timestamp = '1700000000';
+
+        $this->assertFalse($config->verifyWebhookSignature($body, 'invalid-signature', $timestamp, $nonce));
+    }
+
+    public function testVerifyWebhookSignatureReturnsFalseWhenSecretEmpty(): void
     {
         $mockGlobals = new MockGlobalsAccessor([]);
         $config = new GlobalConfig($mockGlobals);
 
-        $this->assertFalse($config->verifyWebhookAuth('user', 'pass'));
+        $this->assertFalse($config->verifyWebhookSignature('body', 'sig', '123', 'nonce'));
+    }
+
+    public function testVerifyWebhookSignatureRejectsWrongBody(): void
+    {
+        $secret = 'test-secret';
+        $mockGlobals = new MockGlobalsAccessor([
+            GlobalConfig::CONFIG_OPTION_WEBHOOK_SECRET => base64_encode($secret),
+        ]);
+        $config = new GlobalConfig($mockGlobals);
+
+        $nonce = 'abc123';
+        $timestamp = '1700000000';
+        // Compute signature for one body, verify with a different body
+        $signedData = 'original-body' . '.' . $nonce . '.' . $timestamp;
+        $signature = base64_encode(hash_hmac('sha256', $signedData, $secret, true));
+
+        $this->assertFalse($config->verifyWebhookSignature('tampered-body', $signature, $timestamp, $nonce));
+    }
+
+    public function testVerifyWebhookSignatureRejectsWrongNonce(): void
+    {
+        $secret = 'test-secret';
+        $mockGlobals = new MockGlobalsAccessor([
+            GlobalConfig::CONFIG_OPTION_WEBHOOK_SECRET => base64_encode($secret),
+        ]);
+        $config = new GlobalConfig($mockGlobals);
+
+        $body = 'test-body';
+        $timestamp = '1700000000';
+        $signedData = $body . '.original-nonce.' . $timestamp;
+        $signature = base64_encode(hash_hmac('sha256', $signedData, $secret, true));
+
+        $this->assertFalse($config->verifyWebhookSignature($body, $signature, $timestamp, 'different-nonce'));
     }
 
     public function testGetWebhookIpAllowlistEmpty(): void
@@ -335,13 +387,4 @@ class GlobalConfigTest extends TestCase
         $this->assertFalse($config->isIpInAllowlist('192.168.2.1'));
     }
 
-    public function testVerifyWebhookPasswordReturnsFalseForEmptyStored(): void
-    {
-        $mockGlobals = new MockGlobalsAccessor([
-            GlobalConfig::CONFIG_OPTION_WEBHOOK_PASSWORD => '',
-        ]);
-        $config = new GlobalConfig($mockGlobals);
-
-        $this->assertFalse($config->verifyWebhookPassword('anything'));
-    }
 }
