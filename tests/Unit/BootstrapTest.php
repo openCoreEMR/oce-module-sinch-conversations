@@ -13,6 +13,7 @@
 namespace OpenCoreEMR\Modules\SinchConversations\Tests\Unit;
 
 use OpenCoreEMR\Modules\SinchConversations\Bootstrap;
+use OpenCoreEMR\Modules\SinchConversations\ConfigFactory;
 use OpenCoreEMR\Modules\SinchConversations\Controller\ConversationController;
 use OpenCoreEMR\Modules\SinchConversations\Controller\InboxController;
 use OpenCoreEMR\Modules\SinchConversations\Controller\SettingsController;
@@ -27,18 +28,36 @@ use OpenCoreEMR\Modules\SinchConversations\Service\TemplateSyncService;
 use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockGlobalsAccessor;
 use OpenCoreEMR\Sinch\Conversation\Client\ConversationApiClient;
 use OpenEMR\Common\Logging\SystemLogger;
+use OpenEMR\Menu\MenuEvent;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\EventDispatcher\EventDispatcher;
 
 class BootstrapTest extends TestCase
 {
+    /** @var list<string> */
+    private const EXTERNAL_CONFIG_ENV_VARS = [
+        ConfigFactory::ENV_CONFIG_VAR,
+        ConfigFactory::CONFIG_FILE_ENV_VAR,
+        ConfigFactory::SECRETS_FILE_ENV_VAR,
+    ];
+
     private Bootstrap $bootstrap;
     private EventDispatcher $eventDispatcher;
+    /** @var array<string, string|false> Original env var values to restore in tearDown */
+    private array $savedEnv = [];
 
     protected function setUp(): void
     {
         // Clear logs before each test
         SystemLogger::clearLogs();
+
+        // Clear external config env vars so they don't interfere with tests.
+        // Note: Bootstrap now honors injected accessors regardless of external
+        // config mode, but we still clear these for clean test isolation.
+        foreach (self::EXTERNAL_CONFIG_ENV_VARS as $var) {
+            $this->savedEnv[$var] = getenv($var);
+            putenv($var);
+        }
 
         $this->eventDispatcher = new EventDispatcher();
 
@@ -60,6 +79,15 @@ class BootstrapTest extends TestCase
     protected function tearDown(): void
     {
         SystemLogger::clearLogs();
+
+        // Restore original env var values
+        foreach ($this->savedEnv as $var => $value) {
+            if ($value === false) {
+                putenv($var);
+            } else {
+                putenv("$var=$value");
+            }
+        }
     }
 
     public function testBootstrapCanBeConstructed(): void
@@ -208,5 +236,49 @@ class BootstrapTest extends TestCase
     public function testModuleNameConstant(): void
     {
         $this->assertEquals('oce-module-sinch-conversations', Bootstrap::MODULE_NAME);
+    }
+
+    // --- Menu visibility ---
+
+    public function testMenuItemAddedWhenEnabled(): void
+    {
+        $this->bootstrap->subscribeToEvents();
+
+        $modimg = new \stdClass();
+        $modimg->menu_id = 'modimg';
+        $modimg->children = [];
+
+        $event = new MenuEvent([$modimg]);
+        $this->eventDispatcher->dispatch($event, MenuEvent::MENU_UPDATE);
+
+        $menu = $event->getMenu();
+        $children = $menu[0]->children;
+        $matchingChildren = array_filter(
+            $children,
+            static fn($child): bool => isset($child->menu_id)
+                && $child->menu_id === 'oce_sinch_conversations',
+        );
+        $this->assertNotEmpty($matchingChildren, 'Expected oce_sinch_conversations menu item to be present');
+    }
+
+    public function testMenuItemNotAddedWhenDisabled(): void
+    {
+        $mockGlobals = new MockGlobalsAccessor([
+            GlobalConfig::CONFIG_OPTION_ENABLED => '0',
+        ]);
+
+        $dispatcher = new EventDispatcher();
+        $bootstrap = new Bootstrap($dispatcher, configAccessor: $mockGlobals);
+        $bootstrap->subscribeToEvents();
+
+        $modimg = new \stdClass();
+        $modimg->menu_id = 'modimg';
+        $modimg->children = [];
+
+        $event = new MenuEvent([$modimg]);
+        $dispatcher->dispatch($event, MenuEvent::MENU_UPDATE);
+
+        $menu = $event->getMenu();
+        $this->assertEmpty($menu[0]->children);
     }
 }

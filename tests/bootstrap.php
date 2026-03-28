@@ -26,7 +26,17 @@ require_once __DIR__ . '/Mocks/MockQueryUtils.php';
 require_once __DIR__ . '/Mocks/MockCryptoGen.php';
 require_once __DIR__ . '/Mocks/MockCsrfUtils.php';
 
-// Define OpenEMR global functions used in controllers
+// Define OpenEMR global functions used in controllers and Bootstrap
+if (!function_exists('xl')) {
+    /**
+     * Mock translation function - just returns the input string
+     */
+    function xl(string $text): string
+    {
+        return $text;
+    }
+}
+
 if (!function_exists('xlt')) {
     /**
      * Mock translation function - just returns the input string

@@ -22,7 +22,7 @@ $logger = new SystemLogger();
 $globalsAccessor = new GlobalsAccessor();
 
 $kernel = $globalsAccessor->getKernel();
-$bootstrap = new Bootstrap($kernel->getEventDispatcher(), $kernel, $globalsAccessor);
+$bootstrap = new Bootstrap($kernel->getEventDispatcher(), $kernel);
 
 $controller = $bootstrap->getConversationController();
 
