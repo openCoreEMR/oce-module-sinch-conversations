@@ -15,20 +15,22 @@ namespace OpenCoreEMR\Modules\SinchConversations\Command;
 use OpenCoreEMR\Sinch\Conversation\Client\AppConfigurationClient;
 use OpenCoreEMR\Sinch\Conversation\Config\StandaloneConfig;
 use OpenCoreEMR\Sinch\Conversation\Exception\ApiException;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
+#[AsCommand(
+    name: 'sinch:inspect',
+    description: 'Inspect Sinch Conversations API configuration',
+)]
 class InspectCommand extends Command
 {
-    protected static ?string $defaultName = 'sinch:inspect';
-
     protected function configure(): void
     {
         $this
-            ->setDescription('Inspect Sinch Conversations API configuration')
             ->setHelp('Fetches and displays your Sinch app configuration, including channels and senders.')
             ->addOption(
                 'project-id',

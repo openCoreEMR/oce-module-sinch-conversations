@@ -15,6 +15,7 @@ namespace OpenCoreEMR\Modules\SinchConversations\Command;
 use OpenCoreEMR\Sinch\Conversation\Client\AppConfigurationClient;
 use OpenCoreEMR\Sinch\Conversation\Config\StandaloneConfig;
 use OpenCoreEMR\Sinch\Conversation\Exception\ApiException;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
@@ -22,14 +23,15 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
+#[AsCommand(
+    name: 'sinch:webhook:create',
+    description: 'Create a webhook for a Sinch app',
+)]
 class WebhookCreateCommand extends Command
 {
-    protected static ?string $defaultName = 'sinch:webhook:create';
-
     protected function configure(): void
     {
         $this
-            ->setDescription('Create a webhook for a Sinch app')
             ->setHelp('Creates a new webhook to receive message events and delivery receipts.')
             ->addArgument('url', InputArgument::REQUIRED, 'Webhook target URL (e.g., https://example.com/webhook)')
             ->addOption('project-id', 'p', InputOption::VALUE_REQUIRED, 'Sinch Project ID')

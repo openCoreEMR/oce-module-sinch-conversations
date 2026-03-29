@@ -15,20 +15,22 @@ namespace OpenCoreEMR\Modules\SinchConversations\Command;
 use OpenCoreEMR\Sinch\Conversation\Client\AppConfigurationClient;
 use OpenCoreEMR\Sinch\Conversation\Config\StandaloneConfig;
 use OpenCoreEMR\Sinch\Conversation\Exception\ApiException;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
+#[AsCommand(
+    name: 'sinch:webhook:list',
+    description: 'List webhooks for a Sinch app',
+)]
 class WebhookListCommand extends Command
 {
-    protected static ?string $defaultName = 'sinch:webhook:list';
-
     protected function configure(): void
     {
         $this
-            ->setDescription('List webhooks for a Sinch app')
             ->setHelp('Lists all webhooks configured for a Sinch Conversation app.')
             ->addOption('project-id', 'p', InputOption::VALUE_REQUIRED, 'Sinch Project ID')
             ->addOption('app-id', 'a', InputOption::VALUE_REQUIRED, 'Sinch App ID')
