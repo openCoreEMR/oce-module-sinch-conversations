@@ -30,9 +30,9 @@ A HIPAA-compliant, omnichannel patient communication module for OpenEMR using th
 
 ## Requirements
 
-- OpenEMR 7.0.0 or later
+- OpenEMR 8.0.0 or later
 - PHP 8.2 or later
-- MySQL 5.7 or later / MariaDB 10.2 or later
+- MariaDB 10.6 or later
 - **Sinch Conversations API account with BAA** (see Legal Requirements below)
 
 ## Installation
