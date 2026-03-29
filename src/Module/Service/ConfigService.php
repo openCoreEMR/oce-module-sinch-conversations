@@ -171,11 +171,6 @@ class ConfigService
     {
         $cryptoGen = new CryptoGen();
         $encrypted = $cryptoGen->encryptStandard($value);
-
-        if ($encrypted === false) {
-            throw new ValidationException("Failed to encrypt API secret");
-        }
-
         $this->saveSetting($key, $encrypted);
     }
 }

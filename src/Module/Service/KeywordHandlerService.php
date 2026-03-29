@@ -175,7 +175,6 @@ class KeywordHandlerService
         $national = substr((string) $digits, -10);
 
         // Strip common formatting chars and compare last 10 digits.
-        // Use chained REPLACE instead of REGEXP_REPLACE for MySQL 5.7 compatibility.
         $stripPhone = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE("
             . "phone_cell, '-', ''), ' ', ''), '(', ''), ')', ''), '.', '')";
         $sql = "SELECT pid, fname, lname, phone_cell
