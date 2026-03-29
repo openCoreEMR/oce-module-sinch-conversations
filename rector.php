@@ -33,6 +33,8 @@ return RectorConfig::configure()
     ->withPaths([
         __DIR__ . '/src',
         __DIR__ . '/public',
+        __DIR__ . '/background_service_entry.php',
+        __DIR__ . '/ModuleManagerListener.php',
     ])
     ->withCache(
         cacheClass: FileCacheStorage::class,

@@ -13,6 +13,7 @@
 namespace OpenCoreEMR\Modules\SinchConversations\Controller;
 
 use OpenCoreEMR\Modules\SinchConversations\Channel;
+use OpenCoreEMR\Modules\SinchConversations\ErrorId;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Service\ConsentService;
 use OpenCoreEMR\Modules\SinchConversations\Service\KeywordHandlerService;
@@ -254,7 +255,7 @@ class WebhookController
 
             return new JsonResponse($responseBody, Response::HTTP_OK);
         } catch (\Throwable $e) {
-            $errorId = bin2hex(random_bytes(4));
+            $errorId = ErrorId::generate();
             $this->logger->error('Failed to process inbound message', [
                 'messageId' => $messageId,
                 'errorId' => $errorId,
@@ -299,7 +300,7 @@ class WebhookController
                 Response::HTTP_OK
             );
         } catch (\Throwable $e) {
-            $errorId = bin2hex(random_bytes(4));
+            $errorId = ErrorId::generate();
             $this->logger->error('Failed to process delivery report', [
                 'messageId' => $messageId,
                 'errorId' => $errorId,
@@ -372,7 +373,7 @@ class WebhookController
                 $this->consentService->optOut($patientId, $normalizedIdentity, $method, channel: $channelEnum);
             } catch (\Throwable $e) {
                 $failures++;
-                $errorId = bin2hex(random_bytes(4));
+                $errorId = ErrorId::generate();
                 $this->logger->error('Failed to process OPT_OUT for patient', [
                     'patientId' => $patientId,
                     'identity' => $identity,
@@ -451,7 +452,7 @@ class WebhookController
         try {
             $this->consentService->optIn($patientId, $normalizedIdentity, "sinch_{$channel}", channel: $channelEnum);
         } catch (\Throwable $e) {
-            $errorId = bin2hex(random_bytes(4));
+            $errorId = ErrorId::generate();
             $this->logger->error('Failed to process OPT_IN', [
                 'identity' => $identity,
                 'errorId' => $errorId,
@@ -654,7 +655,7 @@ class WebhookController
                 new MessageOptions(templateKey: 'keyword_response', skipConsentCheck: true)
             );
         } catch (\Throwable $e) {
-            $errorId = bin2hex(random_bytes(4));
+            $errorId = ErrorId::generate();
             $this->logger->error('Failed to send keyword response', [
                 'phone' => $normalized,
                 'errorId' => $errorId,

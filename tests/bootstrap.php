@@ -25,6 +25,7 @@ require_once __DIR__ . '/Mocks/MockSystemLogger.php';
 require_once __DIR__ . '/Mocks/MockQueryUtils.php';
 require_once __DIR__ . '/Mocks/MockCryptoGen.php';
 require_once __DIR__ . '/Mocks/MockCsrfUtils.php';
+require_once __DIR__ . '/Mocks/MockModulesClassLoader.php';
 
 // Define OpenEMR global functions used in controllers and Bootstrap
 if (!function_exists('xl')) {
