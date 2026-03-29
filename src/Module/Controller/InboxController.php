@@ -12,6 +12,7 @@
 
 namespace OpenCoreEMR\Modules\SinchConversations\Controller;
 
+use OpenCoreEMR\Modules\SinchConversations\ErrorId;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Service\MessagePollingService;
 use OpenCoreEMR\Modules\SinchConversations\SessionAccessor;
@@ -112,7 +113,7 @@ class InboxController
             }
             $this->session->setFlash('inbox_message', $flash);
         } catch (\Throwable $e) {
-            $errorId = bin2hex(random_bytes(4));
+            $errorId = ErrorId::generate();
             $this->logger->error('Failed to refresh messages', [
                 'errorId' => $errorId,
                 'exception' => $e,

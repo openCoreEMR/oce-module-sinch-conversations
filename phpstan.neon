@@ -4,6 +4,8 @@ parameters:
         - src
         - public
         - openemr.bootstrap.php
+        - background_service_entry.php
+        - ModuleManagerListener.php
         - version.php
 
     # PHP version

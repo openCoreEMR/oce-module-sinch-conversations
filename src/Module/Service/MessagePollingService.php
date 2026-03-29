@@ -12,6 +12,7 @@
 
 namespace OpenCoreEMR\Modules\SinchConversations\Service;
 
+use OpenCoreEMR\Modules\SinchConversations\ErrorId;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Sinch\Conversation\Client\ConversationApiClient;
 use OpenEMR\Common\Database\QueryUtils;
@@ -164,7 +165,7 @@ class MessagePollingService
                 new MessageOptions(templateKey: 'keyword_response', skipConsentCheck: true)
             );
         } catch (\Throwable $e) {
-            $errorId = bin2hex(random_bytes(4));
+            $errorId = ErrorId::generate();
             $this->logger->error('Failed to send keyword response', [
                 'phone' => $phoneNumber,
                 'errorId' => $errorId,

@@ -6,6 +6,8 @@
     <file>src</file>
     <file>public</file>
     <file>openemr.bootstrap.php</file>
+    <file>background_service_entry.php</file>
+    <file>ModuleManagerListener.php</file>
     <file>version.php</file>
 
     <!-- Exclude patterns -->

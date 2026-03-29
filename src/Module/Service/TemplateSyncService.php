@@ -12,6 +12,7 @@
 
 namespace OpenCoreEMR\Modules\SinchConversations\Service;
 
+use OpenCoreEMR\Modules\SinchConversations\ErrorId;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Sinch\Conversation\Client\ConversationApiClient;
 use OpenCoreEMR\Sinch\Conversation\Exception\ApiException;
@@ -102,7 +103,7 @@ class TemplateSyncService
                     $results['created']++;
                 }
             } catch (\Throwable $e) {
-                $errorId = bin2hex(random_bytes(4));
+                $errorId = ErrorId::generate();
                 $results['failed']++;
                 $results['errors'][] = [
                     'template_key' => $template['template_key'],

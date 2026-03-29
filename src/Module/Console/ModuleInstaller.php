@@ -324,22 +324,24 @@ class ModuleInstaller
         try {
             $namespace = \ModuleManagerListener::getModuleNamespace();
             if (!empty($namespace)) {
+                $sourcePath = \ModuleManagerListener::getModuleSourcePath();
                 $classLoader = new \OpenEMR\Core\ModulesClassLoader($this->openemrPath);
-                $classLoader->registerNamespaceIfNotExists($namespace, $moduleDir . '/src');
+                $classLoader->registerNamespaceIfNotExists($namespace, $moduleDir . $sourcePath);
             }
 
             $instance = \ModuleManagerListener::initListenerSelf();
-            if (is_object($instance) && method_exists($instance, 'moduleManagerAction')) {
-                /** @var mixed $result */
-                $result = $instance->moduleManagerAction($action, $modId, 'Success');
-                if ($result !== 'Success') {
-                    $resultStr = is_scalar($result) ? (string) $result : 'error';
-                    $this->output->writeln("  <comment>ModuleManagerListener ($action): $resultStr</comment>");
-                }
+            $result = $instance->moduleManagerAction($action, $modId, 'Success');
+            if ($result !== 'Success') {
+                $this->output->writeln("  <comment>ModuleManagerListener ($action): $result</comment>");
             }
         } catch (\Throwable $e) {
+            $errorId = \OpenCoreEMR\Modules\SinchConversations\ErrorId::generate();
+            (new \OpenEMR\Common\Logging\SystemLogger())->error(
+                'ModuleManagerListener error',
+                ['errorId' => $errorId, 'action' => $action, 'exception' => $e]
+            );
             $this->output->writeln(
-                "  <comment>Warning: ModuleManagerListener error: " . $e->getMessage() . "</comment>"
+                "  <comment>ModuleManagerListener ($action) failed (ref: $errorId)</comment>"
             );
         }
     }

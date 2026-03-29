@@ -34,6 +34,11 @@ class QueryUtils
     private static array $mockResultQueue = [];
 
     /**
+     * Exception to throw on next sqlStatementThrowException call
+     */
+    private static ?\Throwable $nextException = null;
+
+    /**
      * @param string $sql
      * @param array<mixed> $binds
      * @return array<int, array<string, mixed>>
@@ -77,7 +82,20 @@ class QueryUtils
     public static function sqlStatementThrowException(string $sql, array $binds = []): mixed
     {
         self::$queries[] = ['sql' => $sql, 'binds' => $binds];
+        if (self::$nextException !== null) {
+            $e = self::$nextException;
+            self::$nextException = null;
+            throw $e;
+        }
         return true;
+    }
+
+    /**
+     * Set an exception to throw on the next sqlStatementThrowException call
+     */
+    public static function setNextException(\Throwable $e): void
+    {
+        self::$nextException = $e;
     }
 
     /**
@@ -119,6 +137,7 @@ class QueryUtils
     {
         self::$mockResults = [];
         self::$mockResultQueue = [];
+        self::$nextException = null;
     }
 
     /**

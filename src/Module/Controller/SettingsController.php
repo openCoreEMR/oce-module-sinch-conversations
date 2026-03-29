@@ -12,6 +12,7 @@
 
 namespace OpenCoreEMR\Modules\SinchConversations\Controller;
 
+use OpenCoreEMR\Modules\SinchConversations\ErrorId;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Service\ConfigService;
 use OpenCoreEMR\Modules\SinchConversations\Service\TemplateSyncService;
@@ -136,7 +137,7 @@ class SettingsController
 
             return $this->redirect($request);
         } catch (\Throwable $e) {
-            $errorId = bin2hex(random_bytes(4));
+            $errorId = ErrorId::generate();
             $this->logger->error('Error saving settings', [
                 'errorId' => $errorId,
                 'exception' => $e,
@@ -210,7 +211,7 @@ class SettingsController
             ];
             return new JsonResponse($result);
         } catch (\Throwable $e) {
-            $errorId = bin2hex(random_bytes(4));
+            $errorId = ErrorId::generate();
             $this->logger->error('API connection test failed', [
                 'errorId' => $errorId,
                 'exception' => $e,
@@ -300,7 +301,7 @@ class SettingsController
                     (!empty($senderPhone) ? " from {$senderPhone}" : ''),
             ]);
         } catch (\Throwable $e) {
-            $errorId = bin2hex(random_bytes(4));
+            $errorId = ErrorId::generate();
             $this->logger->error('Failed to send test SMS', [
                 'phone' => $phoneNumber,
                 'errorId' => $errorId,
@@ -368,7 +369,7 @@ class SettingsController
                 'details' => $results,
             ]);
         } catch (\Throwable $e) {
-            $errorId = bin2hex(random_bytes(4));
+            $errorId = ErrorId::generate();
             $this->logger->error('Template sync failed', [
                 'errorId' => $errorId,
                 'exception' => $e,
