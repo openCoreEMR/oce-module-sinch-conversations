@@ -51,6 +51,8 @@ class AppointmentReminderService
             'errors' => [],
         ];
 
+        $this->purgeExpiredReminders();
+
         $hours = $this->config->getSmsNotificationHours();
         if ($hours <= 0) {
             $this->logger->debug('SMS notification hours is 0 or negative, skipping appointment reminders');
@@ -168,6 +170,22 @@ class AppointmentReminderService
                     (pc_eid, patient_id, sent_at, template_key)
                 VALUES (?, ?, NOW(), ?)";
         QueryUtils::sqlStatementThrowException($sql, [$pcEid, $patientId, $templateKey]);
+    }
+
+    /**
+     * Delete reminder records older than 90 days
+     *
+     * These records only serve as deduplication guards. Once the appointment
+     * date has long passed, they are no longer needed.
+     */
+    private function purgeExpiredReminders(): void
+    {
+        try {
+            $sql = "DELETE FROM oce_sinch_appointment_reminders WHERE sent_at < DATE_SUB(NOW(), INTERVAL 90 DAY)";
+            QueryUtils::sqlStatementThrowException($sql, []);
+        } catch (\Throwable $e) {
+            $this->logger->error('Failed to purge expired appointment reminders', ['exception' => $e]);
+        }
     }
 
     /**

@@ -72,8 +72,19 @@ class AppointmentReminderServiceTest extends TestCase
         $this->assertSame(0, $results['sent']);
         $this->assertSame(0, $results['skipped']);
         $this->assertSame(0, $results['failed']);
-        // No DB queries should be made
-        $this->assertSame([], QueryUtils::getQueries());
+        // No appointment queries should run (purge still runs)
+        $queries = QueryUtils::getQueries();
+        $appointmentQueries = array_filter(
+            $queries,
+            static fn(array $q): bool => str_contains($q['sql'], 'openemr_postcalendar_events')
+        );
+        $this->assertCount(0, $appointmentQueries);
+
+        $purgeQueries = array_filter(
+            $queries,
+            static fn(array $q): bool => str_contains($q['sql'], 'DELETE FROM oce_sinch_appointment_reminders')
+        );
+        $this->assertNotEmpty($purgeQueries, 'Purge should still run even when notification hours is zero');
     }
 
     // --- no upcoming appointments ---
@@ -372,6 +383,23 @@ class AppointmentReminderServiceTest extends TestCase
         $results = $this->service->run();
 
         $this->assertSame(1, $results['sent']);
+    }
+
+    // --- cleanup ---
+
+    public function testRunPurgesExpiredReminders(): void
+    {
+        $this->mockUpcomingAppointments([]);
+
+        $this->service->run();
+
+        $queries = QueryUtils::getQueries();
+        $deleteQueries = array_filter(
+            $queries,
+            static fn(array $q): bool => str_contains($q['sql'], 'DELETE FROM oce_sinch_appointment_reminders')
+                && str_contains($q['sql'], 'INTERVAL 90 DAY')
+        );
+        $this->assertCount(1, $deleteQueries, 'Expected purge of expired reminders after run');
     }
 
     // --- Helpers ---
