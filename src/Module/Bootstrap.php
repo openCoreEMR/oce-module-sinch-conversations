@@ -85,123 +85,34 @@ class Bootstrap
                     $setting
                 );
 
+                $settingsPath = $this->globalsConfig->getWebroot()
+                    . '/interface/modules/custom_modules/' . self::MODULE_NAME
+                    . '/public/settings.php';
                 $setting = new GlobalSetting(
-                    xlt('Sinch Project ID'),
-                    'text',
+                    xlt('Module Settings'),
+                    GlobalSetting::DATA_TYPE_HTML_DISPLAY_SECTION,
                     '',
-                    xlt('Your Sinch project ID from the Sinch dashboard')
+                    xlt('Link to the module settings page')
+                );
+                $setting->addFieldOption(
+                    GlobalSetting::DATA_TYPE_OPTION_RENDER_CALLBACK,
+                    static function () use ($settingsPath): string {
+                        $url = attr($settingsPath);
+                        $label = xlt('Open Module Settings');
+                        $description = xlt(
+                            'API credentials, messaging configuration, and webhook settings'
+                            . ' are managed on the module settings page.'
+                        );
+                        return <<<HTML
+                            <p>{$description}</p>
+                            <a href="{$url}" class="btn btn-secondary btn-sm"
+                               onclick="top.restoreSession()">{$label}</a>
+                            HTML;
+                    }
                 );
                 $event->getGlobalsService()->appendToSection(
                     'OpenCoreEMR Sinch Conversations',
-                    GlobalConfig::CONFIG_OPTION_PROJECT_ID,
-                    $setting
-                );
-
-                $setting = new GlobalSetting(
-                    xlt('Sinch App ID'),
-                    'text',
-                    '',
-                    xlt('Your Sinch app ID for the Conversations API')
-                );
-                $event->getGlobalsService()->appendToSection(
-                    'OpenCoreEMR Sinch Conversations',
-                    GlobalConfig::CONFIG_OPTION_APP_ID,
-                    $setting
-                );
-
-                $setting = new GlobalSetting(
-                    xlt('Sinch API Key'),
-                    'text',
-                    '',
-                    xlt('Your Sinch API key')
-                );
-                $event->getGlobalsService()->appendToSection(
-                    'OpenCoreEMR Sinch Conversations',
-                    GlobalConfig::CONFIG_OPTION_API_KEY,
-                    $setting
-                );
-
-                $setting = new GlobalSetting(
-                    xlt('Sinch API Secret'),
-                    'encrypted',
-                    '',
-                    xlt('Your Sinch API secret (will be encrypted)')
-                );
-                $event->getGlobalsService()->appendToSection(
-                    'OpenCoreEMR Sinch Conversations',
-                    GlobalConfig::CONFIG_OPTION_API_SECRET,
-                    $setting
-                );
-
-                $setting = new GlobalSetting(
-                    xlt('Sinch API Region'),
-                    'text',
-                    'us',
-                    xlt('Enter your Sinch API region (us or eu)')
-                );
-                $event->getGlobalsService()->appendToSection(
-                    'OpenCoreEMR Sinch Conversations',
-                    GlobalConfig::CONFIG_OPTION_REGION,
-                    $setting
-                );
-
-                $setting = new GlobalSetting(
-                    xlt('Default Channel'),
-                    'text',
-                    'SMS',
-                    xlt('Default messaging channel (SMS, WHATSAPP, or RCS)')
-                );
-                $event->getGlobalsService()->appendToSection(
-                    'OpenCoreEMR Sinch Conversations',
-                    GlobalConfig::CONFIG_OPTION_DEFAULT_CHANNEL,
-                    $setting
-                );
-
-                $setting = new GlobalSetting(
-                    xlt('Clinic Name'),
-                    'text',
-                    '',
-                    xlt('Clinic name to appear in messages (e.g., "Example Clinic")')
-                );
-                $event->getGlobalsService()->appendToSection(
-                    'OpenCoreEMR Sinch Conversations',
-                    GlobalConfig::CONFIG_OPTION_CLINIC_NAME,
-                    $setting
-                );
-
-                $setting = new GlobalSetting(
-                    xlt('Clinic Phone'),
-                    'text',
-                    '',
-                    xlt('Clinic phone number for message templates (e.g., "650-123-4567")')
-                );
-                $event->getGlobalsService()->appendToSection(
-                    'OpenCoreEMR Sinch Conversations',
-                    GlobalConfig::CONFIG_OPTION_CLINIC_PHONE,
-                    $setting
-                );
-
-                $setting = new GlobalSetting(
-                    xlt('Webhook Secret'),
-                    'encrypted',
-                    '',
-                    xlt('Shared secret for HMAC-SHA256 webhook signature validation')
-                );
-                $event->getGlobalsService()->appendToSection(
-                    'OpenCoreEMR Sinch Conversations',
-                    GlobalConfig::CONFIG_OPTION_WEBHOOK_SECRET,
-                    $setting
-                );
-
-                $setting = new GlobalSetting(
-                    xlt('Webhook IP Allowlist'),
-                    'text',
-                    '',
-                    xlt('Allowed IPs for webhooks (one per line, supports CIDR). Empty = allow all.')
-                );
-                $event->getGlobalsService()->appendToSection(
-                    'OpenCoreEMR Sinch Conversations',
-                    GlobalConfig::CONFIG_OPTION_WEBHOOK_IP_ALLOWLIST,
+                    'oce_sinch_conversations_settings_link',
                     $setting
                 );
             }

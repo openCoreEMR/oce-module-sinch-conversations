@@ -63,11 +63,6 @@
             <strong>{{ 'External Configuration Active'|xlt }}</strong>
             {{ 'All configuration is managed via environment variables or configuration files. Fields below are read-only.'|xlt }}
         </div>
-        {% else %}
-        <div class="alert alert-info" role="alert">
-            <strong>{{ 'Note:'|xlt }}</strong>
-            {{ 'The Sinch API Configuration (Project ID, App ID, API Key, API Secret, Region) can also be configured via Administration > Globals > OpenCoreEMR Sinch Conversations. The Messaging Configuration settings are only available here.'|xlt }}
-        </div>
         {% endif %}
 
         <form method="post" action="?action=save">
