@@ -18,6 +18,7 @@ use OpenCoreEMR\Modules\SinchConversations\ErrorId;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Service\MessagePollingService;
 use OpenCoreEMR\Modules\SinchConversations\Service\MessageService;
+use OpenCoreEMR\Modules\SinchConversations\Service\PhoneNormalizer;
 use OpenCoreEMR\Modules\SinchConversations\SessionAccessor;
 use OpenCoreEMR\Sinch\Conversation\Exception\AccessDeniedException;
 use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
@@ -140,10 +141,15 @@ class ConversationController
             throw new ValidationException("Patient phone number not found");
         }
 
+        $normalizedPhone = PhoneNormalizer::toE164($patient['phone_cell']);
+        if ($normalizedPhone === null) {
+            throw new ValidationException("Patient phone number is not a valid phone number");
+        }
+
         try {
             $this->messageService->sendToPatient(
                 (int) $conversation['patient_id'],
-                $patient['phone_cell'],
+                $normalizedPhone,
                 $messageBody
             );
 
