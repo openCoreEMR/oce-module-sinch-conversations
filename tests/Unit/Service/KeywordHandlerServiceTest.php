@@ -22,6 +22,7 @@ use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockGlobalsAccessor;
 use OpenEMR\Common\Database\QueryUtils;
 use OpenEMR\Common\Logging\SystemLogger;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 class KeywordHandlerServiceTest extends TestCase
@@ -71,9 +72,7 @@ class KeywordHandlerServiceTest extends TestCase
 
     // --- STOP keywords ---
 
-    /**
-     * @dataProvider stopKeywordProvider
-     */
+    #[DataProvider('stopKeywordProvider')]
     public function testStopKeywordsOptOutAndRespond(string $keyword): void
     {
         $this->mockPatientLookup('+15559999999', [
@@ -140,9 +139,7 @@ class KeywordHandlerServiceTest extends TestCase
 
     // --- START keywords ---
 
-    /**
-     * @dataProvider startKeywordProvider
-     */
+    #[DataProvider('startKeywordProvider')]
     public function testStartKeywordsOptInAndRespond(string $keyword): void
     {
         $this->mockPatientLookup('+15559999999', [
@@ -196,9 +193,7 @@ class KeywordHandlerServiceTest extends TestCase
 
     // --- HELP keywords ---
 
-    /**
-     * @dataProvider helpKeywordProvider
-     */
+    #[DataProvider('helpKeywordProvider')]
     public function testHelpKeywordsRespond(string $keyword): void
     {
         $this->mockPatientLookup('+15559999999', [

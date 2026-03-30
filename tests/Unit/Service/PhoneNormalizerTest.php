@@ -15,13 +15,12 @@ declare(strict_types=1);
 namespace OpenCoreEMR\Modules\SinchConversations\Tests\Unit\Service;
 
 use OpenCoreEMR\Modules\SinchConversations\Service\PhoneNormalizer;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 class PhoneNormalizerTest extends TestCase
 {
-    /**
-     * @dataProvider validPhoneProvider
-     */
+    #[DataProvider('validPhoneProvider')]
     public function testNormalizesToE164(string $input, string $expected): void
     {
         $this->assertSame($expected, PhoneNormalizer::toE164($input));
@@ -49,9 +48,7 @@ class PhoneNormalizerTest extends TestCase
         ];
     }
 
-    /**
-     * @dataProvider invalidPhoneProvider
-     */
+    #[DataProvider('invalidPhoneProvider')]
     public function testReturnsNullForInvalidInput(string $input): void
     {
         $this->assertNull(PhoneNormalizer::toE164($input));
