@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Central accessor for OpenEMR globals
+ * Central accessor for OpenEMR globals via OEGlobalsBag
  *
  * @package   OpenCoreEMR
  * @link      https://opencoreemr.com
@@ -15,98 +15,67 @@ declare(strict_types=1);
 namespace OpenCoreEMR\Modules\SinchConversations;
 
 use OpenEMR\Core\Kernel;
+use OpenEMR\Core\OEGlobalsBag;
 
 /**
- * Provides centralized access to OpenEMR globals.
- * This class serves as a single point of abstraction for globals access,
- * making it easier to update or refactor in the future.
+ * Delegates configuration reads to OEGlobalsBag, OpenEMR's typed wrapper
+ * around $GLOBALS. This eliminates direct superglobal access from module code.
  *
  * @internal Use ConfigFactory::createConfigAccessor() instead of instantiating directly
  */
 class GlobalsAccessor implements ConfigAccessorInterface
 {
-    /**
-     * Get a value from globals
-     */
+    private readonly OEGlobalsBag $bag;
+
+    public function __construct()
+    {
+        $this->bag = OEGlobalsBag::getInstance();
+    }
+
     public function get(string $key, mixed $default = null): mixed
     {
-        return $GLOBALS[$key] ?? $default;
+        return $this->bag->get($key, $default) ?? $default;
     }
 
-    /**
-     * Set a value in globals
-     */
     public function set(string $key, mixed $value): void
     {
-        $GLOBALS[$key] = $value;
+        $this->bag->set($key, $value);
     }
 
-    /**
-     * Check if a key exists in globals
-     */
     public function has(string $key): bool
     {
-        return isset($GLOBALS[$key]);
+        return $this->bag->has($key);
     }
 
-    /**
-     * Get a string value from globals
-     */
     public function getString(string $key, string $default = ''): string
     {
-        $value = $this->get($key, $default);
-        if (is_string($value)) {
-            return $value;
-        }
-        return is_scalar($value) || $value === null ? (string)$value : $default;
+        return $this->bag->getString($key, $default);
     }
 
-    /**
-     * Get a boolean value from globals
-     */
     public function getBoolean(string $key, bool $default = false): bool
     {
-        $value = $this->get($key, $default);
-        if (is_bool($value)) {
-            return $value;
-        }
-        // Handle string/numeric boolean values
-        return filter_var($value, FILTER_VALIDATE_BOOLEAN);
+        return $this->bag->getBoolean($key, $default);
     }
 
-    /**
-     * Get an integer value from globals
-     */
     public function getInt(string $key, int $default = 0): int
     {
-        $value = $this->get($key, $default);
-        if (is_int($value)) {
-            return $value;
-        }
-        return is_numeric($value) ? (int)$value : $default;
+        return $this->bag->getInt($key, $default);
     }
 
     /**
      * Get the OpenEMR Kernel instance from globals
      *
+     * OEGlobalsBag doesn't have a typed kernel accessor, so we
+     * narrow the type manually here.
+     *
      * @throws \RuntimeException If the kernel is not available
      */
     public function getKernel(): Kernel
     {
-        $kernel = $this->get('kernel');
+        $kernel = $this->bag->get('kernel');
         if (!$kernel instanceof Kernel) {
             throw new \RuntimeException('OpenEMR Kernel not available');
         }
         return $kernel;
-    }
-
-    /**
-     * Get all globals
-     *
-     * @return array<string, mixed>
-     */
-    public function all(): array
-    {
-        return $GLOBALS;
     }
 }
