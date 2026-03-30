@@ -128,6 +128,14 @@ class GlobalConfig
     }
 
     /**
+     * Get the OpenEMR web root path (empty string for root installs, e.g. '/openemr' for subdirectory)
+     */
+    public function getWebroot(): string
+    {
+        return $this->configAccessor->getString('webroot', '');
+    }
+
+    /**
      * Check if the patient portal is enabled
      */
     public function isPortalEnabled(): bool

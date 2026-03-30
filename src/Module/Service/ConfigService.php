@@ -158,8 +158,12 @@ class ConfigService
      */
     private function saveSetting(string $key, string $value): void
     {
-        $sql = "UPDATE globals SET gl_value = ? WHERE gl_name = ?";
-        QueryUtils::sqlStatementThrowException($sql, [$value, $key]);
+        $sql = <<<'SQL'
+            INSERT INTO `globals` (`gl_name`, `gl_index`, `gl_value`)
+            VALUES (?, 0, ?)
+            ON DUPLICATE KEY UPDATE `gl_value` = VALUES(`gl_value`)
+            SQL;
+        QueryUtils::sqlStatementThrowException($sql, [$key, $value]);
     }
 
     /**

@@ -105,9 +105,9 @@ class ConfigServiceTest extends TestCase
         ]);
 
         $queries = QueryUtils::getQueries();
-        $updateQueries = array_filter($queries, fn($q) => str_contains($q['sql'], 'UPDATE globals'));
-        // Should have 7 updates (project_id, app_id, api_key, region, channel, name, phone)
-        $this->assertCount(7, $updateQueries);
+        $upsertQueries = array_filter($queries, fn($q) => str_contains($q['sql'], 'INSERT INTO `globals`'));
+        // Should have 7 upserts (project_id, app_id, api_key, region, channel, name, phone)
+        $this->assertCount(7, $upsertQueries);
     }
 
     public function testSaveSettingsAcceptsValidRegions(): void
@@ -140,7 +140,7 @@ class ConfigServiceTest extends TestCase
         $this->service->saveSettings(['clinic_name' => 'Test']);
 
         $queries = QueryUtils::getQueries();
-        $updateQueries = array_filter($queries, fn($q) => str_contains($q['sql'], 'UPDATE globals'));
-        $this->assertCount(1, $updateQueries);
+        $upsertQueries = array_filter($queries, fn($q) => str_contains($q['sql'], 'INSERT INTO `globals`'));
+        $this->assertCount(1, $upsertQueries);
     }
 }
