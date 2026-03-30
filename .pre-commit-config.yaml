@@ -90,3 +90,10 @@ repos:
     language: system
     files: ^(composer\.json|src/.+\.php)$
     pass_filenames: false
+
+  - id: cli-smoke-test
+    name: CLI Smoke Test
+    entry: php cli.php list --short
+    language: system
+    always_run: true
+    pass_filenames: false
