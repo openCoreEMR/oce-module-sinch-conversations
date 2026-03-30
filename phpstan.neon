@@ -1,3 +1,8 @@
+includes:
+    - vendor/spaze/phpstan-disallowed-calls/extension.neon
+    - vendor/phpstan/phpstan-deprecation-rules/rules.neon
+    - vendor/opencoreemr/openemr-phpstan-rules/extension.neon
+
 parameters:
     level: 9
     paths:
@@ -28,6 +33,14 @@ parameters:
 
     # Ignore errors for unused properties and legacy OpenEMR functions
     ignoreErrors:
+        # Entry-point scripts that bootstrap OpenEMR must access $GLOBALS
+        # before OEGlobalsBag is available
+        -
+            identifier: openemr.forbiddenGlobalsAccess
+            paths:
+                - background_service_entry.php
+                - src/Module/Console/Command/AbstractModuleCommand.php
+
         # OpenEMR global functions not available for static analysis
         - '#Function (xl|xlt|xla|xlj|text|attr) not found#'
 

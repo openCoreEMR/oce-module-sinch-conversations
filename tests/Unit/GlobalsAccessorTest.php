@@ -74,10 +74,16 @@ class GlobalsAccessorTest extends TestCase
         $this->assertFalse($this->accessor->has('nonexistent'));
     }
 
-    public function testHasReturnsFalseForNull(): void
+    public function testHasReturnsTrueForNull(): void
     {
-        // isset() returns false for null values
-        $this->assertFalse($this->accessor->has('test_null'));
+        // OEGlobalsBag uses array_key_exists, which returns true for null values
+        $this->assertTrue($this->accessor->has('test_null'));
+    }
+
+    public function testGetReturnsDefaultForNullValue(): void
+    {
+        // Null values are treated as missing — default is returned (matches old $GLOBALS[$key] ?? $default behavior)
+        $this->assertSame('fallback', $this->accessor->get('test_null', 'fallback'));
     }
 
     public function testGetString(): void
@@ -127,15 +133,6 @@ class GlobalsAccessorTest extends TestCase
         $GLOBALS['test_int_string'] = '123';
         $this->assertEquals(123, $this->accessor->getInt('test_int_string'));
         unset($GLOBALS['test_int_string']);
-    }
-
-    public function testAll(): void
-    {
-        $all = $this->accessor->all();
-
-        $this->assertIsArray($all);
-        $this->assertArrayHasKey('test_string', $all);
-        $this->assertEquals('hello', $all['test_string']);
     }
 
     public function testGetKernelReturnsKernel(): void
