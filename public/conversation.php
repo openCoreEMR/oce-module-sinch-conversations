@@ -10,6 +10,8 @@
  * @license   GNU General Public License 3
  */
 
+declare(strict_types=1);
+
 require_once __DIR__ . '/../../../../globals.php';
 
 use OpenCoreEMR\Modules\SinchConversations\Bootstrap;

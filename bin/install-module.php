@@ -20,6 +20,8 @@
  * @license   https://github.com/openemr/openemr/blob/master/LICENSE GNU General Public License 3
  */
 
+declare(strict_types=1);
+
 if (php_sapi_name() !== 'cli') {
     echo "This script can only be run from the command line.\n";
     exit(1);

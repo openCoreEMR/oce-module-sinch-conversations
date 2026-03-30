@@ -10,6 +10,8 @@
  * @license   GNU General Public License 3
  */
 
+declare(strict_types=1);
+
 // Default version when not in a git repository
 // This is automatically updated by release-please
 const DEFAULT_VERSION = '0.9.0'; // x-release-please-version
