@@ -10,6 +10,8 @@
  * @license   GNU General Public License 3
  */
 
+declare(strict_types=1);
+
 namespace OpenCoreEMR\Modules\SinchConversations\Tests\Unit\Controller;
 
 use OpenCoreEMR\Modules\SinchConversations\Controller\WebhookController;

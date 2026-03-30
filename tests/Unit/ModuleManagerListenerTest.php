@@ -8,6 +8,8 @@
  * @link      https://www.opencoreemr.com
  */
 
+declare(strict_types=1);
+
 namespace OpenCoreEMR\Modules\SinchConversations\Tests\Unit;
 
 use OpenEMR\Common\Database\QueryUtils;

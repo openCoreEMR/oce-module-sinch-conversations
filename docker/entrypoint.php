@@ -7,6 +7,8 @@
  * Avoids the slow chown operations in the standard openemr.sh entrypoint
  */
 
+declare(strict_types=1);
+
 echo "==> Simple OpenEMR Development Entrypoint\n";
 
 // Generate SSL certificates if they don't exist

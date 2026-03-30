@@ -13,6 +13,8 @@
  * @license   GNU General Public License 3
  */
 
+declare(strict_types=1);
+
 // Don't require session for webhooks - Sinch calls this endpoint directly
 $ignoreAuth = true;
 
