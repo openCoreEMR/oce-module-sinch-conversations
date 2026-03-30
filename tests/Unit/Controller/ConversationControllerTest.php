@@ -291,6 +291,57 @@ class ConversationControllerTest extends TestCase
         $this->assertInstanceOf(RedirectResponse::class, $response);
     }
 
+    public function testReplyNormalizesPhoneToE164(): void
+    {
+        $_SERVER['REQUEST_METHOD'] = 'POST';
+        $_POST['csrf_token'] = 'valid';
+        $_POST['conversation_id'] = 'conv-1';
+        $_POST['message'] = 'Reply text';
+        CsrfUtils::setVerifyResult(true);
+
+        QueryUtils::setMockResult(
+            "SELECT patient_id FROM oce_sinch_conversations WHERE conversation_id = ?",
+            ['conv-1'],
+            [['patient_id' => 42]]
+        );
+        QueryUtils::setMockResult(
+            "SELECT phone_cell FROM patient_data WHERE pid = ?",
+            [42],
+            [['phone_cell' => '(555) 999-9999']]
+        );
+
+        $this->messageService->expects($this->once())
+            ->method('sendToPatient')
+            ->with(42, '+15559999999', 'Reply text');
+
+        $this->controller->dispatch('reply');
+    }
+
+    public function testReplyThrowsWhenPhoneCannotBeNormalized(): void
+    {
+        $_SERVER['REQUEST_METHOD'] = 'POST';
+        $_POST['csrf_token'] = 'valid';
+        $_POST['conversation_id'] = 'conv-1';
+        $_POST['message'] = 'Reply text';
+        CsrfUtils::setVerifyResult(true);
+
+        QueryUtils::setMockResult(
+            "SELECT patient_id FROM oce_sinch_conversations WHERE conversation_id = ?",
+            ['conv-1'],
+            [['patient_id' => 42]]
+        );
+        QueryUtils::setMockResult(
+            "SELECT phone_cell FROM patient_data WHERE pid = ?",
+            [42],
+            [['phone_cell' => 'not-a-phone']]
+        );
+
+        $this->expectException(ValidationException::class);
+        $this->expectExceptionMessage('not a valid phone number');
+
+        $this->controller->dispatch('reply');
+    }
+
     // --- Helpers ---
 
     private function mockConversationData(string $conversationId, int $messageCount = 0): void
