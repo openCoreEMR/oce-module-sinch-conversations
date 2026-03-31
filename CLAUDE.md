@@ -35,6 +35,7 @@ This document describes the architectural patterns and conventions for OpenEMR m
 | Document | Description |
 |----------|-------------|
 | [API Reference](docs/sinch/api-reference.md) | Sinch API documentation links and usage guidance |
+| [Provisioning Guide](docs/sinch/provisioning-guide.md) | Full app provisioning: DISPATCH mode, Consent Management, webhooks, verification |
 | [Setup Guide](docs/sinch/setup-guide.md) | Sinch dashboard setup, 10DLC campaign registration, module configuration |
 | [Troubleshooting](docs/sinch/troubleshooting.md) | Debugging undelivered SMS, common errors, dashboard navigation |
 

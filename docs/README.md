@@ -28,6 +28,7 @@ docs/
 ├── regulatory.md            # TCPA, HIPAA, FCC, carrier requirements
 └── sinch/                   # Sinch platform documentation
     ├── api-reference.md    # API links and guidance
+    ├── provisioning-guide.md # Full app provisioning workflow
     ├── setup-guide.md      # Dashboard setup, 10DLC, module config
     └── troubleshooting.md  # Debugging delivery, common errors
 ```
