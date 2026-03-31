@@ -43,9 +43,12 @@ function oce_sinch_run_appointment_reminders(): void
         $moduleDir . '/src/Module'
     );
 
-    $config = new \OpenCoreEMR\Modules\SinchConversations\GlobalConfig(
-        \OpenCoreEMR\Modules\SinchConversations\ConfigFactory::createConfigAccessor()
-    );
+    $globalsBag = \OpenEMR\Core\OEGlobalsBag::getInstance();
+    $descriptor = \OpenCoreEMR\Modules\SinchConversations\SinchModuleConfig::createConfigDescriptor();
+    $configFactory = new \OpenCoreEMR\ModuleConfig\ConfigFactory($descriptor, $globalsBag);
+    $accessor = $configFactory->createConfigAccessor();
+
+    $config = new \OpenCoreEMR\Modules\SinchConversations\GlobalConfig($accessor, $configFactory);
 
     if (!$config->isEnabled()) {
         return;
@@ -56,7 +59,9 @@ function oce_sinch_run_appointment_reminders(): void
         : new \OpenEMR\Core\Kernel();
     $bootstrap = new \OpenCoreEMR\Modules\SinchConversations\Bootstrap(
         $kernel->getEventDispatcher(),
-        $kernel
+        $kernel,
+        $accessor,
+        $configFactory
     );
 
     $service = $bootstrap->getAppointmentReminderService();

@@ -15,7 +15,6 @@ declare(strict_types=1);
 namespace OpenCoreEMR\Modules\SinchConversations\Tests\Unit;
 
 use OpenCoreEMR\Modules\SinchConversations\Bootstrap;
-use OpenCoreEMR\Modules\SinchConversations\ConfigFactory;
 use OpenCoreEMR\Modules\SinchConversations\Controller\ConversationController;
 use OpenCoreEMR\Modules\SinchConversations\Controller\InboxController;
 use OpenCoreEMR\Modules\SinchConversations\Controller\SettingsController;
@@ -27,6 +26,8 @@ use OpenCoreEMR\Modules\SinchConversations\Service\MessagePollingService;
 use OpenCoreEMR\Modules\SinchConversations\Service\MessageService;
 use OpenCoreEMR\Modules\SinchConversations\Service\TemplateService;
 use OpenCoreEMR\Modules\SinchConversations\Service\TemplateSyncService;
+use OpenCoreEMR\Modules\SinchConversations\SinchModuleConfig;
+use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockConfigFactory;
 use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockGlobalsAccessor;
 use OpenCoreEMR\Sinch\Conversation\Client\ConversationApiClient;
 use OpenEMR\Common\Logging\SystemLogger;
@@ -41,9 +42,9 @@ class BootstrapTest extends TestCase
 {
     /** @var list<string> */
     private const EXTERNAL_CONFIG_ENV_VARS = [
-        ConfigFactory::ENV_CONFIG_VAR,
-        ConfigFactory::CONFIG_FILE_ENV_VAR,
-        ConfigFactory::SECRETS_FILE_ENV_VAR,
+        'OCE_SINCH_CONVERSATIONS_ENV_CONFIG',
+        'OCE_SINCH_CONVERSATIONS_CONFIG_FILE',
+        'OCE_SINCH_CONVERSATIONS_SECRETS_FILE',
     ];
 
     private Bootstrap $bootstrap;
@@ -302,7 +303,7 @@ class BootstrapTest extends TestCase
         $keys = array_keys($section);
 
         $this->assertSame(
-            [GlobalConfig::CONFIG_OPTION_ENABLED, 'oce_sinch_conversations_settings_link'],
+            [GlobalConfig::CONFIG_OPTION_ENABLED, GlobalConfig::CONFIG_OPTION_ENABLED . '_settings_link'],
             $keys,
             'Globals section should only contain the enabled toggle and settings link'
         );
@@ -352,7 +353,7 @@ class BootstrapTest extends TestCase
 
         $metadata = $globalsService->getGlobalsMetadata();
         $section = $metadata['OpenCoreEMR Sinch Conversations'] ?? [];
-        $linkEntry = $section['oce_sinch_conversations_settings_link'] ?? null;
+        $linkEntry = $section[GlobalConfig::CONFIG_OPTION_ENABLED . '_settings_link'] ?? null;
 
         $this->assertNotNull($linkEntry, 'Settings link entry should exist');
         // GlobalSetting::format() returns [label, dataType, default, description, ?fieldOptions]

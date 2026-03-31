@@ -15,6 +15,7 @@ declare(strict_types=1);
 namespace OpenCoreEMR\Modules\SinchConversations\Tests\Unit;
 
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
+use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockConfigFactory;
 use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockGlobalsAccessor;
 use PHPUnit\Framework\TestCase;
 
@@ -37,7 +38,7 @@ class GlobalConfigTest extends TestCase
             GlobalConfig::CONFIG_OPTION_CLINIC_PHONE => '+15551234567',
         ]);
 
-        $this->config = new GlobalConfig($this->mockGlobals);
+        $this->config = new GlobalConfig($this->mockGlobals, new MockConfigFactory());
     }
 
     public function testIsEnabled(): void
@@ -48,7 +49,7 @@ class GlobalConfigTest extends TestCase
     public function testIsEnabledDefault(): void
     {
         $mockGlobals = new MockGlobalsAccessor([]);
-        $config = new GlobalConfig($mockGlobals);
+        $config = new GlobalConfig($mockGlobals, new MockConfigFactory());
 
         $this->assertFalse($config->isEnabled());
     }
@@ -93,7 +94,7 @@ class GlobalConfigTest extends TestCase
         $mockGlobals = new MockGlobalsAccessor([
             GlobalConfig::CONFIG_OPTION_API_SECRET => '',
         ]);
-        $config = new GlobalConfig($mockGlobals);
+        $config = new GlobalConfig($mockGlobals, new MockConfigFactory());
 
         $this->assertEquals('', $config->getApiSecret());
     }
@@ -111,7 +112,7 @@ class GlobalConfigTest extends TestCase
     public function testGetRegionDefault(): void
     {
         $mockGlobals = new MockGlobalsAccessor([]);
-        $config = new GlobalConfig($mockGlobals);
+        $config = new GlobalConfig($mockGlobals, new MockConfigFactory());
 
         $this->assertEquals('us', $config->getRegion());
     }
@@ -129,7 +130,7 @@ class GlobalConfigTest extends TestCase
     public function testGetDefaultChannelDefault(): void
     {
         $mockGlobals = new MockGlobalsAccessor([]);
-        $config = new GlobalConfig($mockGlobals);
+        $config = new GlobalConfig($mockGlobals, new MockConfigFactory());
 
         $this->assertEquals('SMS', $config->getDefaultChannel());
     }
@@ -148,7 +149,7 @@ class GlobalConfigTest extends TestCase
     {
         $config = new GlobalConfig(new MockGlobalsAccessor([
             'portal_onsite_two_enable' => true,
-        ]));
+        ]), new MockConfigFactory());
         $this->assertTrue($config->isPortalEnabled());
     }
 
@@ -161,7 +162,7 @@ class GlobalConfigTest extends TestCase
     {
         $config = new GlobalConfig(new MockGlobalsAccessor([
             'portal_onsite_two_address' => 'https://example.com/portal',
-        ]));
+        ]), new MockConfigFactory());
         $this->assertEquals('https://example.com/portal', $config->getPortalUrl());
     }
 
@@ -175,7 +176,7 @@ class GlobalConfigTest extends TestCase
         $mockGlobals = new MockGlobalsAccessor([
             GlobalConfig::CONFIG_OPTION_REGION => 'eu',
         ]);
-        $config = new GlobalConfig($mockGlobals);
+        $config = new GlobalConfig($mockGlobals, new MockConfigFactory());
 
         $this->assertEquals('https://eu.conversation.api.sinch.com', $config->getApiBaseUrl());
     }
@@ -185,7 +186,7 @@ class GlobalConfigTest extends TestCase
         $mockGlobals = new MockGlobalsAccessor([
             GlobalConfig::CONFIG_OPTION_REGION => 'unknown',
         ]);
-        $config = new GlobalConfig($mockGlobals);
+        $config = new GlobalConfig($mockGlobals, new MockConfigFactory());
 
         // Should default to US
         $this->assertEquals('https://us.conversation.api.sinch.com', $config->getApiBaseUrl());
@@ -199,7 +200,7 @@ class GlobalConfigTest extends TestCase
         $mockGlobals = new MockGlobalsAccessor([
             GlobalConfig::CONFIG_OPTION_WEBHOOK_SECRET => base64_encode('my-webhook-secret'),
         ]);
-        $config = new GlobalConfig($mockGlobals);
+        $config = new GlobalConfig($mockGlobals, new MockConfigFactory());
 
         $this->assertEquals('my-webhook-secret', $config->getWebhookSecret());
     }
@@ -207,7 +208,7 @@ class GlobalConfigTest extends TestCase
     public function testGetWebhookSecretReturnsEmptyWhenNotSet(): void
     {
         $mockGlobals = new MockGlobalsAccessor([]);
-        $config = new GlobalConfig($mockGlobals);
+        $config = new GlobalConfig($mockGlobals, new MockConfigFactory());
 
         $this->assertEquals('', $config->getWebhookSecret());
     }
@@ -217,7 +218,7 @@ class GlobalConfigTest extends TestCase
         $mockGlobals = new MockGlobalsAccessor([
             GlobalConfig::CONFIG_OPTION_WEBHOOK_SECRET => base64_encode('some-secret'),
         ]);
-        $config = new GlobalConfig($mockGlobals);
+        $config = new GlobalConfig($mockGlobals, new MockConfigFactory());
 
         $this->assertTrue($config->isWebhookAuthConfigured());
     }
@@ -227,7 +228,7 @@ class GlobalConfigTest extends TestCase
         $mockGlobals = new MockGlobalsAccessor([
             GlobalConfig::CONFIG_OPTION_WEBHOOK_SECRET => '',
         ]);
-        $config = new GlobalConfig($mockGlobals);
+        $config = new GlobalConfig($mockGlobals, new MockConfigFactory());
 
         $this->assertFalse($config->isWebhookAuthConfigured());
     }
@@ -235,7 +236,7 @@ class GlobalConfigTest extends TestCase
     public function testIsWebhookAuthConfiguredReturnsFalseWhenNotConfigured(): void
     {
         $mockGlobals = new MockGlobalsAccessor([]);
-        $config = new GlobalConfig($mockGlobals);
+        $config = new GlobalConfig($mockGlobals, new MockConfigFactory());
 
         $this->assertFalse($config->isWebhookAuthConfigured());
     }
@@ -246,7 +247,7 @@ class GlobalConfigTest extends TestCase
         $mockGlobals = new MockGlobalsAccessor([
             GlobalConfig::CONFIG_OPTION_WEBHOOK_SECRET => base64_encode($secret),
         ]);
-        $config = new GlobalConfig($mockGlobals);
+        $config = new GlobalConfig($mockGlobals, new MockConfigFactory());
 
         $body = '{"trigger":"MESSAGE_INBOUND"}';
         $nonce = 'abc123';
@@ -262,7 +263,7 @@ class GlobalConfigTest extends TestCase
         $mockGlobals = new MockGlobalsAccessor([
             GlobalConfig::CONFIG_OPTION_WEBHOOK_SECRET => base64_encode('test-secret'),
         ]);
-        $config = new GlobalConfig($mockGlobals);
+        $config = new GlobalConfig($mockGlobals, new MockConfigFactory());
 
         $body = '{"trigger":"MESSAGE_INBOUND"}';
         $nonce = 'abc123';
@@ -274,7 +275,7 @@ class GlobalConfigTest extends TestCase
     public function testVerifyWebhookSignatureReturnsFalseWhenSecretEmpty(): void
     {
         $mockGlobals = new MockGlobalsAccessor([]);
-        $config = new GlobalConfig($mockGlobals);
+        $config = new GlobalConfig($mockGlobals, new MockConfigFactory());
 
         $this->assertFalse($config->verifyWebhookSignature('body', 'sig', '123', 'nonce'));
     }
@@ -285,7 +286,7 @@ class GlobalConfigTest extends TestCase
         $mockGlobals = new MockGlobalsAccessor([
             GlobalConfig::CONFIG_OPTION_WEBHOOK_SECRET => base64_encode($secret),
         ]);
-        $config = new GlobalConfig($mockGlobals);
+        $config = new GlobalConfig($mockGlobals, new MockConfigFactory());
 
         $nonce = 'abc123';
         $timestamp = '1700000000';
@@ -302,7 +303,7 @@ class GlobalConfigTest extends TestCase
         $mockGlobals = new MockGlobalsAccessor([
             GlobalConfig::CONFIG_OPTION_WEBHOOK_SECRET => base64_encode($secret),
         ]);
-        $config = new GlobalConfig($mockGlobals);
+        $config = new GlobalConfig($mockGlobals, new MockConfigFactory());
 
         $body = 'test-body';
         $timestamp = '1700000000';
@@ -315,7 +316,7 @@ class GlobalConfigTest extends TestCase
     public function testGetWebhookIpAllowlistEmpty(): void
     {
         $mockGlobals = new MockGlobalsAccessor([]);
-        $config = new GlobalConfig($mockGlobals);
+        $config = new GlobalConfig($mockGlobals, new MockConfigFactory());
 
         $this->assertEquals([], $config->getWebhookIpAllowlist());
     }
@@ -325,7 +326,7 @@ class GlobalConfigTest extends TestCase
         $mockGlobals = new MockGlobalsAccessor([
             GlobalConfig::CONFIG_OPTION_WEBHOOK_IP_ALLOWLIST => '10.0.0.1,10.0.0.2,192.168.1.0/24',
         ]);
-        $config = new GlobalConfig($mockGlobals);
+        $config = new GlobalConfig($mockGlobals, new MockConfigFactory());
 
         $this->assertEquals(['10.0.0.1', '10.0.0.2', '192.168.1.0/24'], $config->getWebhookIpAllowlist());
     }
@@ -335,7 +336,7 @@ class GlobalConfigTest extends TestCase
         $mockGlobals = new MockGlobalsAccessor([
             GlobalConfig::CONFIG_OPTION_WEBHOOK_IP_ALLOWLIST => "10.0.0.1\n10.0.0.2\n192.168.1.0/24",
         ]);
-        $config = new GlobalConfig($mockGlobals);
+        $config = new GlobalConfig($mockGlobals, new MockConfigFactory());
 
         $this->assertEquals(['10.0.0.1', '10.0.0.2', '192.168.1.0/24'], $config->getWebhookIpAllowlist());
     }
@@ -345,7 +346,7 @@ class GlobalConfigTest extends TestCase
         $mockGlobals = new MockGlobalsAccessor([
             GlobalConfig::CONFIG_OPTION_WEBHOOK_IP_ALLOWLIST => " 10.0.0.1 , 10.0.0.2 ",
         ]);
-        $config = new GlobalConfig($mockGlobals);
+        $config = new GlobalConfig($mockGlobals, new MockConfigFactory());
 
         $this->assertEquals(['10.0.0.1', '10.0.0.2'], $config->getWebhookIpAllowlist());
     }
@@ -353,7 +354,7 @@ class GlobalConfigTest extends TestCase
     public function testIsIpInAllowlistReturnsTrueWhenEmpty(): void
     {
         $mockGlobals = new MockGlobalsAccessor([]);
-        $config = new GlobalConfig($mockGlobals);
+        $config = new GlobalConfig($mockGlobals, new MockConfigFactory());
 
         $this->assertTrue($config->isIpInAllowlist('1.2.3.4'));
     }
@@ -363,7 +364,7 @@ class GlobalConfigTest extends TestCase
         $mockGlobals = new MockGlobalsAccessor([
             GlobalConfig::CONFIG_OPTION_WEBHOOK_IP_ALLOWLIST => '10.0.0.1,10.0.0.2',
         ]);
-        $config = new GlobalConfig($mockGlobals);
+        $config = new GlobalConfig($mockGlobals, new MockConfigFactory());
 
         $this->assertTrue($config->isIpInAllowlist('10.0.0.1'));
     }
@@ -373,7 +374,7 @@ class GlobalConfigTest extends TestCase
         $mockGlobals = new MockGlobalsAccessor([
             GlobalConfig::CONFIG_OPTION_WEBHOOK_IP_ALLOWLIST => '10.0.0.1,10.0.0.2',
         ]);
-        $config = new GlobalConfig($mockGlobals);
+        $config = new GlobalConfig($mockGlobals, new MockConfigFactory());
 
         $this->assertFalse($config->isIpInAllowlist('192.168.1.1'));
     }
@@ -383,7 +384,7 @@ class GlobalConfigTest extends TestCase
         $mockGlobals = new MockGlobalsAccessor([
             GlobalConfig::CONFIG_OPTION_WEBHOOK_IP_ALLOWLIST => '192.168.1.0/24',
         ]);
-        $config = new GlobalConfig($mockGlobals);
+        $config = new GlobalConfig($mockGlobals, new MockConfigFactory());
 
         $this->assertTrue($config->isIpInAllowlist('192.168.1.50'));
         $this->assertFalse($config->isIpInAllowlist('192.168.2.1'));

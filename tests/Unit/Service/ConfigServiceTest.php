@@ -16,6 +16,7 @@ namespace OpenCoreEMR\Modules\SinchConversations\Tests\Unit\Service;
 
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Service\ConfigService;
+use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockConfigFactory;
 use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockGlobalsAccessor;
 use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
 use OpenEMR\Common\Database\QueryUtils;
@@ -32,7 +33,7 @@ class ConfigServiceTest extends TestCase
         QueryUtils::clearMockResults();
         SystemLogger::clearLogs();
 
-        $config = new GlobalConfig(new MockGlobalsAccessor([]));
+        $config = new GlobalConfig(new MockGlobalsAccessor([]), new MockConfigFactory());
         $this->service = new ConfigService($config);
     }
 

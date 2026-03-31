@@ -17,6 +17,7 @@ namespace OpenCoreEMR\Modules\SinchConversations\Tests\Unit\Service;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Service\MessageOptions;
 use OpenCoreEMR\Modules\SinchConversations\Service\MessageService;
+use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockConfigFactory;
 use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockGlobalsAccessor;
 use OpenCoreEMR\Sinch\Conversation\Client\ConversationApiClient;
 use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
@@ -39,7 +40,7 @@ class MessageServiceTest extends TestCase
 
         $this->config = new GlobalConfig(new MockGlobalsAccessor([
             GlobalConfig::CONFIG_OPTION_CLINIC_PHONE => '+15551234567',
-        ]));
+        ]), new MockConfigFactory());
         $this->apiClient = $this->createMock(ConversationApiClient::class);
         $this->service = new MessageService($this->config, $this->apiClient);
     }

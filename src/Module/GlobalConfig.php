@@ -14,6 +14,8 @@ declare(strict_types=1);
 
 namespace OpenCoreEMR\Modules\SinchConversations;
 
+use OpenCoreEMR\ModuleConfig\ConfigAccessorInterface;
+use OpenCoreEMR\ModuleConfig\ConfigFactory;
 use OpenEMR\Common\Crypto\CryptoGen;
 use Symfony\Component\HttpFoundation\IpUtils;
 
@@ -22,9 +24,10 @@ class GlobalConfig
     private readonly bool $isExternalConfigMode;
 
     public function __construct(
-        private readonly ConfigAccessorInterface $configAccessor = new GlobalsAccessor()
+        private readonly ConfigAccessorInterface $configAccessor,
+        ConfigFactory $configFactory,
     ) {
-        $this->isExternalConfigMode = ConfigFactory::isExternalConfigMode();
+        $this->isExternalConfigMode = $configFactory->isExternalConfigMode();
     }
 
     public const CONFIG_OPTION_ENABLED = 'oce_sinch_conversations_enabled';

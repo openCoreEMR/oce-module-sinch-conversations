@@ -15,7 +15,6 @@ declare(strict_types=1);
 namespace OpenCoreEMR\Modules\SinchConversations\Command;
 
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
-use OpenCoreEMR\Modules\SinchConversations\GlobalsAccessor;
 
 /**
  * Configuration adapter for CLI usage without OpenEMR globals

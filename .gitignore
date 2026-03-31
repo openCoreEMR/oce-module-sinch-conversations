@@ -8,6 +8,9 @@ composer.lock
 *.sublime-project
 *.sublime-workspace
 
+# Claude Code
+.claude/settings.local.json
+
 # OS
 .DS_Store
 Thumbs.db

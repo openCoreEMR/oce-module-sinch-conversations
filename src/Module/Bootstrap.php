@@ -14,12 +14,14 @@ declare(strict_types=1);
 
 namespace OpenCoreEMR\Modules\SinchConversations;
 
+use OpenCoreEMR\ModuleConfig\ConfigAccessorInterface;
+use OpenCoreEMR\ModuleConfig\ConfigFactory;
+use OpenCoreEMR\ModuleConfig\GlobalsRegistrar;
 use OpenEMR\Common\Logging\SystemLogger;
 use OpenEMR\Common\Twig\TwigContainer;
 use OpenEMR\Core\Kernel;
-use OpenEMR\Events\Globals\GlobalsInitializedEvent;
+use OpenEMR\Core\OEGlobalsBag;
 use OpenEMR\Menu\MenuEvent;
-use OpenEMR\Services\Globals\GlobalSetting;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
 class Bootstrap
@@ -27,6 +29,7 @@ class Bootstrap
     public const MODULE_NAME = "oce-module-sinch-conversations";
 
     private readonly GlobalConfig $globalsConfig;
+    private readonly ConfigFactory $configFactory;
     private readonly SessionAccessor $session;
     private readonly \Twig\Environment $twig;
     private readonly SystemLogger $logger;
@@ -35,12 +38,15 @@ class Bootstrap
         private readonly EventDispatcherInterface $eventDispatcher,
         private readonly Kernel $kernel = new Kernel(),
         ?ConfigAccessorInterface $configAccessor = null,
+        ?ConfigFactory $configFactory = null,
     ) {
-        // When no accessor is injected, resolve via ConfigFactory (which
-        // detects file/env/database config mode in one pass).
-        // When an accessor IS injected (e.g., mocks in tests), always honor it.
-        $accessor = $configAccessor ?? ConfigFactory::createConfigAccessor();
-        $this->globalsConfig = new GlobalConfig($accessor);
+        $descriptor = SinchModuleConfig::createConfigDescriptor();
+        $this->configFactory = $configFactory ?? new ConfigFactory(
+            $descriptor,
+            OEGlobalsBag::getInstance()
+        );
+        $accessor = $configAccessor ?? $this->configFactory->createConfigAccessor();
+        $this->globalsConfig = new GlobalConfig($accessor, $this->configFactory);
         $this->session = new SessionAccessor();
 
         $templatePath = \dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . "templates" . DIRECTORY_SEPARATOR;
@@ -66,56 +72,10 @@ class Bootstrap
 
     private function addGlobalSettings(): void
     {
-        $this->eventDispatcher->addListener(
-            GlobalsInitializedEvent::EVENT_HANDLE,
-            function (GlobalsInitializedEvent $event): void {
-                $event->getGlobalsService()->createSection(
-                    'OpenCoreEMR Sinch Conversations'
-                );
-
-                $setting = new GlobalSetting(
-                    xlt('Enable OpenCoreEMR Sinch Conversations Module'),
-                    'bool',
-                    '0',
-                    xlt('Enable or disable the OpenCoreEMR Sinch Conversations integration for patient messaging')
-                );
-                $event->getGlobalsService()->appendToSection(
-                    'OpenCoreEMR Sinch Conversations',
-                    GlobalConfig::CONFIG_OPTION_ENABLED,
-                    $setting
-                );
-
-                $settingsPath = $this->globalsConfig->getWebroot()
-                    . '/interface/modules/custom_modules/' . self::MODULE_NAME
-                    . '/public/settings.php';
-                $setting = new GlobalSetting(
-                    xlt('Module Settings'),
-                    GlobalSetting::DATA_TYPE_HTML_DISPLAY_SECTION,
-                    '',
-                    xlt('Link to the module settings page')
-                );
-                $setting->addFieldOption(
-                    GlobalSetting::DATA_TYPE_OPTION_RENDER_CALLBACK,
-                    static function () use ($settingsPath): string {
-                        $url = attr($settingsPath);
-                        $label = xlt('Open Module Settings');
-                        $description = xlt(
-                            'API credentials, messaging configuration, and webhook settings'
-                            . ' are managed on the module settings page.'
-                        );
-                        return <<<HTML
-                            <p>{$description}</p>
-                            <a href="{$url}" class="btn btn-secondary btn-sm"
-                               onclick="top.restoreSession()">{$label}</a>
-                            HTML;
-                    }
-                );
-                $event->getGlobalsService()->appendToSection(
-                    'OpenCoreEMR Sinch Conversations',
-                    'oce_sinch_conversations_settings_link',
-                    $setting
-                );
-            }
+        $registrar = new GlobalsRegistrar(OEGlobalsBag::getInstance());
+        $registrar->register(
+            $this->eventDispatcher,
+            SinchModuleConfig::createGlobalsSectionDescriptor()
         );
     }
 

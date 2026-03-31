@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Mock GlobalsAccessor for testing
+ * Mock config accessor for testing
  *
  * @package   OpenCoreEMR
  * @link      https://opencoreemr.com
@@ -14,59 +14,31 @@ declare(strict_types=1);
 
 namespace OpenCoreEMR\Modules\SinchConversations\Tests\Mocks;
 
-use OpenCoreEMR\Modules\SinchConversations\GlobalsAccessor;
+use OpenCoreEMR\ModuleConfig\ConfigAccessorInterface;
 
-class MockGlobalsAccessor extends GlobalsAccessor
+class MockGlobalsAccessor implements ConfigAccessorInterface
 {
-    /**
-     * @var array<string, mixed>
-     */
-    private array $mockData = [];
-
     /**
      * @param array<string, mixed> $data
      */
-    public function __construct(array $data = [])
+    public function __construct(private array $data = [])
     {
-        $this->mockData = $data;
     }
 
-    /**
-     * @param string $key
-     * @param mixed $default
-     * @return mixed
-     */
-    public function get(string $key, mixed $default = null): mixed
-    {
-        return $this->mockData[$key] ?? $default;
-    }
-
-    /**
-     * @param string $key
-     * @param string $default
-     */
     public function getString(string $key, string $default = ''): string
     {
-        $value = $this->mockData[$key] ?? $default;
-        return is_string($value) ? $value : (string)$value;
+        $value = $this->data[$key] ?? $default;
+        return is_string($value) ? $value : (string) $value;
     }
 
-    /**
-     * @param string $key
-     * @param int $default
-     */
     public function getInt(string $key, int $default = 0): int
     {
-        return (int)($this->mockData[$key] ?? $default);
+        return (int) ($this->data[$key] ?? $default);
     }
 
-    /**
-     * @param string $key
-     * @param bool $default
-     */
     public function getBoolean(string $key, bool $default = false): bool
     {
-        $value = $this->mockData[$key] ?? $default;
+        $value = $this->data[$key] ?? $default;
         if (is_bool($value)) {
             return $value;
         }
@@ -75,23 +47,6 @@ class MockGlobalsAccessor extends GlobalsAccessor
 
     public function has(string $key): bool
     {
-        return isset($this->mockData[$key]);
-    }
-
-    /**
-     * @param string $key
-     * @param mixed $value
-     */
-    public function set(string $key, mixed $value): void
-    {
-        $this->mockData[$key] = $value;
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    public function all(): array
-    {
-        return $this->mockData;
+        return array_key_exists($key, $this->data);
     }
 }

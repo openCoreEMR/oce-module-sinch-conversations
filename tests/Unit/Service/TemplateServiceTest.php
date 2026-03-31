@@ -16,6 +16,7 @@ namespace OpenCoreEMR\Modules\SinchConversations\Tests\Unit\Service;
 
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Service\TemplateService;
+use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockConfigFactory;
 use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockGlobalsAccessor;
 use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
 use OpenEMR\Common\Database\QueryUtils;
@@ -32,7 +33,7 @@ class TemplateServiceTest extends TestCase
         QueryUtils::clearMockResults();
         SystemLogger::clearLogs();
 
-        $config = new GlobalConfig(new MockGlobalsAccessor([]));
+        $config = new GlobalConfig(new MockGlobalsAccessor([]), new MockConfigFactory());
         $this->service = new TemplateService($config);
     }
 
@@ -276,7 +277,7 @@ class TemplateServiceTest extends TestCase
     {
         $config = new GlobalConfig(new MockGlobalsAccessor([
             'portal_onsite_two_enable' => true,
-        ]));
+        ]), new MockConfigFactory());
         $service = new TemplateService($config);
 
         $this->assertEquals('appointment_reminder_portal', $service->getAppointmentReminderTemplateKey());
@@ -286,7 +287,7 @@ class TemplateServiceTest extends TestCase
     {
         $config = new GlobalConfig(new MockGlobalsAccessor([
             'portal_onsite_two_enable' => false,
-        ]));
+        ]), new MockConfigFactory());
         $service = new TemplateService($config);
 
         $this->assertEquals('appointment_reminder_no_portal', $service->getAppointmentReminderTemplateKey());
@@ -294,7 +295,7 @@ class TemplateServiceTest extends TestCase
 
     public function testAppointmentReminderTemplateKeyDefaultsToNoPortal(): void
     {
-        $config = new GlobalConfig(new MockGlobalsAccessor([]));
+        $config = new GlobalConfig(new MockGlobalsAccessor([]), new MockConfigFactory());
         $service = new TemplateService($config);
 
         $this->assertEquals('appointment_reminder_no_portal', $service->getAppointmentReminderTemplateKey());
