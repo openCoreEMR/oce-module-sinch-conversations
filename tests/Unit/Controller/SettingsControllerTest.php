@@ -19,6 +19,7 @@ use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Service\ConfigService;
 use OpenCoreEMR\Modules\SinchConversations\Service\TemplateSyncService;
 use OpenCoreEMR\Modules\SinchConversations\SessionAccessor;
+use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockConfigFactory;
 use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockGlobalsAccessor;
 use OpenCoreEMR\Sinch\Conversation\Client\ConversationApiClient;
 use OpenCoreEMR\Sinch\Conversation\Exception\AccessDeniedException;
@@ -70,7 +71,7 @@ class SettingsControllerTest extends TestCase
             GlobalConfig::CONFIG_OPTION_DEFAULT_CHANNEL => 'SMS',
             GlobalConfig::CONFIG_OPTION_CLINIC_NAME => 'Test Clinic',
             GlobalConfig::CONFIG_OPTION_CLINIC_PHONE => '+15551234567',
-        ]));
+        ]), new MockConfigFactory());
 
         $this->configService = $this->createMock(ConfigService::class);
         $this->apiClient = $this->createMock(ConversationApiClient::class);
@@ -193,7 +194,7 @@ class SettingsControllerTest extends TestCase
                 GlobalConfig::CONFIG_OPTION_DEFAULT_CHANNEL => 'SMS',
                 GlobalConfig::CONFIG_OPTION_CLINIC_NAME => 'Test Clinic',
                 GlobalConfig::CONFIG_OPTION_CLINIC_PHONE => '+15551234567',
-            ]));
+            ]), new MockConfigFactory());
             $this->controller = new SettingsController(
                 $this->config,
                 $this->configService,
@@ -319,7 +320,7 @@ class SettingsControllerTest extends TestCase
 
     public function testTestReturnsBadRequestWhenNotConfigured(): void
     {
-        $config = new GlobalConfig(new MockGlobalsAccessor([]));
+        $config = new GlobalConfig(new MockGlobalsAccessor([]), new MockConfigFactory());
         $controller = new SettingsController(
             $config,
             $this->configService,
@@ -472,7 +473,7 @@ class SettingsControllerTest extends TestCase
 
     public function testSyncTemplatesReturnsBadRequestWhenNotConfigured(): void
     {
-        $config = new GlobalConfig(new MockGlobalsAccessor([]));
+        $config = new GlobalConfig(new MockGlobalsAccessor([]), new MockConfigFactory());
         $controller = new SettingsController(
             $config,
             $this->configService,

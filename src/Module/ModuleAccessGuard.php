@@ -14,7 +14,10 @@ declare(strict_types=1);
 
 namespace OpenCoreEMR\Modules\SinchConversations;
 
+use OpenCoreEMR\ModuleConfig\ConfigAccessorInterface;
+use OpenCoreEMR\ModuleConfig\ConfigFactory;
 use OpenEMR\Common\Database\QueryUtils;
+use OpenEMR\Core\OEGlobalsBag;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -53,7 +56,13 @@ class ModuleAccessGuard
         }
 
         // Check module's own enabled setting (respects env config mode)
-        $configAccessor ??= ConfigFactory::createConfigAccessor();
+        if ($configAccessor === null) {
+            $factory = new ConfigFactory(
+                SinchModuleConfig::createConfigDescriptor(),
+                OEGlobalsBag::getInstance()
+            );
+            $configAccessor = $factory->createConfigAccessor();
+        }
         if (!$configAccessor->getBoolean(GlobalConfig::CONFIG_OPTION_ENABLED, false)) {
             return self::createNotFoundResponse();
         }

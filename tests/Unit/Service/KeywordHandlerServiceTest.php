@@ -18,6 +18,7 @@ use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Service\ConsentService;
 use OpenCoreEMR\Modules\SinchConversations\Service\KeywordHandlerService;
 use OpenCoreEMR\Modules\SinchConversations\Service\TemplateService;
+use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockConfigFactory;
 use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockGlobalsAccessor;
 use OpenEMR\Common\Database\QueryUtils;
 use OpenEMR\Common\Logging\SystemLogger;
@@ -42,7 +43,7 @@ class KeywordHandlerServiceTest extends TestCase
             GlobalConfig::CONFIG_OPTION_CLINIC_NAME => 'Test Clinic',
             GlobalConfig::CONFIG_OPTION_CLINIC_PHONE => '+15551234567',
         ]);
-        $this->config = new GlobalConfig($mockGlobals);
+        $this->config = new GlobalConfig($mockGlobals, new MockConfigFactory());
         $this->consentService = $this->createMock(ConsentService::class);
         $this->templateService = $this->createMock(TemplateService::class);
 

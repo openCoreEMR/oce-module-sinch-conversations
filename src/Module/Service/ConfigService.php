@@ -14,19 +14,20 @@ declare(strict_types=1);
 
 namespace OpenCoreEMR\Modules\SinchConversations\Service;
 
+use OpenCoreEMR\ModuleConfig\ConfigService as LibConfigService;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
-use OpenEMR\Common\Crypto\CryptoGen;
-use OpenEMR\Common\Database\QueryUtils;
 use OpenEMR\Common\Logging\SystemLogger;
 
 class ConfigService
 {
+    private readonly LibConfigService $libConfigService;
     private readonly SystemLogger $logger;
 
     public function __construct(
         private readonly GlobalConfig $config
     ) {
+        $this->libConfigService = new LibConfigService();
         $this->logger = new SystemLogger();
     }
 
@@ -149,34 +150,13 @@ class ConfigService
         }
     }
 
-    /**
-     * Save a single setting to globals table
-     *
-     * @param string $key
-     * @param string $value
-     * @return void
-     */
     private function saveSetting(string $key, string $value): void
     {
-        $sql = <<<'SQL'
-            INSERT INTO `globals` (`gl_name`, `gl_index`, `gl_value`)
-            VALUES (?, 0, ?)
-            ON DUPLICATE KEY UPDATE `gl_value` = VALUES(`gl_value`)
-            SQL;
-        QueryUtils::sqlStatementThrowException($sql, [$key, $value]);
+        $this->libConfigService->saveSetting($key, $value);
     }
 
-    /**
-     * Save an encrypted setting to globals table
-     *
-     * @param string $key
-     * @param string $value
-     * @return void
-     */
     private function saveEncryptedSetting(string $key, string $value): void
     {
-        $cryptoGen = new CryptoGen();
-        $encrypted = $cryptoGen->encryptStandard($value);
-        $this->saveSetting($key, $encrypted);
+        $this->libConfigService->saveEncryptedSetting($key, $value);
     }
 }

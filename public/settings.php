@@ -15,16 +15,19 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../../../globals.php';
 
 use OpenCoreEMR\Modules\SinchConversations\Bootstrap;
-use OpenCoreEMR\Modules\SinchConversations\GlobalsAccessor;
 use OpenCoreEMR\Sinch\Conversation\Exception\ExceptionInterface;
 use OpenEMR\Common\Logging\SystemLogger;
+use OpenEMR\Core\Kernel;
+use OpenEMR\Core\OEGlobalsBag;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
 
 $logger = new SystemLogger();
-$globalsAccessor = new GlobalsAccessor();
 
-$kernel = $globalsAccessor->getKernel();
+$kernel = OEGlobalsBag::getInstance()->get('kernel');
+if (!$kernel instanceof Kernel) {
+    throw new \RuntimeException('OpenEMR Kernel not available');
+}
 $bootstrap = new Bootstrap($kernel->getEventDispatcher(), $kernel);
 
 $controller = $bootstrap->getSettingsController();

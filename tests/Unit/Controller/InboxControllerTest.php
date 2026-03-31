@@ -18,6 +18,7 @@ use OpenCoreEMR\Modules\SinchConversations\Controller\InboxController;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Service\MessagePollingService;
 use OpenCoreEMR\Modules\SinchConversations\SessionAccessor;
+use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockConfigFactory;
 use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockGlobalsAccessor;
 use OpenCoreEMR\Sinch\Conversation\Exception\AccessDeniedException;
 use OpenEMR\Common\Csrf\CsrfUtils;
@@ -69,7 +70,7 @@ class InboxControllerTest extends TestCase
             'assets_static_relative' => '/assets',
         ]);
 
-        $this->config = new GlobalConfig($mockGlobals);
+        $this->config = new GlobalConfig($mockGlobals, new MockConfigFactory());
         $this->pollingService = $this->createMock(MessagePollingService::class);
         $this->session = $this->createMock(SessionAccessor::class);
 

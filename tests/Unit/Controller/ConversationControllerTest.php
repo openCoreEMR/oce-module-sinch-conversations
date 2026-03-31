@@ -19,6 +19,7 @@ use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Service\MessagePollingService;
 use OpenCoreEMR\Modules\SinchConversations\Service\MessageService;
 use OpenCoreEMR\Modules\SinchConversations\SessionAccessor;
+use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockConfigFactory;
 use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockGlobalsAccessor;
 use OpenCoreEMR\Sinch\Conversation\Exception\AccessDeniedException;
 use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
@@ -61,7 +62,7 @@ class ConversationControllerTest extends TestCase
         $this->config = new GlobalConfig(new MockGlobalsAccessor([
             GlobalConfig::CONFIG_OPTION_PROJECT_ID => 'test-project',
             GlobalConfig::CONFIG_OPTION_CLINIC_PHONE => '+15551234567',
-        ]));
+        ]), new MockConfigFactory());
         $this->pollingService = $this->createMock(MessagePollingService::class);
         $this->messageService = $this->createMock(MessageService::class);
         $this->session = $this->createMock(SessionAccessor::class);

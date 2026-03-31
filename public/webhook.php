@@ -20,12 +20,13 @@ $ignoreAuth = true;
 
 require_once __DIR__ . '/../../../../globals.php';
 
+use OpenCoreEMR\ModuleConfig\ConfigFactory;
 use OpenCoreEMR\Modules\SinchConversations\Bootstrap;
-use OpenCoreEMR\Modules\SinchConversations\ConfigFactory;
-use OpenCoreEMR\Modules\SinchConversations\GlobalsAccessor;
 use OpenCoreEMR\Modules\SinchConversations\ModuleAccessGuard;
+use OpenCoreEMR\Modules\SinchConversations\SinchModuleConfig;
 use OpenCoreEMR\Sinch\Conversation\Exception\ExceptionInterface;
 use OpenEMR\Common\Logging\SystemLogger;
+use OpenEMR\Core\OEGlobalsBag;
 use Symfony\Component\HttpFoundation\Response;
 
 // Check if module is installed and enabled - return 404 if not
@@ -38,10 +39,14 @@ if ($guardResponse instanceof Response) {
 $logger = new SystemLogger();
 
 try {
-    $globalsAccessor = new GlobalsAccessor();
-    $kernel = $globalsAccessor->getKernel();
-    $configAccessor = ConfigFactory::createConfigAccessor();
-    $bootstrap = new Bootstrap($kernel->getEventDispatcher(), $kernel, $configAccessor);
+    $globalsBag = OEGlobalsBag::getInstance();
+    $kernel = $globalsBag->get('kernel');
+    if (!$kernel instanceof \OpenEMR\Core\Kernel) {
+        throw new \RuntimeException('OpenEMR Kernel not available');
+    }
+    $configFactory = new ConfigFactory(SinchModuleConfig::createConfigDescriptor(), $globalsBag);
+    $configAccessor = $configFactory->createConfigAccessor();
+    $bootstrap = new Bootstrap($kernel->getEventDispatcher(), $kernel, $configAccessor, $configFactory);
 
     $controller = $bootstrap->getWebhookController();
     $response = $controller->dispatch();

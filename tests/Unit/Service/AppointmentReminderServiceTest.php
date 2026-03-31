@@ -18,6 +18,7 @@ use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Service\AppointmentReminderService;
 use OpenCoreEMR\Modules\SinchConversations\Service\MessageService;
 use OpenCoreEMR\Modules\SinchConversations\Service\TemplateService;
+use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockConfigFactory;
 use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockGlobalsAccessor;
 use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
 use OpenEMR\Common\Database\QueryUtils;
@@ -42,7 +43,7 @@ class AppointmentReminderServiceTest extends TestCase
             'SMS_NOTIFICATION_HOUR' => 24,
             GlobalConfig::CONFIG_OPTION_CLINIC_NAME => 'Test Clinic',
             GlobalConfig::CONFIG_OPTION_CLINIC_PHONE => '+15551234567',
-        ]));
+        ]), new MockConfigFactory());
 
         $this->templateService = $this->createMock(TemplateService::class);
         $this->messageService = $this->createMock(MessageService::class);
@@ -60,7 +61,7 @@ class AppointmentReminderServiceTest extends TestCase
     {
         $config = new GlobalConfig(new MockGlobalsAccessor([
             'SMS_NOTIFICATION_HOUR' => 0,
-        ]));
+        ]), new MockConfigFactory());
         $service = new AppointmentReminderService(
             $config,
             $this->templateService,
@@ -318,7 +319,7 @@ class AppointmentReminderServiceTest extends TestCase
             GlobalConfig::CONFIG_OPTION_CLINIC_NAME => 'Portal Clinic',
             'portal_onsite_two_enable' => true,
             'portal_onsite_two_address' => 'https://portal.example.com',
-        ]));
+        ]), new MockConfigFactory());
         $service = new AppointmentReminderService(
             $config,
             $this->templateService,

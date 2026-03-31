@@ -20,6 +20,7 @@ use OpenCoreEMR\Modules\SinchConversations\Service\ConsentService;
 use OpenCoreEMR\Modules\SinchConversations\Service\MessageOptions;
 use OpenCoreEMR\Modules\SinchConversations\Service\MessageService;
 use OpenCoreEMR\Modules\SinchConversations\Service\TemplateService;
+use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockConfigFactory;
 use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockGlobalsAccessor;
 use OpenEMR\Common\Database\QueryUtils;
 use OpenEMR\Common\Logging\SystemLogger;
@@ -41,7 +42,7 @@ class ConsentServiceTest extends TestCase
 
         $this->config = new GlobalConfig(new MockGlobalsAccessor([
             GlobalConfig::CONFIG_OPTION_CLINIC_NAME => 'Test Clinic',
-        ]));
+        ]), new MockConfigFactory());
         $this->templateService = $this->createMock(TemplateService::class);
         $this->messageService = $this->createMock(MessageService::class);
 

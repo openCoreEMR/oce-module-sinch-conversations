@@ -18,6 +18,7 @@ use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Service\KeywordHandlerService;
 use OpenCoreEMR\Modules\SinchConversations\Service\MessagePollingService;
 use OpenCoreEMR\Modules\SinchConversations\Service\MessageService;
+use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockConfigFactory;
 use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockGlobalsAccessor;
 use OpenCoreEMR\Sinch\Conversation\Client\ConversationApiClient;
 use OpenEMR\Common\Database\QueryUtils;
@@ -39,7 +40,7 @@ class MessagePollingServiceTest extends TestCase
         QueryUtils::clearMockResults();
         SystemLogger::clearLogs();
 
-        $this->config = new GlobalConfig(new MockGlobalsAccessor([]));
+        $this->config = new GlobalConfig(new MockGlobalsAccessor([]), new MockConfigFactory());
         $this->apiClient = $this->createMock(ConversationApiClient::class);
         $this->keywordHandler = $this->createMock(KeywordHandlerService::class);
         $this->messageService = $this->createMock(MessageService::class);
