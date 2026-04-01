@@ -23,17 +23,15 @@ use Symfony\Component\HttpFoundation\Response;
 
 $logger = new SystemLogger();
 
-$kernel = OEGlobalsBag::getInstance()->get('kernel');
-if (!$kernel instanceof Kernel) {
-    throw new \RuntimeException('OpenEMR Kernel not available');
-}
-$bootstrap = new Bootstrap($kernel->getEventDispatcher(), $kernel);
-
-$controller = $bootstrap->getInboxController();
-
 $action = (string)($_GET['action'] ?? $_POST['action'] ?? 'list');
 
 try {
+    $kernel = OEGlobalsBag::getInstance()->get('kernel');
+    if (!$kernel instanceof Kernel) {
+        throw new \RuntimeException('OpenEMR Kernel not available');
+    }
+    $bootstrap = new Bootstrap($kernel->getEventDispatcher(), $kernel);
+    $controller = $bootstrap->getInboxController();
     $response = $controller->dispatch($action);
     $response->send();
 } catch (ExceptionInterface $e) {
