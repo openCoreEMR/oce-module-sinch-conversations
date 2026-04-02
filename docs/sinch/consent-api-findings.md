@@ -107,12 +107,14 @@ Messages sent via the Conversation API were silently dropped (accepted with 200 
 
 ## Credential Configuration
 
-The Sinch Conversations app used for Consent Management resides in the **parent project**, not in a subproject. The API credentials must belong to the same (parent) project as the app — credentials scoped to a different project or subproject can authenticate but silently fail to access the parent project's apps.
+The API credentials must belong to the same Sinch project as the Conversations app. Credentials from a different project can authenticate but silently fail to access the target project's apps.
+
+Note: Sinch "parent" and "sub" projects are effectively independent projects — there is no real hierarchy. A subproject's credentials grant no access to a parent project's resources, and vice versa. The naming is misleading.
 
 In practice, this means:
 - Verify which Sinch project owns the Conversations app you are targeting.
-- Ensure the API key/secret you configure for Consent Management are issued for that same project.
-- Avoid reusing subproject-specific credentials if the app is attached to the parent project.
+- Ensure the API key/secret you configure are issued for that same project.
+- Do not assume credentials from one project (parent or sub) work for another.
 
 Details about where these credentials are stored (e.g., vault names, item labels, CLI commands) should be documented in an internal runbook or secret-management guide, not in this repository.
 
