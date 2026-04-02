@@ -46,6 +46,12 @@ This document describes the architectural patterns and conventions for OpenEMR m
 | [Opt-Out Handling](docs/messaging/opt-out.md) | Opt-out keywords, flows (via text and chart), compliance notes |
 | [Testing Scenarios](docs/messaging/testing.md) | End-to-end testing scenarios for messaging functionality |
 
+### Architecture Decision Records
+
+| Document | Description |
+|----------|-------------|
+| [ADR-0001: Dispatch Mode + Consent Management](docs/adr/0001-dispatch-mode-consent-management.md) | Opt-out architecture: DISPATCH mode, Sinch Consent Management, consent API polling, multi-tenant |
+
 ### Regulatory
 
 | Document | Description |

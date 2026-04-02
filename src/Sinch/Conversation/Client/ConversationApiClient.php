@@ -704,6 +704,141 @@ class ConversationApiClient
     }
 
     /**
+     * Get the consent status for a phone number
+     *
+     * Queries the Sinch Consent Management API using the validated
+     * `/consents/{list_type}` endpoint structure. Queries the OPT_OUT_ALL
+     * list and searches for the given identity in the response.
+     *
+     * @return array<string, mixed> Consent data or empty array if not found
+     * @throws ApiException
+     */
+    public function getConsentStatus(string $appId, string $channelIdentity): array
+    {
+        if ($appId === '') {
+            throw new ApiException('App ID is required to get consent status');
+        }
+
+        $projectId = $this->config->getSinchProjectId();
+        $listType = 'OPT_OUT_ALL';
+
+        $endpoint = "/v1/projects/{$projectId}/apps/{$appId}/consents/{$listType}";
+
+        try {
+            $this->logger->debug(
+                'Querying consent status',
+                [
+                    'endpoint' => $endpoint,
+                    'channel_identity' => $channelIdentity,
+                    'list_type' => $listType,
+                ]
+            );
+
+            $response = $this->httpClient->get(
+                $endpoint,
+                ['headers' => $this->getHeaders()]
+            );
+
+            $this->logger->debug(
+                'Consent status response',
+                [
+                    'endpoint' => $endpoint,
+                    'status_code' => $response->getStatusCode(),
+                    'list_type' => $listType,
+                ]
+            );
+
+            $statusCode = $response->getStatusCode();
+
+            // 404 can mean lazily-created empty list OR misconfiguration
+            if ($statusCode === 404) {
+                $body = (string) $response->getBody();
+                if (str_contains($body, 'ListType') && str_contains($body, 'does not exist')) {
+                    return [];
+                }
+                throw new ApiException('Consent API returned 404: ' . $body, $statusCode);
+            }
+
+            $data = $this->handleResponse($response);
+
+            // Filter to the requested identity (API returns full list)
+            $normalized = ltrim($channelIdentity, '+');
+            foreach ($data['identities'] ?? [] as $entry) {
+                if (is_array($entry) && ($entry['identity'] ?? '') === $normalized) {
+                    return $entry;
+                }
+            }
+
+            return [];
+        } catch (GuzzleException $e) {
+            $this->logger->error(
+                'Consent status request failed',
+                [
+                    'endpoint' => $endpoint,
+                    'channel_identity' => $channelIdentity,
+                    'exception' => $e,
+                ]
+            );
+
+            throw new ApiException('Failed to get consent status', 0, $e);
+        }
+    }
+
+    /**
+     * List all opted-out numbers for an app
+     *
+     * Queries the Sinch Consent Management API using the validated
+     * `/consents/OPT_OUT_ALL` endpoint and parses the `identities` field.
+     *
+     * @return array<int, array<string, mixed>>
+     * @throws ApiException
+     */
+    public function listOptOuts(string $appId): array
+    {
+        $projectId = $this->config->getSinchProjectId();
+        $listType = 'OPT_OUT_ALL';
+
+        $endpoint = "/v1/projects/{$projectId}/apps/{$appId}/consents/{$listType}";
+
+        try {
+            $this->logger->debug(
+                'Listing opt-outs',
+                ['endpoint' => $endpoint, 'app_id' => $appId]
+            );
+
+            $response = $this->httpClient->get(
+                $endpoint,
+                ['headers' => $this->getHeaders()]
+            );
+
+            $this->logger->debug(
+                'Opt-out list response',
+                ['endpoint' => $endpoint, 'status_code' => $response->getStatusCode()]
+            );
+
+            $statusCode = $response->getStatusCode();
+
+            // 404 can mean lazily-created empty list OR misconfiguration
+            if ($statusCode === 404) {
+                $body = (string) $response->getBody();
+                if (str_contains($body, 'ListType') && str_contains($body, 'does not exist')) {
+                    return [];
+                }
+                throw new ApiException('Consent API returned 404: ' . $body, $statusCode);
+            }
+
+            $data = $this->handleResponse($response);
+            return $data['identities'] ?? [];
+        } catch (GuzzleException $e) {
+            $this->logger->error(
+                'Opt-out list request failed',
+                ['endpoint' => $endpoint, 'exception' => $e]
+            );
+            throw new ApiException('Failed to list opt-outs', 0, $e);
+        }
+    }
+
+    /**
      * Get authorization headers with OAuth2 token
      *
      * @return array<string, string>

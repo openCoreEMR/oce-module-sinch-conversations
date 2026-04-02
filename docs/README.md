@@ -23,6 +23,8 @@ docs/
 │   ├── appointment-reminders.md # Phase 1 scope, templates, variables
 │   ├── opt-out.md          # Opt-out keywords, flows, compliance
 │   └── testing.md          # End-to-end testing scenarios
+├── adr/                     # Architecture Decision Records
+│   └── 0001-dispatch-mode-consent-management.md
 ├── regulatory.md            # TCPA, HIPAA, FCC, carrier requirements
 └── sinch/                   # Sinch platform documentation
     ├── api-reference.md    # API links and guidance

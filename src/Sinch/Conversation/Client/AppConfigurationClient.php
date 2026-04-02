@@ -309,6 +309,164 @@ class AppConfigurationClient
     }
 
     /**
+     * Get the consent status for a phone number
+     *
+     * Queries the Sinch Consent Management API using the validated
+     * `/consents/{list_type}` endpoint structure. Queries the OPT_OUT_ALL
+     * list and searches for the given identity in the response.
+     *
+     * @return array<string, mixed> Consent data or empty array if not found
+     * @throws ApiException
+     */
+    public function getConsentStatus(string $appId, string $channelIdentity): array
+    {
+        if ($appId === '') {
+            throw new ApiException('App ID is required to get consent status');
+        }
+
+        $projectId = $this->config->getSinchProjectId();
+        $listType = 'OPT_OUT_ALL';
+
+        $endpoint = "/v1/projects/{$projectId}/apps/{$appId}/consents/{$listType}";
+
+        try {
+            $response = $this->httpClient->get(
+                $endpoint,
+                ['headers' => $this->getHeaders()]
+            );
+
+            $statusCode = $response->getStatusCode();
+
+            // 404 can mean lazily-created empty list OR misconfiguration
+            if ($statusCode === 404) {
+                $body = (string) $response->getBody();
+                if (str_contains($body, 'ListType') && str_contains($body, 'does not exist')) {
+                    return [];
+                }
+                throw new ApiException('Consent API returned 404: ' . $body, $statusCode);
+            }
+
+            $data = $this->handleResponse($response);
+
+            // Filter to the requested identity (API returns full list, no per-number query)
+            $normalized = ltrim($channelIdentity, '+');
+            foreach ($data['identities'] ?? [] as $entry) {
+                if (is_array($entry) && ($entry['identity'] ?? '') === $normalized) {
+                    return $entry;
+                }
+            }
+
+            return [];
+        } catch (GuzzleException $e) {
+            throw new ApiException('Failed to get consent status', 0, $e);
+        }
+    }
+
+    /**
+     * List all opted-out numbers for an app
+     *
+     * Queries the Sinch Consent Management API using the validated
+     * `/consents/OPT_OUT_ALL` endpoint and parses the `identities` field.
+     *
+     * @return array<int, array<string, mixed>>
+     * @throws ApiException
+     */
+    public function listOptOuts(string $appId): array
+    {
+        if ($appId === '') {
+            throw new ApiException('App ID is required to list opt-outs');
+        }
+
+        $projectId = $this->config->getSinchProjectId();
+        $listType = 'OPT_OUT_ALL';
+
+        $endpoint = "/v1/projects/{$projectId}/apps/{$appId}/consents/{$listType}";
+
+        try {
+            $response = $this->httpClient->get(
+                $endpoint,
+                ['headers' => $this->getHeaders()]
+            );
+
+            $statusCode = $response->getStatusCode();
+
+            // 404 can mean lazily-created empty list OR misconfiguration
+            if ($statusCode === 404) {
+                $body = (string) $response->getBody();
+                if (str_contains($body, 'ListType') && str_contains($body, 'does not exist')) {
+                    return [];
+                }
+                throw new ApiException('Consent API returned 404: ' . $body, $statusCode);
+            }
+
+            $data = $this->handleResponse($response);
+            return $data['identities'] ?? [];
+        } catch (GuzzleException $e) {
+            throw new ApiException('Failed to list opt-outs', 0, $e);
+        }
+    }
+
+    /**
+     * Send a message using channel identity
+     *
+     * Used by consent check to test send behavior for opted-out numbers.
+     *
+     * Note: this duplicates ConversationApiClient::sendMessageByChannelIdentity().
+     * A shared message-sending helper should be extracted to eliminate drift risk.
+     *
+     * @param string $channelIdentity Phone number
+     * @param string $message Message text
+     * @param string $channel SMS, WHATSAPP, etc
+     * @return array<string, mixed> Response data
+     * @throws ApiException
+     */
+    public function sendMessageByChannelIdentity(
+        string $channelIdentity,
+        string $message,
+        string $channel = 'SMS'
+    ): array {
+        $projectId = $this->config->getSinchProjectId();
+        $appId = $this->config->getSinchAppId();
+
+        if ($appId === '') {
+            throw new ApiException('Sinch app ID is not configured');
+        }
+
+        $payload = [
+            'app_id' => $appId,
+            'recipient' => [
+                'identified_by' => [
+                    'channel_identities' => [
+                        [
+                            'channel' => $channel,
+                            'identity' => $channelIdentity,
+                        ],
+                    ],
+                ],
+            ],
+            'message' => [
+                'text_message' => [
+                    'text' => $message,
+                ],
+            ],
+        ];
+
+        try {
+            $response = $this->httpClient->post(
+                "/v1/projects/{$projectId}/messages:send",
+                [
+                    'headers' => $this->getHeaders(),
+                    'json' => $payload,
+                ]
+            );
+
+            return $this->handleResponse($response);
+        } catch (GuzzleException $e) {
+            throw new ApiException('Failed to send message', 0, $e);
+        }
+    }
+
+    /**
      * Get request headers with authentication
      *
      * @return array<string, string>
