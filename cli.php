@@ -16,6 +16,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/vendor/autoload.php';
 
 use OpenCoreEMR\Modules\SinchConversations\Command\AppListCommand;
+use OpenCoreEMR\Modules\SinchConversations\Command\ConsentCheckCommand;
 use OpenCoreEMR\Modules\SinchConversations\Command\InspectCommand;
 use OpenCoreEMR\Modules\SinchConversations\Command\WebhookCreateCommand;
 use OpenCoreEMR\Modules\SinchConversations\Command\WebhookListCommand;
@@ -28,5 +29,6 @@ $application->add(new InspectCommand());
 $application->add(new AppListCommand());
 $application->add(new WebhookListCommand());
 $application->add(new WebhookCreateCommand());
+$application->add(new ConsentCheckCommand());
 
 $application->run();
