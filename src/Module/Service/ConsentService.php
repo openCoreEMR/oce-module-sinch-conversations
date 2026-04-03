@@ -43,7 +43,14 @@ class ConsentService
      */
     public function hasConsent(int $patientId, string $phoneNumber): bool
     {
-        $normalized = PhoneNormalizer::toE164($phoneNumber) ?? $phoneNumber;
+        $normalized = PhoneNormalizer::toE164($phoneNumber);
+        if ($normalized === null) {
+            $this->logger->warning('Cannot check consent with unparseable phone number', [
+                'patientId' => $patientId,
+                'phone' => $phoneNumber,
+            ]);
+            return false;
+        }
 
         $sql = "SELECT opted_in, opted_out
                 FROM oce_sinch_patient_consent
@@ -187,13 +194,129 @@ class ConsentService
      */
     public function getConsent(int $patientId, string $phoneNumber): ?array
     {
-        $normalized = PhoneNormalizer::toE164($phoneNumber) ?? $phoneNumber;
+        $normalized = PhoneNormalizer::toE164($phoneNumber);
+        if ($normalized === null) {
+            $this->logger->warning('Cannot get consent with unparseable phone number', [
+                'patientId' => $patientId,
+                'phone' => $phoneNumber,
+            ]);
+            return null;
+        }
 
         $sql = "SELECT * FROM oce_sinch_patient_consent
                 WHERE patient_id = ? AND phone_number = ?";
         $result = QueryUtils::querySingleRow($sql, [$patientId, $normalized]);
 
         return $result ?: null;
+    }
+
+    /**
+     * Record a carrier-level block on a patient's phone number
+     *
+     * Set when a delivery failure contains an SMPP error code indicating the
+     * carrier has blocked the number (255, 61, 151), or when the Sinch consent
+     * API reports an opt-out we did not see via webhook.
+     */
+    public function setCarrierBlock(int $patientId, string $phoneNumber, string $reason): void
+    {
+        $normalized = PhoneNormalizer::toE164($phoneNumber);
+        if ($normalized === null) {
+            $this->logger->warning('Cannot set carrier block with unparseable phone number', [
+                'patientId' => $patientId,
+                'phone' => $phoneNumber,
+            ]);
+            return;
+        }
+
+        // Use INSERT ... ON DUPLICATE KEY UPDATE so the block is recorded even
+        // when no consent record exists yet (e.g. the patient received a message
+        // through an external path and was never formally opted in).
+        $sql = "INSERT INTO oce_sinch_patient_consent (
+                    patient_id, phone_number, opted_in, opted_out,
+                    carrier_blocked, carrier_blocked_at, carrier_block_reason,
+                    created_at, updated_at
+                ) VALUES (?, ?, FALSE, FALSE, TRUE, NOW(), ?, NOW(), NOW())
+                ON DUPLICATE KEY UPDATE
+                    carrier_blocked = TRUE,
+                    carrier_blocked_at = NOW(),
+                    carrier_block_reason = VALUES(carrier_block_reason),
+                    updated_at = NOW()";
+
+        QueryUtils::sqlStatementThrowException($sql, [$patientId, $normalized, $reason]);
+
+        $this->logger->info('Carrier block set', [
+            'patientId' => $patientId,
+            'phone' => $normalized,
+            'reason' => $reason,
+        ]);
+    }
+
+    /**
+     * Clear a carrier block after a successful delivery confirms the block is lifted
+     *
+     * Intentionally does NOT re-opt-in the patient. The carrier block flow
+     * calls optOut(), so the patient remains opted out until staff manually
+     * re-opts them in. This matches the issue spec: "When staff re-opts-in
+     * a carrier-blocked patient" is an explicit human action.
+     */
+    public function clearCarrierBlock(int $patientId, string $phoneNumber): void
+    {
+        $normalized = PhoneNormalizer::toE164($phoneNumber);
+        if ($normalized === null) {
+            $this->logger->warning('Cannot clear carrier block with unparseable phone number', [
+                'patientId' => $patientId,
+                'phone' => $phoneNumber,
+            ]);
+            return;
+        }
+
+        $sql = "UPDATE oce_sinch_patient_consent
+                SET carrier_blocked = FALSE,
+                    carrier_blocked_at = NULL,
+                    carrier_block_reason = NULL,
+                    updated_at = NOW()
+                WHERE patient_id = ? AND phone_number = ?";
+
+        QueryUtils::sqlStatementThrowException($sql, [$patientId, $normalized]);
+
+        $this->logger->info('Carrier block cleared', [
+            'patientId' => $patientId,
+            'phone' => $normalized,
+        ]);
+    }
+
+    /**
+     * Check if a patient's phone number is carrier-blocked
+     *
+     * @return array{carrier_blocked_at: ?string, carrier_block_reason: ?string}|null
+     */
+    public function getCarrierBlock(int $patientId, string $phoneNumber): ?array
+    {
+        $normalized = PhoneNormalizer::toE164($phoneNumber);
+        if ($normalized === null) {
+            $this->logger->warning('Cannot check carrier block with unparseable phone number', [
+                'patientId' => $patientId,
+                'phone' => $phoneNumber,
+            ]);
+            return null;
+        }
+
+        $sql = "SELECT carrier_blocked_at, carrier_block_reason
+                FROM oce_sinch_patient_consent
+                WHERE patient_id = ? AND phone_number = ? AND carrier_blocked = TRUE";
+        $result = QueryUtils::querySingleRow($sql, [$patientId, $normalized]);
+
+        if (!$result) {
+            return null;
+        }
+
+        $blockedAt = $result['carrier_blocked_at'] ?? null;
+        $blockReason = $result['carrier_block_reason'] ?? null;
+
+        return [
+            'carrier_blocked_at' => is_string($blockedAt) ? $blockedAt : null,
+            'carrier_block_reason' => is_string($blockReason) ? $blockReason : null,
+        ];
     }
 
     /**

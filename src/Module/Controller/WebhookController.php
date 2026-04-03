@@ -34,6 +34,9 @@ class WebhookController
 {
     private const TIMESTAMP_TOLERANCE_SECONDS = 300;
 
+    /** SMPP error codes that indicate carrier-level opt-out / block */
+    private const CARRIER_BLOCK_SMPP_CODES = [61, 151, 255];
+
     private readonly SystemLogger $logger;
 
     public function __construct(
@@ -408,13 +411,6 @@ class WebhookController
 
         try {
             $this->updateMessageDeliveryStatus($messageId, $status);
-
-            $this->logger->info('Successfully processed delivery report', ['messageId' => $messageId]);
-
-            return new JsonResponse(
-                ['status' => 'success', 'messageId' => $messageId],
-                Response::HTTP_OK
-            );
         } catch (\Throwable $e) {
             $errorId = ErrorId::generate();
             $this->logger->error('Failed to process delivery report', [
@@ -428,6 +424,27 @@ class WebhookController
                 Response::HTTP_INTERNAL_SERVER_ERROR
             );
         }
+
+        // Carrier block detection runs after the delivery status is persisted.
+        // Failures here must not cause the webhook to return 500 — the delivery
+        // status is already recorded and Sinch should not retry.
+        try {
+            $this->handleCarrierBlockDetection($messageId, $status, $deliveryReport);
+        } catch (\Throwable $e) {
+            $errorId = ErrorId::generate();
+            $this->logger->error('Carrier block detection failed (delivery status already recorded)', [
+                'messageId' => $messageId,
+                'errorId' => $errorId,
+                'exception' => $e,
+            ]);
+        }
+
+        $this->logger->info('Successfully processed delivery report', ['messageId' => $messageId]);
+
+        return new JsonResponse(
+            ['status' => 'success', 'messageId' => $messageId],
+            Response::HTTP_OK
+        );
     }
 
     /**
@@ -443,7 +460,10 @@ class WebhookController
      */
     private function handleOptOut(array $payload): Response
     {
-        $notification = $payload['opt_out_notification'] ?? [];
+        /** @var array<string, mixed> $notification */
+        $notification = is_array($payload['opt_out_notification'] ?? null)
+            ? $payload['opt_out_notification']
+            : [];
         $identity = $this->extractString($notification, 'identity', '');
         $channel = $this->extractString($notification, 'channel', '');
         $status = $this->extractString($notification, 'status', '');
@@ -525,7 +545,10 @@ class WebhookController
      */
     private function handleOptIn(array $payload): Response
     {
-        $notification = $payload['opt_in_notification'] ?? [];
+        /** @var array<string, mixed> $notification */
+        $notification = is_array($payload['opt_in_notification'] ?? null)
+            ? $payload['opt_in_notification']
+            : [];
         $identity = $this->extractString($notification, 'identity', '');
         $channel = $this->extractString($notification, 'channel', '');
         $status = $this->extractString($notification, 'status', '');
@@ -622,6 +645,120 @@ class WebhookController
         }
 
         return [];
+    }
+
+    /**
+     * Detect carrier blocks from SMPP error codes in failed deliveries,
+     * and clear carrier blocks when delivery succeeds
+     *
+     * @param array<string, mixed> $deliveryReport
+     */
+    private function handleCarrierBlockDetection(
+        string $messageId,
+        string $status,
+        array $deliveryReport
+    ): void {
+        $recipients = $this->lookupMessageRecipients($messageId);
+        if ($recipients === []) {
+            return;
+        }
+
+        if ($status === 'FAILED') {
+            $smppCode = $this->extractSmppErrorCode($deliveryReport);
+            if ($smppCode !== null && in_array($smppCode, self::CARRIER_BLOCK_SMPP_CODES, true)) {
+                $reason = "SMPP error {$smppCode}";
+                foreach ($recipients as $recipient) {
+                    $patientId = $recipient['patient_id'];
+                    $phoneNumber = $recipient['phone_number'];
+                    $this->logger->info('Carrier block detected from delivery failure', [
+                        'messageId' => $messageId,
+                        'patientId' => $patientId,
+                        'smppCode' => $smppCode,
+                    ]);
+                    $this->consentService->setCarrierBlock($patientId, $phoneNumber, $reason);
+                    // SMPP error codes are SMS-specific, so pass the channel explicitly
+                    $this->consentService->optOut($patientId, $phoneNumber, 'carrier_block', Channel::SMS);
+                }
+            }
+            return;
+        }
+
+        if ($status === 'DELIVERED') {
+            foreach ($recipients as $recipient) {
+                $patientId = $recipient['patient_id'];
+                $phoneNumber = $recipient['phone_number'];
+                $block = $this->consentService->getCarrierBlock($patientId, $phoneNumber);
+                if ($block !== null) {
+                    $this->logger->info('Clearing carrier block after successful delivery', [
+                        'messageId' => $messageId,
+                        'patientId' => $patientId,
+                    ]);
+                    $this->consentService->clearCarrierBlock($patientId, $phoneNumber);
+                }
+            }
+        }
+    }
+
+    /**
+     * Look up all recipient patients for an outbound message
+     *
+     * A carrier block applies to the phone number, not a specific patient,
+     * so return all patients sharing the recipient number (same pattern as
+     * lookupPatientsByContactOrIdentity for opt-out webhooks).
+     *
+     * @return list<array{patient_id: int, phone_number: string}>
+     */
+    private function lookupMessageRecipients(string $messageId): array
+    {
+        $sql = "SELECT to_identifier FROM oce_sinch_messages WHERE message_id = ? AND direction = 'outbound'";
+        $message = QueryUtils::querySingleRow($sql, [$messageId]);
+        if (!$message || ($message['to_identifier'] ?? '') === '') {
+            return [];
+        }
+
+        $toIdentifier = (string) $message['to_identifier'];
+        $normalized = PhoneNormalizer::toE164($toIdentifier) ?? $toIdentifier;
+
+        $sql = "SELECT DISTINCT patient_id FROM oce_sinch_contacts WHERE channel_identity = ?";
+        $contacts = QueryUtils::fetchRecords($sql, [$normalized]);
+        if ($contacts === []) {
+            return [];
+        }
+
+        return array_values(array_map(
+            static fn(array $row): array => [
+                'patient_id' => (int) $row['patient_id'],
+                'phone_number' => $normalized,
+            ],
+            $contacts
+        ));
+    }
+
+    /**
+     * Extract SMPP error code from a delivery report
+     *
+     * Sinch delivery reports include error codes in reason_code or nested
+     * channel_identity.channel_error_code fields.
+     *
+     * @param array<string, mixed> $deliveryReport
+     */
+    private function extractSmppErrorCode(array $deliveryReport): ?int
+    {
+        // Try reason_code first (common location).
+        // Match digits only — is_numeric() would accept floats like "255.0"
+        // and cause a false positive carrier block.
+        $reasonCode = $this->extractString($deliveryReport, 'reason_code', '');
+        if (preg_match('/^\d+$/', $reasonCode) === 1) {
+            return (int) $reasonCode;
+        }
+
+        // Try nested channel identity error code
+        $channelErrorCode = $this->extractString($deliveryReport, 'channel_identity.channel_error_code', '');
+        if (preg_match('/^\d+$/', $channelErrorCode) === 1) {
+            return (int) $channelErrorCode;
+        }
+
+        return null;
     }
 
     /**

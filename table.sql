@@ -81,12 +81,16 @@ CREATE TABLE IF NOT EXISTS `oce_sinch_patient_consent` (
   `opt_out_date` DATETIME DEFAULT NULL COMMENT 'When they opted out',
   `opt_out_method` VARCHAR(50) DEFAULT NULL COMMENT 'How they opted out (sms_stop, web_form, etc)',
   `consent_text` TEXT DEFAULT NULL COMMENT 'Full text of consent agreement',
+  `carrier_blocked` BOOLEAN DEFAULT FALSE COMMENT 'Whether carrier has blocked delivery to this number',
+  `carrier_blocked_at` DATETIME DEFAULT NULL COMMENT 'When the carrier block was detected',
+  `carrier_block_reason` VARCHAR(255) DEFAULT NULL COMMENT 'SMPP error code or consent API source that triggered the block',
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT 'When this record was created',
   `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'When this record was last updated',
   INDEX `idx_patient_id` (`patient_id`),
   INDEX `idx_phone_number` (`phone_number`),
   INDEX `idx_opted_in` (`opted_in`),
   INDEX `idx_opted_out` (`opted_out`),
+  INDEX `idx_carrier_blocked` (`carrier_blocked`),
   UNIQUE KEY `unique_patient_phone` (`patient_id`, `phone_number`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

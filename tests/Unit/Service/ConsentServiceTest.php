@@ -158,6 +158,22 @@ class ConsentServiceTest extends TestCase
         $this->assertNotEmpty($errorLogs);
     }
 
+    public function testOptInSkipsUnparseablePhone(): void
+    {
+        $this->messageService->expects($this->never())->method('sendToPatient');
+
+        $result = $this->service->optIn(1, 'not-a-phone', 'web_form');
+
+        $this->assertFalse($result);
+
+        $queries = QueryUtils::getQueries();
+        $consentQueries = array_filter(
+            $queries,
+            fn($q) => str_contains($q['sql'], 'oce_sinch_patient_consent')
+        );
+        $this->assertEmpty($consentQueries);
+    }
+
     // --- optOut ---
 
     public function testOptOutSmsSyncsHipaaAllowSms(): void
@@ -178,6 +194,22 @@ class ConsentServiceTest extends TestCase
         $hipaaUpdate = array_values($hipaaQueries)[0];
         $this->assertEquals('NO', $hipaaUpdate['binds'][0]);
         $this->assertEquals(1, $hipaaUpdate['binds'][1]);
+    }
+
+    public function testOptOutSkipsUnparseablePhone(): void
+    {
+        $this->service->optOut(1, 'not-a-phone', 'sms_stop');
+
+        $queries = QueryUtils::getQueries();
+        $consentQueries = array_filter(
+            $queries,
+            fn($q) => str_contains($q['sql'], 'oce_sinch_patient_consent')
+        );
+        $this->assertEmpty($consentQueries);
+
+        $logs = SystemLogger::getLogs();
+        $warnings = array_filter($logs, fn($log) => $log['level'] === 'warning');
+        $this->assertNotEmpty($warnings);
     }
 
     public function testOptOutDefaultsToSmsChannel(): void
@@ -266,5 +298,137 @@ class ConsentServiceTest extends TestCase
         );
 
         $this->assertNull($this->service->getConsent(1, '+15551234567'));
+    }
+
+    // --- setCarrierBlock ---
+
+    public function testSetCarrierBlockInsertsOrUpdatesRecord(): void
+    {
+        $this->service->setCarrierBlock(1, '+15551234567', 'SMPP error 255');
+
+        $queries = QueryUtils::getQueries();
+        $upsertQueries = array_filter(
+            $queries,
+            fn($q) => str_contains($q['sql'], 'INSERT INTO oce_sinch_patient_consent')
+                && str_contains($q['sql'], 'ON DUPLICATE KEY UPDATE')
+                && str_contains($q['sql'], 'carrier_blocked = TRUE')
+        );
+        $this->assertNotEmpty($upsertQueries);
+
+        $upsert = array_values($upsertQueries)[0];
+        $this->assertEquals(1, $upsert['binds'][0]);
+        $this->assertEquals('+15551234567', $upsert['binds'][1]);
+        $this->assertEquals('SMPP error 255', $upsert['binds'][2]);
+    }
+
+    public function testSetCarrierBlockSkipsUnparseablePhone(): void
+    {
+        $this->service->setCarrierBlock(1, 'not-a-phone', 'SMPP error 255');
+
+        $queries = QueryUtils::getQueries();
+        $updateQueries = array_filter(
+            $queries,
+            fn($q) => str_contains($q['sql'], 'carrier_blocked')
+        );
+        $this->assertEmpty($updateQueries);
+
+        $logs = SystemLogger::getLogs();
+        $warnings = array_filter($logs, fn($log) => $log['level'] === 'warning');
+        $this->assertNotEmpty($warnings);
+    }
+
+    // --- clearCarrierBlock ---
+
+    public function testClearCarrierBlockUpdatesRecord(): void
+    {
+        $this->service->clearCarrierBlock(1, '+15551234567');
+
+        $queries = QueryUtils::getQueries();
+        $updateQueries = array_filter(
+            $queries,
+            fn($q) => str_contains($q['sql'], 'UPDATE oce_sinch_patient_consent')
+                && str_contains($q['sql'], 'carrier_blocked = FALSE')
+        );
+        $this->assertNotEmpty($updateQueries);
+
+        $update = array_values($updateQueries)[0];
+        $this->assertEquals(1, $update['binds'][0]);
+        $this->assertEquals('+15551234567', $update['binds'][1]);
+    }
+
+    public function testClearCarrierBlockSkipsUnparseablePhone(): void
+    {
+        $this->service->clearCarrierBlock(1, 'not-a-phone');
+
+        $queries = QueryUtils::getQueries();
+        $updateQueries = array_filter(
+            $queries,
+            fn($q) => str_contains($q['sql'], 'carrier_blocked')
+        );
+        $this->assertEmpty($updateQueries);
+    }
+
+    // --- getCarrierBlock ---
+
+    public function testGetCarrierBlockReturnsDataWhenBlocked(): void
+    {
+        QueryUtils::setMockResult(
+            "SELECT carrier_blocked_at, carrier_block_reason
+                FROM oce_sinch_patient_consent
+                WHERE patient_id = ? AND phone_number = ? AND carrier_blocked = TRUE",
+            [1, '+15551234567'],
+            [['carrier_blocked_at' => '2026-04-03 10:00:00', 'carrier_block_reason' => 'SMPP error 255']]
+        );
+
+        $result = $this->service->getCarrierBlock(1, '+15551234567');
+
+        $this->assertNotNull($result);
+        $this->assertEquals('2026-04-03 10:00:00', $result['carrier_blocked_at']);
+        $this->assertEquals('SMPP error 255', $result['carrier_block_reason']);
+    }
+
+    public function testGetCarrierBlockReturnsNullWhenNotBlocked(): void
+    {
+        QueryUtils::setMockResult(
+            "SELECT carrier_blocked_at, carrier_block_reason
+                FROM oce_sinch_patient_consent
+                WHERE patient_id = ? AND phone_number = ? AND carrier_blocked = TRUE",
+            [1, '+15551234567'],
+            []
+        );
+
+        $this->assertNull($this->service->getCarrierBlock(1, '+15551234567'));
+    }
+
+    // --- optIn does not clear carrier_blocked ---
+
+    public function testOptInDoesNotTouchCarrierBlockColumns(): void
+    {
+        $this->templateService->method('render')->willReturn('Welcome!');
+        $this->messageService->method('sendToPatient');
+
+        $this->service->optIn(1, '+15551234567', 'web_form');
+
+        // Verify none of the queries issued by optIn() reference carrier_blocked.
+        // The optIn SQL uses its own INSERT...ON DUPLICATE KEY UPDATE that must not
+        // clear the carrier_blocked flag — that is only cleared by successful delivery.
+        $queries = QueryUtils::getQueries();
+        foreach ($queries as $query) {
+            if (str_contains($query['sql'], 'hipaa_allowsms')) {
+                continue; // Skip the hipaa sync query
+            }
+            if (str_contains($query['sql'], 'oce_sinch_patient_consent')) {
+                $this->assertStringNotContainsString('carrier_blocked', $query['sql']);
+            }
+        }
+    }
+
+    public function testGetCarrierBlockSkipsUnparseablePhone(): void
+    {
+        $this->assertNull($this->service->getCarrierBlock(1, 'not-a-phone'));
+
+        $logs = SystemLogger::getLogs();
+        $warnings = array_filter($logs, fn($log) => $log['level'] === 'warning');
+        $this->assertNotEmpty($warnings);
     }
 }

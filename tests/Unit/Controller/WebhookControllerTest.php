@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace OpenCoreEMR\Modules\SinchConversations\Tests\Unit\Controller;
 
+use OpenCoreEMR\Modules\SinchConversations\Channel;
 use OpenCoreEMR\Modules\SinchConversations\Controller\WebhookController;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Service\ConsentService;
@@ -699,6 +700,362 @@ class WebhookControllerTest extends TestCase
                 && !str_contains($q['sql'], 'delivered_at')
         );
         $this->assertNotEmpty($updateQueries);
+    }
+
+    // --- Carrier block detection tests ---
+
+    public function testDeliveryFailureSmpp255TriggersCarrierBlock(): void
+    {
+        // Mock message lookup: outbound message to +15551234567
+        QueryUtils::setMockResult(
+            "SELECT to_identifier FROM oce_sinch_messages WHERE message_id = ? AND direction = 'outbound'",
+            ['msg-fail-255'],
+            [['to_identifier' => '+15551234567']]
+        );
+        QueryUtils::setMockResult(
+            "SELECT DISTINCT patient_id FROM oce_sinch_contacts WHERE channel_identity = ?",
+            ['+15551234567'],
+            [['patient_id' => 10]]
+        );
+
+        $this->mockConsentService->expects($this->once())
+            ->method('setCarrierBlock')
+            ->with(10, '+15551234567', 'SMPP error 255');
+
+        $this->mockConsentService->expects($this->once())
+            ->method('optOut')
+            ->with(10, '+15551234567', 'carrier_block', Channel::SMS);
+
+        $request = $this->makeRequest('POST', [
+            'message_delivery_report' => [
+                'message_id' => 'msg-fail-255',
+                'status' => 'FAILED',
+                'reason_code' => '255',
+            ],
+        ]);
+
+        $response = $this->controller->dispatch($request);
+
+        $this->assertEquals(Response::HTTP_OK, $response->getStatusCode());
+    }
+
+    public function testDeliveryFailureSmpp61TriggersCarrierBlock(): void
+    {
+        QueryUtils::setMockResult(
+            "SELECT to_identifier FROM oce_sinch_messages WHERE message_id = ? AND direction = 'outbound'",
+            ['msg-fail-61'],
+            [['to_identifier' => '+15551234567']]
+        );
+        QueryUtils::setMockResult(
+            "SELECT DISTINCT patient_id FROM oce_sinch_contacts WHERE channel_identity = ?",
+            ['+15551234567'],
+            [['patient_id' => 10]]
+        );
+
+        $this->mockConsentService->expects($this->once())
+            ->method('setCarrierBlock')
+            ->with(10, '+15551234567', 'SMPP error 61');
+
+        $this->mockConsentService->expects($this->once())
+            ->method('optOut')
+            ->with(10, '+15551234567', 'carrier_block', Channel::SMS);
+
+        $request = $this->makeRequest('POST', [
+            'message_delivery_report' => [
+                'message_id' => 'msg-fail-61',
+                'status' => 'FAILED',
+                'reason_code' => '61',
+            ],
+        ]);
+
+        $response = $this->controller->dispatch($request);
+
+        $this->assertEquals(Response::HTTP_OK, $response->getStatusCode());
+    }
+
+    public function testDeliveryFailureSmpp151TriggersCarrierBlock(): void
+    {
+        QueryUtils::setMockResult(
+            "SELECT to_identifier FROM oce_sinch_messages WHERE message_id = ? AND direction = 'outbound'",
+            ['msg-fail-151'],
+            [['to_identifier' => '+15551234567']]
+        );
+        QueryUtils::setMockResult(
+            "SELECT DISTINCT patient_id FROM oce_sinch_contacts WHERE channel_identity = ?",
+            ['+15551234567'],
+            [['patient_id' => 10]]
+        );
+
+        $this->mockConsentService->expects($this->once())
+            ->method('setCarrierBlock')
+            ->with(10, '+15551234567', 'SMPP error 151');
+
+        $this->mockConsentService->expects($this->once())
+            ->method('optOut')
+            ->with(10, '+15551234567', 'carrier_block', Channel::SMS);
+
+        $request = $this->makeRequest('POST', [
+            'message_delivery_report' => [
+                'message_id' => 'msg-fail-151',
+                'status' => 'FAILED',
+                'reason_code' => '151',
+            ],
+        ]);
+
+        $response = $this->controller->dispatch($request);
+
+        $this->assertEquals(Response::HTTP_OK, $response->getStatusCode());
+    }
+
+    public function testDeliveryFailureOtherCodeDoesNotTriggerCarrierBlock(): void
+    {
+        QueryUtils::setMockResult(
+            "SELECT to_identifier FROM oce_sinch_messages WHERE message_id = ? AND direction = 'outbound'",
+            ['msg-fail-400'],
+            [['to_identifier' => '+15551234567']]
+        );
+        QueryUtils::setMockResult(
+            "SELECT DISTINCT patient_id FROM oce_sinch_contacts WHERE channel_identity = ?",
+            ['+15551234567'],
+            [['patient_id' => 10]]
+        );
+
+        $this->mockConsentService->expects($this->never())->method('setCarrierBlock');
+        $this->mockConsentService->expects($this->never())->method('optOut');
+
+        $request = $this->makeRequest('POST', [
+            'message_delivery_report' => [
+                'message_id' => 'msg-fail-400',
+                'status' => 'FAILED',
+                'reason_code' => '400',
+            ],
+        ]);
+
+        $response = $this->controller->dispatch($request);
+
+        $this->assertEquals(Response::HTTP_OK, $response->getStatusCode());
+    }
+
+    public function testDeliveryFailureNoErrorCodeDoesNotTriggerCarrierBlock(): void
+    {
+        QueryUtils::setMockResult(
+            "SELECT to_identifier FROM oce_sinch_messages WHERE message_id = ? AND direction = 'outbound'",
+            ['msg-fail-nocode'],
+            [['to_identifier' => '+15551234567']]
+        );
+        QueryUtils::setMockResult(
+            "SELECT DISTINCT patient_id FROM oce_sinch_contacts WHERE channel_identity = ?",
+            ['+15551234567'],
+            [['patient_id' => 10]]
+        );
+
+        $this->mockConsentService->expects($this->never())->method('setCarrierBlock');
+
+        $request = $this->makeRequest('POST', [
+            'message_delivery_report' => [
+                'message_id' => 'msg-fail-nocode',
+                'status' => 'FAILED',
+            ],
+        ]);
+
+        $response = $this->controller->dispatch($request);
+
+        $this->assertEquals(Response::HTTP_OK, $response->getStatusCode());
+    }
+
+    public function testSuccessfulDeliveryClearsCarrierBlock(): void
+    {
+        QueryUtils::setMockResult(
+            "SELECT to_identifier FROM oce_sinch_messages WHERE message_id = ? AND direction = 'outbound'",
+            ['msg-delivered-clear'],
+            [['to_identifier' => '+15551234567']]
+        );
+        QueryUtils::setMockResult(
+            "SELECT DISTINCT patient_id FROM oce_sinch_contacts WHERE channel_identity = ?",
+            ['+15551234567'],
+            [['patient_id' => 10]]
+        );
+
+        $this->mockConsentService->expects($this->once())
+            ->method('getCarrierBlock')
+            ->with(10, '+15551234567')
+            ->willReturn(['carrier_blocked_at' => '2026-04-01', 'carrier_block_reason' => 'SMPP error 255']);
+
+        $this->mockConsentService->expects($this->once())
+            ->method('clearCarrierBlock')
+            ->with(10, '+15551234567');
+
+        $request = $this->makeRequest('POST', [
+            'message_delivery_report' => [
+                'message_id' => 'msg-delivered-clear',
+                'status' => 'DELIVERED',
+            ],
+        ]);
+
+        $response = $this->controller->dispatch($request);
+
+        $this->assertEquals(Response::HTTP_OK, $response->getStatusCode());
+    }
+
+    public function testSuccessfulDeliverySkipsClearWhenNotBlocked(): void
+    {
+        QueryUtils::setMockResult(
+            "SELECT to_identifier FROM oce_sinch_messages WHERE message_id = ? AND direction = 'outbound'",
+            ['msg-delivered-ok'],
+            [['to_identifier' => '+15551234567']]
+        );
+        QueryUtils::setMockResult(
+            "SELECT DISTINCT patient_id FROM oce_sinch_contacts WHERE channel_identity = ?",
+            ['+15551234567'],
+            [['patient_id' => 10]]
+        );
+
+        $this->mockConsentService->expects($this->once())
+            ->method('getCarrierBlock')
+            ->with(10, '+15551234567')
+            ->willReturn(null);
+
+        $this->mockConsentService->expects($this->never())->method('clearCarrierBlock');
+
+        $request = $this->makeRequest('POST', [
+            'message_delivery_report' => [
+                'message_id' => 'msg-delivered-ok',
+                'status' => 'DELIVERED',
+            ],
+        ]);
+
+        $response = $this->controller->dispatch($request);
+
+        $this->assertEquals(Response::HTTP_OK, $response->getStatusCode());
+    }
+
+    public function testDeliveryFailureNoMessageRecordSkipsCarrierBlock(): void
+    {
+        QueryUtils::setMockResult(
+            "SELECT to_identifier FROM oce_sinch_messages WHERE message_id = ? AND direction = 'outbound'",
+            ['msg-unknown'],
+            []
+        );
+
+        $this->mockConsentService->expects($this->never())->method('setCarrierBlock');
+
+        $request = $this->makeRequest('POST', [
+            'message_delivery_report' => [
+                'message_id' => 'msg-unknown',
+                'status' => 'FAILED',
+                'reason_code' => '255',
+            ],
+        ]);
+
+        $response = $this->controller->dispatch($request);
+
+        $this->assertEquals(Response::HTTP_OK, $response->getStatusCode());
+    }
+
+    public function testCarrierBlockUsesChannelErrorCodeFallback(): void
+    {
+        QueryUtils::setMockResult(
+            "SELECT to_identifier FROM oce_sinch_messages WHERE message_id = ? AND direction = 'outbound'",
+            ['msg-fail-nested'],
+            [['to_identifier' => '+15551234567']]
+        );
+        QueryUtils::setMockResult(
+            "SELECT DISTINCT patient_id FROM oce_sinch_contacts WHERE channel_identity = ?",
+            ['+15551234567'],
+            [['patient_id' => 10]]
+        );
+
+        $this->mockConsentService->expects($this->once())
+            ->method('setCarrierBlock')
+            ->with(10, '+15551234567', 'SMPP error 255');
+
+        $this->mockConsentService->expects($this->once())
+            ->method('optOut')
+            ->with(10, '+15551234567', 'carrier_block', Channel::SMS);
+
+        $request = $this->makeRequest('POST', [
+            'message_delivery_report' => [
+                'message_id' => 'msg-fail-nested',
+                'status' => 'FAILED',
+                'channel_identity' => [
+                    'channel_error_code' => '255',
+                ],
+            ],
+        ]);
+
+        $response = $this->controller->dispatch($request);
+
+        $this->assertEquals(Response::HTTP_OK, $response->getStatusCode());
+    }
+
+    public function testCarrierBlockAppliesToAllPatientsSharingPhone(): void
+    {
+        QueryUtils::setMockResult(
+            "SELECT to_identifier FROM oce_sinch_messages WHERE message_id = ? AND direction = 'outbound'",
+            ['msg-fail-multi'],
+            [['to_identifier' => '+15551234567']]
+        );
+        QueryUtils::setMockResult(
+            "SELECT DISTINCT patient_id FROM oce_sinch_contacts WHERE channel_identity = ?",
+            ['+15551234567'],
+            [['patient_id' => 5], ['patient_id' => 6], ['patient_id' => 7]]
+        );
+
+        $this->mockConsentService->expects($this->exactly(3))
+            ->method('setCarrierBlock');
+
+        $this->mockConsentService->expects($this->exactly(3))
+            ->method('optOut');
+
+        $request = $this->makeRequest('POST', [
+            'message_delivery_report' => [
+                'message_id' => 'msg-fail-multi',
+                'status' => 'FAILED',
+                'reason_code' => '255',
+            ],
+        ]);
+
+        $response = $this->controller->dispatch($request);
+
+        $this->assertEquals(Response::HTTP_OK, $response->getStatusCode());
+    }
+
+    public function testCarrierBlockErrorDoesNotFailWebhook(): void
+    {
+        QueryUtils::setMockResult(
+            "SELECT to_identifier FROM oce_sinch_messages WHERE message_id = ? AND direction = 'outbound'",
+            ['msg-fail-err'],
+            [['to_identifier' => '+15551234567']]
+        );
+        QueryUtils::setMockResult(
+            "SELECT DISTINCT patient_id FROM oce_sinch_contacts WHERE channel_identity = ?",
+            ['+15551234567'],
+            [['patient_id' => 10]]
+        );
+
+        $this->mockConsentService->method('setCarrierBlock')
+            ->willThrowException(new \RuntimeException('DB connection lost'));
+
+        $request = $this->makeRequest('POST', [
+            'message_delivery_report' => [
+                'message_id' => 'msg-fail-err',
+                'status' => 'FAILED',
+                'reason_code' => '255',
+            ],
+        ]);
+
+        $response = $this->controller->dispatch($request);
+
+        // Delivery status was already recorded — webhook succeeds despite carrier block error
+        $this->assertEquals(Response::HTTP_OK, $response->getStatusCode());
+        $this->assertResponseContains($response, 'status', 'success');
+
+        $logs = SystemLogger::getLogs();
+        $errorLogs = array_filter($logs, fn($log) =>
+            $log['level'] === 'error'
+            && str_contains($log['message'], 'Carrier block detection failed')
+        );
+        $this->assertNotEmpty($errorLogs);
     }
 
     // --- OPT_OUT / OPT_IN tests ---
