@@ -225,6 +225,18 @@ class Bootstrap
     }
 
     /**
+     * Get Consent Sync Service
+     */
+    public function getConsentSyncService(): Service\ConsentSyncService
+    {
+        return new Service\ConsentSyncService(
+            $this->globalsConfig,
+            $this->getConversationApiClient(),
+            $this->getConsentService()
+        );
+    }
+
+    /**
      * Get Webhook Controller
      */
     public function getWebhookController(): Controller\WebhookController

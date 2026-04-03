@@ -21,6 +21,7 @@ use OpenCoreEMR\Modules\SinchConversations\Controller\SettingsController;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Service\ConfigService;
 use OpenCoreEMR\Modules\SinchConversations\Service\ConsentService;
+use OpenCoreEMR\Modules\SinchConversations\Service\ConsentSyncService;
 use OpenCoreEMR\Modules\SinchConversations\Service\KeywordHandlerService;
 use OpenCoreEMR\Modules\SinchConversations\Service\MessagePollingService;
 use OpenCoreEMR\Modules\SinchConversations\Service\MessageService;
@@ -189,6 +190,13 @@ class BootstrapTest extends TestCase
         $service = $this->bootstrap->getTemplateSyncService();
 
         $this->assertInstanceOf(TemplateSyncService::class, $service);
+    }
+
+    public function testGetConsentSyncServiceReturnsService(): void
+    {
+        $service = $this->bootstrap->getConsentSyncService();
+
+        $this->assertInstanceOf(ConsentSyncService::class, $service);
     }
 
     public function testSubscribeToEventsCallsAddGlobalSettings(): void
