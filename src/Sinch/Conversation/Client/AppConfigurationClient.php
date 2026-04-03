@@ -25,6 +25,7 @@ use OpenCoreEMR\Sinch\Conversation\Exception\ApiException;
 class AppConfigurationClient
 {
     private const BASE_URL = 'https://us.conversation.api.sinch.com';
+    private const CONSENT_MAX_PAGES = 100;
     private readonly Client $httpClient;
     private ?string $cachedAccessToken = null;
 
@@ -313,7 +314,7 @@ class AppConfigurationClient
      *
      * Queries the Sinch Consent Management API using the validated
      * `/consents/{list_type}` endpoint structure. Queries the OPT_OUT_ALL
-     * list and searches for the given identity in the response.
+     * list page-by-page, returning early when the identity is found.
      *
      * @return array<string, mixed> Consent data or empty array if not found
      * @throws ApiException
@@ -326,47 +327,73 @@ class AppConfigurationClient
 
         $projectId = $this->config->getSinchProjectId();
         $listType = 'OPT_OUT_ALL';
-
         $endpoint = "/v1/projects/{$projectId}/apps/{$appId}/consents/{$listType}";
+        $normalized = ltrim($channelIdentity, '+');
+
+        $pageToken = '';
+        $maxPages = self::CONSENT_MAX_PAGES;
 
         try {
-            $response = $this->httpClient->get(
-                $endpoint,
-                ['headers' => $this->getHeaders()]
-            );
-
-            $statusCode = $response->getStatusCode();
-
-            // 404 can mean lazily-created empty list OR misconfiguration
-            if ($statusCode === 404) {
-                $body = (string) $response->getBody();
-                if (str_contains($body, 'ListType') && str_contains($body, 'does not exist')) {
-                    return [];
+            for ($page = 0; $page < $maxPages; $page++) {
+                $query = [];
+                if ($pageToken !== '') {
+                    $query['page_token'] = $pageToken;
                 }
-                throw new ApiException('Consent API returned 404: ' . $body, $statusCode);
-            }
 
-            $data = $this->handleResponse($response);
+                $response = $this->httpClient->get(
+                    $endpoint,
+                    [
+                        'headers' => $this->getHeaders(),
+                        'query' => $query,
+                    ]
+                );
 
-            // Filter to the requested identity (API returns full list, no per-number query)
-            $normalized = ltrim($channelIdentity, '+');
-            foreach ($data['identities'] ?? [] as $entry) {
-                if (is_array($entry) && ($entry['identity'] ?? '') === $normalized) {
-                    return $entry;
+                $statusCode = $response->getStatusCode();
+
+                if ($statusCode === 404) {
+                    $body = (string) $response->getBody();
+                    if (str_contains($body, 'ListType') && str_contains($body, 'does not exist')) {
+                        return [];
+                    }
+                    throw new ApiException('Consent API returned 404: ' . $body, $statusCode);
+                }
+
+                $data = $this->handleResponse($response);
+
+                $rawIdentities = $data['identities'] ?? [];
+                if (is_array($rawIdentities)) {
+                    foreach ($rawIdentities as $entry) {
+                        if (is_array($entry) && ($entry['identity'] ?? '') === $normalized) {
+                            return $entry;
+                        }
+                    }
+                }
+
+                $nextPageToken = $data['next_page_token'] ?? '';
+                $pageToken = is_string($nextPageToken) ? $nextPageToken : '';
+                if ($pageToken === '') {
+                    break;
                 }
             }
-
-            return [];
         } catch (GuzzleException $e) {
             throw new ApiException('Failed to get consent status', 0, $e);
         }
+
+        if ($pageToken !== '') {
+            throw new ApiException(
+                sprintf('Consent list requires more than %d pages; refusing partial results', $maxPages)
+            );
+        }
+
+        return [];
     }
 
     /**
      * List all opted-out numbers for an app
      *
      * Queries the Sinch Consent Management API using the validated
-     * `/consents/OPT_OUT_ALL` endpoint and parses the `identities` field.
+     * `/consents/OPT_OUT_ALL` endpoint and collects identities across
+     * all pages.
      *
      * @return array<int, array<string, mixed>>
      * @throws ApiException
@@ -377,33 +404,82 @@ class AppConfigurationClient
             throw new ApiException('App ID is required to list opt-outs');
         }
 
+        return $this->fetchAllConsentIdentities($appId);
+    }
+
+    /**
+     * Fetch all consent identities, following pagination
+     *
+     * Iterates through all pages of the consent list using
+     * `next_page_token` until the full list is retrieved.
+     *
+     * @return list<array<mixed, mixed>>
+     * @throws ApiException
+     */
+    private function fetchAllConsentIdentities(string $appId): array
+    {
         $projectId = $this->config->getSinchProjectId();
         $listType = 'OPT_OUT_ALL';
-
         $endpoint = "/v1/projects/{$projectId}/apps/{$appId}/consents/{$listType}";
 
+        $allIdentities = [];
+        $pageToken = '';
+        $maxPages = self::CONSENT_MAX_PAGES;
+
         try {
-            $response = $this->httpClient->get(
-                $endpoint,
-                ['headers' => $this->getHeaders()]
-            );
-
-            $statusCode = $response->getStatusCode();
-
-            // 404 can mean lazily-created empty list OR misconfiguration
-            if ($statusCode === 404) {
-                $body = (string) $response->getBody();
-                if (str_contains($body, 'ListType') && str_contains($body, 'does not exist')) {
-                    return [];
+            for ($page = 0; $page < $maxPages; $page++) {
+                $query = [];
+                if ($pageToken !== '') {
+                    $query['page_token'] = $pageToken;
                 }
-                throw new ApiException('Consent API returned 404: ' . $body, $statusCode);
-            }
 
-            $data = $this->handleResponse($response);
-            return $data['identities'] ?? [];
+                $response = $this->httpClient->get(
+                    $endpoint,
+                    [
+                        'headers' => $this->getHeaders(),
+                        'query' => $query,
+                    ]
+                );
+
+                $statusCode = $response->getStatusCode();
+
+                // 404 can mean lazily-created empty list OR misconfiguration
+                if ($statusCode === 404) {
+                    $body = (string) $response->getBody();
+                    if (str_contains($body, 'ListType') && str_contains($body, 'does not exist')) {
+                        return [];
+                    }
+                    throw new ApiException('Consent API returned 404: ' . $body, $statusCode);
+                }
+
+                $data = $this->handleResponse($response);
+
+                $rawIdentities = $data['identities'] ?? [];
+                if (is_array($rawIdentities)) {
+                    foreach ($rawIdentities as $entry) {
+                        if (is_array($entry)) {
+                            $allIdentities[] = $entry;
+                        }
+                    }
+                }
+
+                $nextPageToken = $data['next_page_token'] ?? '';
+                $pageToken = is_string($nextPageToken) ? $nextPageToken : '';
+                if ($pageToken === '') {
+                    break;
+                }
+            }
         } catch (GuzzleException $e) {
-            throw new ApiException('Failed to list opt-outs', 0, $e);
+            throw new ApiException('Failed to fetch consent identities', 0, $e);
         }
+
+        if ($pageToken !== '') {
+            throw new ApiException(
+                sprintf('Consent list requires more than %d pages; refusing partial results', $maxPages)
+            );
+        }
+
+        return $allIdentities;
     }
 
     /**
