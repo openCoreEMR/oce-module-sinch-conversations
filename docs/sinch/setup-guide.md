@@ -151,7 +151,7 @@ environment variables. This is useful for containerized deployments.
 | Region | `OCE_SINCH_CONVERSATIONS_REGION` | `us` or `eu` |
 | Default Channel | `OCE_SINCH_CONVERSATIONS_DEFAULT_CHANNEL` | `SMS` (default) |
 | Clinic Name | `OCE_SINCH_CONVERSATIONS_CLINIC_NAME` | Display name in messages |
-| Clinic Phone | `OCE_SINCH_CONVERSATIONS_CLINIC_PHONE` | Sender phone number (digits only, no +) |
+| Clinic Phone | `OCE_SINCH_CONVERSATIONS_CLINIC_PHONE` | Sender phone number (E.164 format, e.g., +12085551234) |
 
 ### Verifying Configuration
 
