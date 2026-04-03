@@ -256,31 +256,20 @@ class WebhookController
      */
     private function detectEventType(array $payload): ?string
     {
-        // Order matters only for readability; each payload has exactly one of these
-        $eventKeys = [
-            'message',
-            'message_delivery_report',
-            'event',
-            'opt_out_notification',
-            'opt_in_notification',
-            'contact_create_notification',
-            'contact_delete_notification',
-            'contact_merge_notification',
-            'contact_update_notification',
-            'conversation_start_notification',
-            'conversation_stop_notification',
-            'conversation_delete_notification',
-            'capability_notification',
-            'unsupported_callback',
-            'channel_event_notification',
-            'contact_identities_duplication_notification',
-            'smart_conversation',
-            'message_redaction',
-            'record_notification',
+        // Common metadata keys present in every Sinch callback.
+        // The event type is the single non-metadata key.
+        $metadataKeys = [
+            'app_id',
+            'project_id',
+            'accepted_time',
+            'event_time',
+            'message_metadata',
+            'correlation_id',
+            'channel_metadata',
         ];
 
-        foreach ($eventKeys as $key) {
-            if (array_key_exists($key, $payload)) {
+        foreach ($payload as $key => $value) {
+            if (!in_array($key, $metadataKeys, true)) {
                 return $key;
             }
         }
@@ -302,7 +291,6 @@ class WebhookController
     {
         /** @var string $content */
         $content = $request->getContent();
-        /** @var array<string, mixed>|scalar|null $data */
         $data = json_decode($content, true);
 
         if (json_last_error() !== JSON_ERROR_NONE) {
@@ -310,7 +298,21 @@ class WebhookController
             return [];
         }
 
-        return is_array($data) ? $data : [];
+        if (!is_array($data) || array_is_list($data)) {
+            return [];
+        }
+
+        // json_decode with assoc=true produces string keys for JSON objects.
+        // PHPStan can't infer this after the is_array + !array_is_list checks,
+        // so filter to prove string keys.
+        $result = [];
+        foreach ($data as $key => $value) {
+            if (is_string($key)) {
+                $result[$key] = $value;
+            }
+        }
+
+        return $result;
     }
 
     /**

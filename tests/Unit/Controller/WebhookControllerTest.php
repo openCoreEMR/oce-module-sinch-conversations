@@ -363,6 +363,27 @@ class WebhookControllerTest extends TestCase
         $this->assertEquals(Response::HTTP_BAD_REQUEST, $response->getStatusCode());
     }
 
+    public function testReturns400ForJsonArrayPayload(): void
+    {
+        $body = '[{"message": {}}]';
+        $timestamp = (string) time();
+        $nonce = bin2hex(random_bytes(16));
+        $signedData = $body . '.' . $nonce . '.' . $timestamp;
+        $signature = base64_encode(hash_hmac('sha256', $signedData, self::TEST_SECRET, true));
+
+        $request = Request::create('/webhook', 'POST', [], [], [], [
+            'CONTENT_TYPE' => 'application/json',
+            'HTTP_X_SINCH_WEBHOOK_SIGNATURE' => $signature,
+            'HTTP_X_SINCH_WEBHOOK_SIGNATURE_TIMESTAMP' => $timestamp,
+            'HTTP_X_SINCH_WEBHOOK_SIGNATURE_NONCE' => $nonce,
+            'HTTP_X_SINCH_WEBHOOK_SIGNATURE_ALGORITHM' => 'HmacSHA256',
+        ], $body);
+
+        $response = $this->controller->dispatch($request);
+
+        $this->assertEquals(Response::HTTP_BAD_REQUEST, $response->getStatusCode());
+    }
+
     public function testReturns400ForNoEventKey(): void
     {
         $request = $this->makeRequest('POST', ['app_id' => 'test', 'project_id' => 'test']);
