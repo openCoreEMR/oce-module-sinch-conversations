@@ -30,6 +30,8 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 )]
 class ConsentCheckCommand extends Command
 {
+    use WritesExceptionChain;
+
     private const STATUS_PASSED = 'PASSED';
     private const STATUS_REFUTED = 'REFUTED';
     private const STATUS_INCONCLUSIVE = 'INCONCLUSIVE';
@@ -92,14 +94,14 @@ class ConsentCheckCommand extends Command
         $results = [];
 
         // Check 1: App Configuration
-        $results[] = $this->checkAppConfiguration($io, $apiClient, $appId);
+        $results[] = $this->checkAppConfiguration($io, $output, $apiClient, $appId);
 
         // Check 2: Consent API Discovery (Refutation Condition 1)
-        $results = array_merge($results, $this->checkConsentApiDiscovery($io, $apiClient, $appId, $phone));
+        $results = array_merge($results, $this->checkConsentApiDiscovery($io, $output, $apiClient, $appId, $phone));
 
         // Check 3: Send to Opted-Out Number (Refutation Condition 5)
         if (is_string($phone) && $phone !== '' && $testSend) {
-            $results[] = $this->checkSendToOptedOut($io, $apiClient, $phone);
+            $results[] = $this->checkSendToOptedOut($io, $output, $apiClient, $phone);
         } elseif (is_string($phone) && $phone !== '' && !$testSend) {
             $results[] = [
                 'check' => 'Send to Opted-Out',
@@ -150,6 +152,7 @@ class ConsentCheckCommand extends Command
      */
     private function checkAppConfiguration(
         SymfonyStyle $io,
+        OutputInterface $output,
         AppConfigurationClient $apiClient,
         string $appId
     ): array {
@@ -159,11 +162,12 @@ class ConsentCheckCommand extends Command
             $app = $apiClient->getApp($appId);
         } catch (ApiException $e) {
             $io->error('Failed to fetch app: ' . $e->getMessage());
+            $this->writeExceptionChain($io, $output, $e);
             return [
                 'check' => 'App Config',
                 'condition' => 'App is accessible',
                 'status' => self::STATUS_REFUTED,
-                'detail' => 'API call failed: ' . $e->getMessage(),
+                'detail' => 'API call failed: ' . $this->messageWithCause($e),
             ];
         }
 
@@ -223,6 +227,7 @@ class ConsentCheckCommand extends Command
      */
     private function checkConsentApiDiscovery(
         SymfonyStyle $io,
+        OutputInterface $output,
         AppConfigurationClient $apiClient,
         string $appId,
         ?string $phone
@@ -247,12 +252,13 @@ class ConsentCheckCommand extends Command
             ];
         } catch (ApiException $e) {
             $io->text('listOptOuts failed: ' . $e->getMessage());
+            $this->writeExceptionChain($io, $output, $e);
 
             $results[] = [
                 'check' => 'List Opt-Outs',
                 'condition' => 'RC-1: Consent API exists',
                 'status' => self::STATUS_INCONCLUSIVE,
-                'detail' => 'Endpoint returned error: ' . $e->getMessage(),
+                'detail' => 'Endpoint returned error: ' . $this->messageWithCause($e),
             ];
         }
 
@@ -282,11 +288,12 @@ class ConsentCheckCommand extends Command
                 ];
             } catch (ApiException $e) {
                 $io->text('getConsentStatus failed: ' . $e->getMessage());
+                $this->writeExceptionChain($io, $output, $e);
                 $results[] = [
                     'check' => 'Per-Number Consent',
                     'condition' => 'RC-1: Per-number consent queryable',
                     'status' => self::STATUS_INCONCLUSIVE,
-                    'detail' => 'Endpoint returned error: ' . $e->getMessage(),
+                    'detail' => 'Endpoint returned error: ' . $this->messageWithCause($e),
                 ];
             }
         } else {
@@ -308,6 +315,7 @@ class ConsentCheckCommand extends Command
      */
     private function checkSendToOptedOut(
         SymfonyStyle $io,
+        OutputInterface $output,
         AppConfigurationClient $apiClient,
         string $phone
     ): array {
@@ -331,14 +339,20 @@ class ConsentCheckCommand extends Command
                 'detail' => "Message accepted (id={$messageId}). Check dashboard for delivery status.",
             ];
         } catch (ApiException $e) {
-            $message = $e->getMessage();
-            // If the API explicitly rejects due to consent/opt-out, that validates RC-5
-            $isConsentBlock = str_contains(strtolower($message), 'consent')
-                || str_contains(strtolower($message), 'opt')
-                || str_contains(strtolower($message), 'block');
+            $fullMessage = $this->messageWithCause($e);
+            // Check the full exception chain for consent/opt-out signals.
+            // Use specific terms to avoid false positives from words like
+            // "optional", "optimistic", "non-blocking", etc.
+            $lower = strtolower($fullMessage);
+            $isConsentBlock = str_contains($lower, 'consent')
+                || str_contains($lower, 'opt-out')
+                || str_contains($lower, 'opt_out')
+                || str_contains($lower, 'opted out')
+                || str_contains($lower, 'blocked');
 
             if ($isConsentBlock) {
-                $io->text('API rejected message (likely consent block): ' . $message);
+                $io->text('API rejected message (likely consent block): ' . $e->getMessage());
+                $this->writeExceptionChain($io, $output, $e);
                 return [
                     'check' => 'Send to Opted-Out',
                     'condition' => 'RC-5: Platform blocks opted-out sends',
@@ -347,12 +361,13 @@ class ConsentCheckCommand extends Command
                 ];
             }
 
-            $io->text('API rejected message: ' . $message);
+            $io->text('API rejected message: ' . $e->getMessage());
+            $this->writeExceptionChain($io, $output, $e);
             return [
                 'check' => 'Send to Opted-Out',
                 'condition' => 'RC-5: Platform blocks opted-out sends',
                 'status' => self::STATUS_INCONCLUSIVE,
-                'detail' => 'API error (not clearly consent-related): ' . $message,
+                'detail' => 'API error (not clearly consent-related): ' . $fullMessage,
             ];
         }
     }
