@@ -1,5 +1,59 @@
 # Changelog
 
+## [1.0.0](https://github.com/openCoreEMR/oce-module-sinch-conversations/compare/0.9.0...1.0.0) (2026-04-03)
+
+
+### Features
+
+* add ADR-0001, consent API client methods, and refutation condition CLI ([#84](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/84)) ([c9fa4e5](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/c9fa4e5273d7cf104a7626bf349703d203e348f3)), closes [#83](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/83)
+* add appointment reminder cron service ([#49](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/49)) ([9ec3fe1](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/9ec3fe1539d680d3809cb6f06327ed1dcb4b4a62))
+* add pagination support to consent API client methods ([#88](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/88)) ([e6fb8c1](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/e6fb8c1b623583381c235c852a01a55f35795717)), closes [#87](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/87)
+* add webhook endpoint for inbound messages ([#24](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/24)) ([099ecf9](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/099ecf9d5b3f21aee965a8fd90015d512df1e72e)), closes [#20](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/20)
+* add webhook nonce tracking for replay protection ([#89](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/89)) ([c52d930](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/c52d93090840a238a95444c6ca8baadda499c1ae)), closes [#67](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/67)
+* add webhook tunnel and URL tasks for local development ([#58](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/58)) ([099cfa3](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/099cfa3c5f430165b8a509241eac1e3f6ab0db52))
+* detect carrier-level opt-outs via delivery failures and consent API polling ([#96](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/96)) ([3e7514b](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/3e7514b1b66a1b40a4088dba78f0739f091aa06a)), closes [#31](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/31)
+* disable API config fields when using environment variables ([#37](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/37)) ([bbd5c3c](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/bbd5c3c3bc2762a44d593793c9de07391562cc1c))
+* gate message sending on consent and hipaa_allowsms ([#29](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/29)) ([a7df20d](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/a7df20da219e23f4d54cca231353052e6a5ba561)), closes [#21](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/21)
+* portal-aware appointment reminder template selection ([#38](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/38)) ([306a6cd](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/306a6cd325b60602bcc81241de9f9d24a8ab4f82))
+* register appointment reminders as OpenEMR background service ([#68](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/68)) ([daf493b](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/daf493b049fcef8ce4161787f5fc175c4c8d62a3)), closes [#50](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/50)
+* replace Basic Auth with HMAC-SHA256 webhook signature validation ([#64](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/64)) ([a6057b9](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/a6057b9f0b61eb6552dd5aa72df876c0065036b5)), closes [#60](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/60)
+* wire keyword handler into polling fallback and sync hipaa_allowsms ([#34](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/34)) ([8592005](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/8592005d4a031695c76cb34450fbde9e7a172e0a)), closes [#22](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/22)
+
+
+### Bug Fixes
+
+* centralize phone number normalization to E.164 format ([#46](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/46)) ([6909718](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/6909718f4916a768174ad9b56ca8b26a0c632f58))
+* consolidate settings to module page, remove globals duplicates ([#74](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/74)) ([5130be1](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/5130be1eb6af152066fce97046fc8463bd82e7e3)), closes [#57](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/57)
+* detect webhook event type by field presence, not trigger field ([#91](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/91)) ([cec03f1](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/cec03f1a1fdb11d89cb1a90edd903dd9ab273df7))
+* line length warning in WebhookController opt-out call ([#54](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/54)) ([9d2a2fc](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/9d2a2fce048aeed1e459867c9786faa5358da2f4))
+* move kernel resolution inside try/catch in public entry points ([#86](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/86)) ([1b4551a](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/1b4551a8b9b7934c689dd9aa782ab83e95af4234)), closes [#82](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/82)
+* normalize phone in ConversationController::handleReply ([#77](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/77)) ([8e4fbed](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/8e4fbedb78dc36a709465b8b7021077482caeddf)), closes [#53](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/53)
+* only sync hipaa_allowsms on SMS channel opt-out ([#47](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/47)) ([03c6a38](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/03c6a38244b68daf3983823817dd07185a5d2813))
+* require module's vendor/autoload.php in bootstrap and background entry ([#97](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/97)) ([d851ca3](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/d851ca396f5a62bf78de2ed291c0fbf7686d62f8))
+* send messages by channel identity instead of Sinch contact ID ([#99](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/99)) ([a1a98d1](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/a1a98d1cda25a601e88ff6978cffee36f57947bd))
+* surface exceptions instead of swallowing in webhook and consent service ([#36](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/36)) ([4d0a6f9](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/4d0a6f9fffff555b18b2f8ec03664cff46799529))
+* use #[AsCommand] attribute for CLI command names ([#71](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/71)) ([6fd81df](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/6fd81dfbc5dcaec733b819d520238ce9c56456c2)), closes [#59](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/59)
+* use config accessor for menu visibility instead of global_req ([#55](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/55)) ([0727c1d](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/0727c1d3528e5fcd971913e81ce7badcbf366643))
+
+
+### Documentation
+
+* add Sinch provisioning guide ([#63](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/63)) ([#85](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/85)) ([c60b11b](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/c60b11bead0e8f49849b7fac65d563447fb8c14a))
+* add sinch setup guide, messaging docs, and troubleshooting ([#45](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/45)) ([c164436](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/c16443648094e8f15469f27c074ce2126574a0e2))
+
+
+### Miscellaneous Chores
+
+* release 1.0.0 ([2d33029](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/2d330294d2e60643398d73867e2281edb31594a5))
+
+
+### Code Refactoring
+
+* add patient-id-aware keyword handler entry point ([#41](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/41)) ([#93](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/93)) ([a9b8422](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/a9b8422dd44253f730e4c9d380dda9f429b23565))
+* adopt PSR-3 logging context and surface exceptions ([#48](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/48)) ([ddcfbca](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/ddcfbcab423b7fb26f5ab759ad26d8794cba1268))
+* adopt PSR-3 logging context in Sinch client layer ([#52](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/52)) ([#94](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/94)) ([cb3750b](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/cb3750bd334e8d4626c4fe0207a1c5235ad24db1))
+* surface chained exception details in CLI commands ([#100](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/100)) ([f1a4957](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/f1a495717327a6f37e730ef23e5c425889f32193)), closes [#95](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/95)
+
 ## [0.9.0](https://github.com/openCoreEMR/oce-module-sinch-conversations/compare/0.1.0...0.9.0) (2026-03-02)
 
 
