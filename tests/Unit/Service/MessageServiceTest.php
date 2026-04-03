@@ -64,6 +64,32 @@ class MessageServiceTest extends TestCase
         );
     }
 
+    /**
+     * Mock an existing conversation for a patient
+     */
+    private function mockExistingConversation(int $patientId, string $conversationId): void
+    {
+        QueryUtils::setMockResult(
+            "SELECT conversation_id FROM oce_sinch_conversations
+                WHERE patient_id = ? AND channel = 'SMS'",
+            [$patientId],
+            [['conversation_id' => $conversationId]]
+        );
+    }
+
+    /**
+     * Mock no existing conversation for a patient
+     */
+    private function mockNoConversation(int $patientId): void
+    {
+        QueryUtils::setMockResult(
+            "SELECT conversation_id FROM oce_sinch_conversations
+                WHERE patient_id = ? AND channel = 'SMS'",
+            [$patientId],
+            []
+        );
+    }
+
     // --- consent and hipaa gating ---
 
     public function testSendToPatientThrowsWhenHipaaDisallowsSms(): void
@@ -138,21 +164,10 @@ class MessageServiceTest extends TestCase
 
     public function testSendToPatientSkipsConsentCheckWhenOptionSet(): void
     {
-        // No eligibility mocks — would fail if checked
-        QueryUtils::setMockResult(
-            "SELECT contact_id FROM oce_sinch_contacts
-                WHERE patient_id = ? AND channel_identity = ?",
-            [1, '+15559999999'],
-            [['contact_id' => 'contact-abc']]
-        );
-        QueryUtils::setMockResult(
-            "SELECT conversation_id FROM oce_sinch_conversations
-                WHERE contact_id = ? AND patient_id = ?",
-            ['contact-abc', 1],
-            [['conversation_id' => 'conv-123']]
-        );
 
-        $this->apiClient->method('sendMessage')
+        $this->mockExistingConversation(1, 'conv-123');
+
+        $this->apiClient->method('sendMessageByChannelIdentity')
             ->willReturn(['id' => 'msg-skip']);
 
         $result = $this->service->sendToPatient(1, '+15559999999', 'Hello', new MessageOptions(
@@ -164,172 +179,63 @@ class MessageServiceTest extends TestCase
 
     // --- sendToPatient ---
 
-    public function testSendToPatientWithExistingContact(): void
+    public function testSendToPatientWithExistingConversation(): void
     {
         $this->mockPatientEligible(1, '+15559999999');
 
-        // Existing contact
-        QueryUtils::setMockResult(
-            "SELECT contact_id FROM oce_sinch_contacts
-                WHERE patient_id = ? AND channel_identity = ?",
-            [1, '+15559999999'],
-            [['contact_id' => 'contact-abc']]
-        );
-        // Existing conversation
-        QueryUtils::setMockResult(
-            "SELECT conversation_id FROM oce_sinch_conversations
-                WHERE contact_id = ? AND patient_id = ?",
-            ['contact-abc', 1],
-            [['conversation_id' => 'conv-123']]
-        );
+        $this->mockExistingConversation(1, 'conv-123');
 
         $this->apiClient->expects($this->once())
-            ->method('sendMessage')
+            ->method('sendMessageByChannelIdentity')
+            ->with('+15559999999', 'Hello', 'SMS', $this->anything())
             ->willReturn(['id' => 'msg-001', 'status' => 'QUEUED']);
 
         $result = $this->service->sendToPatient(1, '+15559999999', 'Hello');
 
         $this->assertEquals('msg-001', $result['id']);
 
-        // Verify outbound message was stored
         $queries = QueryUtils::getQueries();
         $insertMsg = array_filter($queries, fn($q) => str_contains($q['sql'], 'INSERT INTO oce_sinch_messages'));
         $this->assertNotEmpty($insertMsg);
     }
 
-    public function testSendToPatientCreatesNewContact(): void
+    public function testSendToPatientCreatesConversationWhenNoneExists(): void
     {
         $this->mockPatientEligible(1, '+15559999999');
 
-        // No existing contact
-        QueryUtils::setMockResult(
-            "SELECT contact_id FROM oce_sinch_contacts
-                WHERE patient_id = ? AND channel_identity = ?",
-            [1, '+15559999999'],
-            []
-        );
-        // API creates contact
-        $this->apiClient->method('createContact')
-            ->with('+15559999999', 'SMS')
-            ->willReturn(['id' => 'new-contact-id']);
+        $this->mockNoConversation(1);
 
-        // New conversation (no existing)
-        QueryUtils::setMockResult(
-            "SELECT conversation_id FROM oce_sinch_conversations
-                WHERE contact_id = ? AND patient_id = ?",
-            ['new-contact-id', 1],
-            []
-        );
-
-        $this->apiClient->method('sendMessage')
+        $this->apiClient->method('sendMessageByChannelIdentity')
             ->willReturn(['id' => 'msg-002']);
 
-        $result = $this->service->sendToPatient(1, '+15559999999', 'Hello');
-
-        $this->assertEquals('msg-002', $result['id']);
-
-        // Verify contact was inserted
-        $queries = QueryUtils::getQueries();
-        $insertContact = array_filter($queries, fn($q) => str_contains($q['sql'], 'INSERT INTO oce_sinch_contacts'));
-        $this->assertNotEmpty($insertContact);
-    }
-
-    public function testSendToPatientThrowsWhenCreateContactFails(): void
-    {
-        $this->mockPatientEligible(1, '+15559999999');
-
-        QueryUtils::setMockResult(
-            "SELECT contact_id FROM oce_sinch_contacts
-                WHERE patient_id = ? AND channel_identity = ?",
-            [1, '+15559999999'],
-            []
-        );
-        $this->apiClient->method('createContact')->willReturn(['id' => '']);
-
-        $this->expectException(ValidationException::class);
-        $this->expectExceptionMessage('Failed to create Sinch contact');
-
         $this->service->sendToPatient(1, '+15559999999', 'Hello');
+
+        $queries = QueryUtils::getQueries();
+        $insertConv = array_filter($queries, fn($q) => str_contains($q['sql'], 'INSERT INTO oce_sinch_conversations'));
+        $this->assertNotEmpty($insertConv);
     }
 
-    public function testSendToPatientAddsSenderFromConfig(): void
+    public function testSendToPatientPassesChannelToApi(): void
     {
         $this->mockPatientEligible(1, '+15559999999');
 
-        QueryUtils::setMockResult(
-            "SELECT contact_id FROM oce_sinch_contacts
-                WHERE patient_id = ? AND channel_identity = ?",
-            [1, '+15559999999'],
-            [['contact_id' => 'contact-abc']]
-        );
-        QueryUtils::setMockResult(
-            "SELECT conversation_id FROM oce_sinch_conversations
-                WHERE contact_id = ? AND patient_id = ?",
-            ['contact-abc', 1],
-            [['conversation_id' => 'conv-123']]
-        );
+        $this->mockExistingConversation(1, 'conv-123');
 
         $this->apiClient->expects($this->once())
-            ->method('sendMessage')
-            ->with(
-                'contact-abc',
-                'Hello',
-                $this->callback(fn($opts) => ($opts['sender'] ?? '') === '+15551234567' && ($opts['channel'] ?? '') === 'SMS')
-            )
+            ->method('sendMessageByChannelIdentity')
+            ->with('+15559999999', 'Hello', 'SMS', $this->anything())
             ->willReturn(['id' => 'msg-003']);
 
         $this->service->sendToPatient(1, '+15559999999', 'Hello');
-    }
-
-    public function testSendToPatientPreservesExplicitSender(): void
-    {
-        $this->mockPatientEligible(1, '+15559999999');
-
-        QueryUtils::setMockResult(
-            "SELECT contact_id FROM oce_sinch_contacts
-                WHERE patient_id = ? AND channel_identity = ?",
-            [1, '+15559999999'],
-            [['contact_id' => 'contact-abc']]
-        );
-        QueryUtils::setMockResult(
-            "SELECT conversation_id FROM oce_sinch_conversations
-                WHERE contact_id = ? AND patient_id = ?",
-            ['contact-abc', 1],
-            [['conversation_id' => 'conv-123']]
-        );
-
-        $this->apiClient->expects($this->once())
-            ->method('sendMessage')
-            ->with(
-                'contact-abc',
-                'Hello',
-                $this->callback(fn($opts) => ($opts['sender'] ?? '') === '+15550000000')
-            )
-            ->willReturn(['id' => 'msg-004']);
-
-        $this->service->sendToPatient(1, '+15559999999', 'Hello', new MessageOptions(
-            sender: '+15550000000',
-        ));
     }
 
     public function testSendToPatientThrowsOnApiFailure(): void
     {
         $this->mockPatientEligible(1, '+15559999999');
 
-        QueryUtils::setMockResult(
-            "SELECT contact_id FROM oce_sinch_contacts
-                WHERE patient_id = ? AND channel_identity = ?",
-            [1, '+15559999999'],
-            [['contact_id' => 'contact-abc']]
-        );
-        QueryUtils::setMockResult(
-            "SELECT conversation_id FROM oce_sinch_conversations
-                WHERE contact_id = ? AND patient_id = ?",
-            ['contact-abc', 1],
-            [['conversation_id' => 'conv-123']]
-        );
+        $this->mockExistingConversation(1, 'conv-123');
 
-        $this->apiClient->method('sendMessage')
+        $this->apiClient->method('sendMessageByChannelIdentity')
             ->willThrowException(new \RuntimeException('API timeout'));
 
         $this->expectException(ValidationException::class);
@@ -342,36 +248,21 @@ class MessageServiceTest extends TestCase
 
     public function testSendBatchCountsSuccessAndFailure(): void
     {
-        // Patient 1 has phone
         QueryUtils::setMockResult(
             "SELECT phone_cell FROM patient_data WHERE pid = ?",
             [1],
             [['phone_cell' => '+15551111111']]
         );
-        // Patient 2 has no phone
         QueryUtils::setMockResult(
             "SELECT phone_cell FROM patient_data WHERE pid = ?",
             [2],
             []
         );
 
-        // Patient 1 eligibility
         $this->mockPatientEligible(1, '+15551111111');
 
-        // Patient 1 send flow
-        QueryUtils::setMockResult(
-            "SELECT contact_id FROM oce_sinch_contacts
-                WHERE patient_id = ? AND channel_identity = ?",
-            [1, '+15551111111'],
-            [['contact_id' => 'c1']]
-        );
-        QueryUtils::setMockResult(
-            "SELECT conversation_id FROM oce_sinch_conversations
-                WHERE contact_id = ? AND patient_id = ?",
-            ['c1', 1],
-            [['conversation_id' => 'conv-1']]
-        );
-        $this->apiClient->method('sendMessage')->willReturn(['id' => 'msg-batch']);
+        $this->mockExistingConversation(1, 'conv-1');
+        $this->apiClient->method('sendMessageByChannelIdentity')->willReturn(['id' => 'msg-batch']);
 
         $results = $this->service->sendBatch([1, 2], 'Batch message');
 
@@ -383,7 +274,6 @@ class MessageServiceTest extends TestCase
 
     public function testSendBatchSkipsIneligiblePatient(): void
     {
-        // Patient 1: has phone but hipaa_allowsms is NO
         QueryUtils::setMockResult(
             "SELECT phone_cell FROM patient_data WHERE pid = ?",
             [1],
@@ -395,26 +285,15 @@ class MessageServiceTest extends TestCase
             [['hipaa_allowsms' => 'NO']]
         );
 
-        // Patient 2: eligible
         QueryUtils::setMockResult(
             "SELECT phone_cell FROM patient_data WHERE pid = ?",
             [2],
             [['phone_cell' => '+15552222222']]
         );
         $this->mockPatientEligible(2, '+15552222222');
-        QueryUtils::setMockResult(
-            "SELECT contact_id FROM oce_sinch_contacts
-                WHERE patient_id = ? AND channel_identity = ?",
-            [2, '+15552222222'],
-            [['contact_id' => 'c2']]
-        );
-        QueryUtils::setMockResult(
-            "SELECT conversation_id FROM oce_sinch_conversations
-                WHERE contact_id = ? AND patient_id = ?",
-            ['c2', 2],
-            [['conversation_id' => 'conv-2']]
-        );
-        $this->apiClient->method('sendMessage')->willReturn(['id' => 'msg-batch-2']);
+
+        $this->mockExistingConversation(2, 'conv-2');
+        $this->apiClient->method('sendMessageByChannelIdentity')->willReturn(['id' => 'msg-batch-2']);
 
         $results = $this->service->sendBatch([1, 2], 'Batch message');
 
@@ -427,7 +306,6 @@ class MessageServiceTest extends TestCase
 
     public function testSendBatchDedupsByPhoneAndMessage(): void
     {
-        // Two patients share the same phone number
         QueryUtils::setMockResult(
             "SELECT phone_cell FROM patient_data WHERE pid = ?",
             [10],
@@ -439,23 +317,12 @@ class MessageServiceTest extends TestCase
             [['phone_cell' => '+15553333333']]
         );
 
-        // Patient 10 eligibility and send flow
         $this->mockPatientEligible(10, '+15553333333');
-        QueryUtils::setMockResult(
-            "SELECT contact_id FROM oce_sinch_contacts
-                WHERE patient_id = ? AND channel_identity = ?",
-            [10, '+15553333333'],
-            [['contact_id' => 'c10']]
-        );
-        QueryUtils::setMockResult(
-            "SELECT conversation_id FROM oce_sinch_conversations
-                WHERE contact_id = ? AND patient_id = ?",
-            ['c10', 10],
-            [['conversation_id' => 'conv-10']]
-        );
+
+        $this->mockExistingConversation(10, 'conv-10');
 
         $this->apiClient->expects($this->once())
-            ->method('sendMessage')
+            ->method('sendMessageByChannelIdentity')
             ->willReturn(['id' => 'msg-dedup']);
 
         $results = $this->service->sendBatch([10, 11], 'Office closed today');
@@ -467,61 +334,19 @@ class MessageServiceTest extends TestCase
 
     public function testSendBatchNormalizesUserEnteredPhones(): void
     {
-        // Patient has a user-entered phone format
         QueryUtils::setMockResult(
             "SELECT phone_cell FROM patient_data WHERE pid = ?",
             [1],
             [['phone_cell' => '(555) 444-5555']]
         );
 
-        // After normalization, the phone should be +15554445555
         $this->mockPatientEligible(1, '+15554445555');
-        QueryUtils::setMockResult(
-            "SELECT contact_id FROM oce_sinch_contacts
-                WHERE patient_id = ? AND channel_identity = ?",
-            [1, '+15554445555'],
-            [['contact_id' => 'c-norm']]
-        );
-        QueryUtils::setMockResult(
-            "SELECT conversation_id FROM oce_sinch_conversations
-                WHERE contact_id = ? AND patient_id = ?",
-            ['c-norm', 1],
-            [['conversation_id' => 'conv-norm']]
-        );
 
-        $this->apiClient->method('sendMessage')->willReturn(['id' => 'msg-norm']);
+        $this->mockExistingConversation(1, 'conv-norm');
+        $this->apiClient->method('sendMessageByChannelIdentity')->willReturn(['id' => 'msg-norm']);
 
         $results = $this->service->sendBatch([1], 'Test');
 
         $this->assertEquals(1, $results['sent']);
-    }
-
-    // --- getOrCreateConversation (tested indirectly) ---
-
-    public function testCreatesNewConversationWhenNoneExists(): void
-    {
-        $this->mockPatientEligible(1, '+15559999999');
-
-        QueryUtils::setMockResult(
-            "SELECT contact_id FROM oce_sinch_contacts
-                WHERE patient_id = ? AND channel_identity = ?",
-            [1, '+15559999999'],
-            [['contact_id' => 'contact-abc']]
-        );
-        // No existing conversation
-        QueryUtils::setMockResult(
-            "SELECT conversation_id FROM oce_sinch_conversations
-                WHERE contact_id = ? AND patient_id = ?",
-            ['contact-abc', 1],
-            []
-        );
-
-        $this->apiClient->method('sendMessage')->willReturn(['id' => 'msg-005']);
-
-        $this->service->sendToPatient(1, '+15559999999', 'Hello');
-
-        $queries = QueryUtils::getQueries();
-        $insertConv = array_filter($queries, fn($q) => str_contains($q['sql'], 'INSERT INTO oce_sinch_conversations'));
-        $this->assertNotEmpty($insertConv);
     }
 }
