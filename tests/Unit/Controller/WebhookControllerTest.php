@@ -97,7 +97,7 @@ class WebhookControllerTest extends TestCase
             $this->mockConsentService
         );
 
-        $request = $this->makeRequest('POST', ['trigger' => 'MESSAGE_INBOUND']);
+        $request = $this->makeRequest('POST', ['message' => []]);
 
         $response = $controller->dispatch($request);
 
@@ -117,7 +117,7 @@ class WebhookControllerTest extends TestCase
             $this->mockConsentService
         );
 
-        $request = $this->makeRequest('POST', ['trigger' => 'MESSAGE_INBOUND']);
+        $request = $this->makeRequest('POST', ['message' => []]);
 
         $response = $controller->dispatch($request);
 
@@ -138,7 +138,7 @@ class WebhookControllerTest extends TestCase
             $this->mockConsentService
         );
 
-        $request = $this->makeRequest('POST', ['trigger' => 'MESSAGE_INBOUND'], 'wrong_secret');
+        $request = $this->makeRequest('POST', ['message' => []], 'wrong_secret');
 
         $response = $controller->dispatch($request);
 
@@ -159,7 +159,7 @@ class WebhookControllerTest extends TestCase
         );
 
         // Create request without HMAC headers
-        $request = $this->makeRequest('POST', ['trigger' => 'MESSAGE_INBOUND'], null);
+        $request = $this->makeRequest('POST', ['message' => []], null);
 
         $response = $controller->dispatch($request);
 
@@ -168,7 +168,7 @@ class WebhookControllerTest extends TestCase
 
     public function testReturns404WhenAlgorithmUnsupported(): void
     {
-        $body = json_encode(['trigger' => 'MESSAGE_INBOUND']) ?: '{}';
+        $body = json_encode(['message' => []]) ?: '{}';
         $timestamp = (string) time();
         $nonce = bin2hex(random_bytes(16));
 
@@ -187,7 +187,7 @@ class WebhookControllerTest extends TestCase
 
     public function testReturns404WhenTimestampNonNumeric(): void
     {
-        $body = json_encode(['trigger' => 'MESSAGE_INBOUND']) ?: '{}';
+        $body = json_encode(['message' => []]) ?: '{}';
         $nonce = bin2hex(random_bytes(16));
 
         $request = Request::create('/webhook', 'POST', [], [], [], [
@@ -205,7 +205,7 @@ class WebhookControllerTest extends TestCase
 
     public function testReturns401WhenTimestampStale(): void
     {
-        $body = json_encode(['trigger' => 'MESSAGE_INBOUND']) ?: '{}';
+        $body = json_encode(['message' => []]) ?: '{}';
         $timestamp = (string) (time() - 600); // 10 minutes ago
         $nonce = bin2hex(random_bytes(16));
 
@@ -224,7 +224,7 @@ class WebhookControllerTest extends TestCase
 
     public function testAcceptsValidAuth(): void
     {
-        $request = $this->makeRequest('POST', ['trigger' => 'UNKNOWN_EVENT']);
+        $request = $this->makeRequest('POST', ['unsupported_callback' => []]);
 
         $response = $this->controller->dispatch($request);
 
@@ -238,7 +238,7 @@ class WebhookControllerTest extends TestCase
             new \RuntimeException('Duplicate entry \'abc123\' for key \'PRIMARY\'')
         );
 
-        $request = $this->makeRequest('POST', ['trigger' => 'MESSAGE_INBOUND']);
+        $request = $this->makeRequest('POST', ['message' => []]);
 
         $response = $this->controller->dispatch($request);
 
@@ -247,7 +247,7 @@ class WebhookControllerTest extends TestCase
 
     public function testRecordsNonceOnSuccessfulAuth(): void
     {
-        $request = $this->makeRequest('POST', ['trigger' => 'UNKNOWN_EVENT']);
+        $request = $this->makeRequest('POST', ['unsupported_callback' => []]);
 
         $this->controller->dispatch($request);
 
@@ -261,7 +261,7 @@ class WebhookControllerTest extends TestCase
 
     public function testPrunesExpiredNonces(): void
     {
-        $request = $this->makeRequest('POST', ['trigger' => 'UNKNOWN_EVENT']);
+        $request = $this->makeRequest('POST', ['unsupported_callback' => []]);
 
         $this->controller->dispatch($request);
 
@@ -289,7 +289,7 @@ class WebhookControllerTest extends TestCase
 
         QueryUtils::clearQueries();
 
-        $request = $this->makeRequest('POST', ['trigger' => 'MESSAGE_INBOUND'], 'wrong_secret');
+        $request = $this->makeRequest('POST', ['message' => []], 'wrong_secret');
         $controller->dispatch($request);
 
         $nonceQueries = array_filter(
@@ -306,7 +306,7 @@ class WebhookControllerTest extends TestCase
             new \RuntimeException('Connection lost during query')
         );
 
-        $request = $this->makeRequest('POST', ['trigger' => 'MESSAGE_INBOUND']);
+        $request = $this->makeRequest('POST', ['message' => []]);
 
         $response = $this->controller->dispatch($request);
 
@@ -363,19 +363,9 @@ class WebhookControllerTest extends TestCase
         $this->assertEquals(Response::HTTP_BAD_REQUEST, $response->getStatusCode());
     }
 
-    public function testReturns400ForMissingTrigger(): void
+    public function testReturns400ForNoEventKey(): void
     {
-        $request = $this->makeRequest('POST', ['message' => ['id' => 'test']]);
-
-        $response = $this->controller->dispatch($request);
-
-        $this->assertEquals(Response::HTTP_BAD_REQUEST, $response->getStatusCode());
-        $this->assertResponseContains($response, 'error', 'Missing trigger type');
-    }
-
-    public function testReturns400ForEmptyTrigger(): void
-    {
-        $request = $this->makeRequest('POST', ['trigger' => '']);
+        $request = $this->makeRequest('POST', ['app_id' => 'test', 'project_id' => 'test']);
 
         $response = $this->controller->dispatch($request);
 
@@ -386,7 +376,7 @@ class WebhookControllerTest extends TestCase
 
     public function testHandlesUnknownEventGracefully(): void
     {
-        $request = $this->makeRequest('POST', ['trigger' => 'CONVERSATION_START']);
+        $request = $this->makeRequest('POST', ['conversation_start_notification' => []]);
 
         $response = $this->controller->dispatch($request);
 
@@ -614,7 +604,7 @@ class WebhookControllerTest extends TestCase
     public function testHandlesMessageDelivery(): void
     {
         $request = $this->makeRequest('POST', [
-            'trigger' => 'MESSAGE_DELIVERY',
+
             'message_delivery_report' => [
                 'message_id' => 'msg-delivered',
                 'status' => 'DELIVERED',
@@ -638,7 +628,7 @@ class WebhookControllerTest extends TestCase
     public function testDeliveryStatusSetsDeliveredAt(): void
     {
         $request = $this->makeRequest('POST', [
-            'trigger' => 'MESSAGE_DELIVERY',
+
             'message_delivery_report' => ['message_id' => 'msg-d1', 'status' => 'DELIVERED'],
         ]);
 
@@ -656,7 +646,7 @@ class WebhookControllerTest extends TestCase
     public function testReadStatusSetsBothTimestamps(): void
     {
         $request = $this->makeRequest('POST', [
-            'trigger' => 'MESSAGE_DELIVERY',
+
             'message_delivery_report' => ['message_id' => 'msg-r1', 'status' => 'READ'],
         ]);
 
@@ -675,7 +665,7 @@ class WebhookControllerTest extends TestCase
     public function testFailedStatusSetsOnlyStatus(): void
     {
         $request = $this->makeRequest('POST', [
-            'trigger' => 'MESSAGE_DELIVERY',
+
             'message_delivery_report' => ['message_id' => 'msg-f1', 'status' => 'FAILED'],
         ]);
 
@@ -705,7 +695,7 @@ class WebhookControllerTest extends TestCase
             ->with(5, '+15559876543', 'sinch_VIBERBM');
 
         $request = $this->makeRequest('POST', [
-            'trigger' => 'OPT_OUT',
+
             'opt_out_notification' => [
                 'contact_id' => 'contact-xyz',
                 'channel' => 'VIBERBM',
@@ -725,7 +715,7 @@ class WebhookControllerTest extends TestCase
         $this->mockConsentService->expects($this->never())->method('optOut');
 
         $request = $this->makeRequest('POST', [
-            'trigger' => 'OPT_OUT',
+
             'opt_out_notification' => [
                 'contact_id' => 'contact-xyz',
                 'channel' => 'VIBERBM',
@@ -756,7 +746,7 @@ class WebhookControllerTest extends TestCase
         $this->mockConsentService->expects($this->never())->method('optOut');
 
         $request = $this->makeRequest('POST', [
-            'trigger' => 'OPT_OUT',
+
             'opt_out_notification' => [
                 'contact_id' => 'contact-unknown',
                 'channel' => 'SMS',
@@ -791,7 +781,7 @@ class WebhookControllerTest extends TestCase
             ->with(7, '+15559876543', 'sinch_SMS');
 
         $request = $this->makeRequest('POST', [
-            'trigger' => 'OPT_OUT',
+
             'opt_out_notification' => [
                 'contact_id' => 'contact-missing',
                 'channel' => 'SMS',
@@ -829,7 +819,7 @@ class WebhookControllerTest extends TestCase
             });
 
         $request = $this->makeRequest('POST', [
-            'trigger' => 'OPT_OUT',
+
             'opt_out_notification' => [
                 'contact_id' => 'contact-shared',
                 'channel' => 'SMS',
@@ -857,7 +847,7 @@ class WebhookControllerTest extends TestCase
             ->with(5, '+15559876543', 'sinch_VIBERBM');
 
         $request = $this->makeRequest('POST', [
-            'trigger' => 'OPT_IN',
+
             'opt_in_notification' => [
                 'contact_id' => 'contact-xyz',
                 'channel' => 'VIBERBM',
@@ -877,7 +867,7 @@ class WebhookControllerTest extends TestCase
         $this->mockConsentService->expects($this->never())->method('optIn');
 
         $request = $this->makeRequest('POST', [
-            'trigger' => 'OPT_IN',
+
             'opt_in_notification' => [
                 'contact_id' => 'contact-xyz',
                 'channel' => 'VIBERBM',
@@ -896,7 +886,7 @@ class WebhookControllerTest extends TestCase
 
     public function testLogsWebhookReceipt(): void
     {
-        $request = $this->makeRequest('POST', ['trigger' => 'UNKNOWN_EVENT']);
+        $request = $this->makeRequest('POST', ['unsupported_callback' => []]);
 
         $this->controller->dispatch($request);
 
@@ -914,7 +904,7 @@ class WebhookControllerTest extends TestCase
     public function testLogsEventProcessing(): void
     {
         $request = $this->makeRequest('POST', [
-            'trigger' => 'MESSAGE_DELIVERY',
+
             'message_delivery_report' => ['message_id' => 'x', 'status' => 'QUEUED'],
         ]);
 
@@ -926,8 +916,8 @@ class WebhookControllerTest extends TestCase
             if ($log['level'] === 'info' && str_contains($log['message'], 'Processing webhook event')) {
                 $this->assertArrayHasKey('context', $log);
                 $this->assertIsArray($log['context']);
-                $this->assertArrayHasKey('trigger', $log['context']);
-                $this->assertSame('MESSAGE_DELIVERY', $log['context']['trigger']);
+                $this->assertArrayHasKey('eventType', $log['context']);
+                $this->assertSame('message_delivery_report', $log['context']['eventType']);
                 $found = true;
                 break;
             }
@@ -976,7 +966,6 @@ class WebhookControllerTest extends TestCase
         string $text
     ): array {
         return [
-            'trigger' => 'MESSAGE_INBOUND',
             'message' => [
                 'id' => $messageId,
                 'conversation_id' => $conversationId,
