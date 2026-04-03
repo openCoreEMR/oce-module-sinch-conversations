@@ -87,7 +87,7 @@ class AppConfigurationClient
             $this->cachedAccessToken = $body['access_token'];
             return $body['access_token'];
         } catch (GuzzleException $e) {
-            throw new ApiException("OAuth2 request failed: " . $e->getMessage());
+            throw new ApiException('OAuth2 request failed', 0, $e);
         }
     }
 
@@ -117,7 +117,7 @@ class AppConfigurationClient
 
             return $this->handleResponse($response);
         } catch (GuzzleException $e) {
-            throw new ApiException("Failed to get app configuration: " . $e->getMessage());
+            throw new ApiException('Failed to get app configuration', 0, $e);
         }
     }
 
@@ -152,7 +152,7 @@ class AppConfigurationClient
 
             return $this->handleResponse($response);
         } catch (GuzzleException $e) {
-            throw new ApiException("Failed to update app configuration: " . $e->getMessage());
+            throw new ApiException('Failed to update app configuration', 0, $e);
         }
     }
 
@@ -177,7 +177,7 @@ class AppConfigurationClient
             $result = $this->handleResponse($response);
             return $result['apps'] ?? [];
         } catch (GuzzleException $e) {
-            throw new ApiException("Failed to list apps: " . $e->getMessage());
+            throw new ApiException('Failed to list apps', 0, $e);
         }
     }
 
@@ -208,7 +208,7 @@ class AppConfigurationClient
             $data = $this->handleResponse($response);
             return $data['webhooks'] ?? [];
         } catch (GuzzleException $e) {
-            throw new ApiException("Failed to list webhooks: " . $e->getMessage());
+            throw new ApiException('Failed to list webhooks', 0, $e);
         }
     }
 
@@ -240,7 +240,7 @@ class AppConfigurationClient
 
             return $this->handleResponse($response);
         } catch (GuzzleException $e) {
-            throw new ApiException("Failed to create webhook: " . $e->getMessage());
+            throw new ApiException('Failed to create webhook', 0, $e);
         }
     }
 
@@ -273,7 +273,7 @@ class AppConfigurationClient
 
             return $this->handleResponse($response);
         } catch (GuzzleException $e) {
-            throw new ApiException("Failed to update webhook: " . $e->getMessage());
+            throw new ApiException('Failed to update webhook', 0, $e);
         }
     }
 
@@ -305,7 +305,7 @@ class AppConfigurationClient
             $statusCode = $response->getStatusCode();
             return $statusCode >= 200 && $statusCode < 300;
         } catch (GuzzleException $e) {
-            throw new ApiException("Failed to delete webhook: " . $e->getMessage());
+            throw new ApiException('Failed to delete webhook', 0, $e);
         }
     }
 

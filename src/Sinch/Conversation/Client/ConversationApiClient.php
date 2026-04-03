@@ -100,8 +100,8 @@ class ConversationApiClient
 
             return $this->handleResponse($response);
         } catch (GuzzleException $e) {
-            $this->logger->error("Sinch API error: " . $e->getMessage());
-            throw new ApiException("Failed to send message: " . $e->getMessage());
+            $this->logger->error('Failed to send message', ['exception' => $e]);
+            throw new ApiException('Failed to send message', 0, $e);
         }
     }
 
@@ -177,8 +177,8 @@ class ConversationApiClient
 
             return $this->handleResponse($response);
         } catch (GuzzleException $e) {
-            $this->logger->error("Sinch API error: " . $e->getMessage());
-            throw new ApiException("Failed to send message: " . $e->getMessage());
+            $this->logger->error('Failed to send message (DISPATCH)', ['exception' => $e]);
+            throw new ApiException('Failed to send message', 0, $e);
         }
     }
 
@@ -206,8 +206,8 @@ class ConversationApiClient
             $data = $this->handleResponse($response);
             return $data['messages'] ?? [];
         } catch (GuzzleException $e) {
-            $this->logger->error("Sinch API error: " . $e->getMessage());
-            throw new ApiException("Failed to get conversation messages: " . $e->getMessage());
+            $this->logger->error('Failed to get conversation messages', ['exception' => $e]);
+            throw new ApiException('Failed to get conversation messages', 0, $e);
         }
     }
 
@@ -232,8 +232,8 @@ class ConversationApiClient
 
             return $this->handleResponse($response);
         } catch (GuzzleException $e) {
-            $this->logger->error("Sinch API error: " . $e->getMessage());
-            throw new ApiException("Failed to get message: " . $e->getMessage());
+            $this->logger->error('Failed to get message', ['exception' => $e]);
+            throw new ApiException('Failed to get message', 0, $e);
         }
     }
 
@@ -260,8 +260,8 @@ class ConversationApiClient
             $data = $this->handleResponse($response);
             return $data['messages'] ?? [];
         } catch (GuzzleException $e) {
-            $this->logger->error("Sinch API error: " . $e->getMessage());
-            throw new ApiException("Failed to list messages: " . $e->getMessage());
+            $this->logger->error('Failed to list messages', ['exception' => $e]);
+            throw new ApiException('Failed to list messages', 0, $e);
         }
     }
 
@@ -314,8 +314,8 @@ class ConversationApiClient
 
             return $this->handleResponse($response);
         } catch (GuzzleException $e) {
-            $this->logger->error("Sinch API error: " . $e->getMessage());
-            throw new ApiException("Failed to create contact: " . $e->getMessage());
+            $this->logger->error('Failed to create contact', ['exception' => $e]);
+            throw new ApiException('Failed to create contact', 0, $e);
         }
     }
 
@@ -340,8 +340,8 @@ class ConversationApiClient
 
             return $this->handleResponse($response);
         } catch (GuzzleException $e) {
-            $this->logger->error("Sinch API error: " . $e->getMessage());
-            throw new ApiException("Failed to get contact: " . $e->getMessage());
+            $this->logger->error('Failed to get contact', ['exception' => $e]);
+            throw new ApiException('Failed to get contact', 0, $e);
         }
     }
 
@@ -373,8 +373,8 @@ class ConversationApiClient
 
             return $this->handleResponse($response);
         } catch (GuzzleException $e) {
-            $this->logger->error("Failed to get app configuration: " . $e->getMessage());
-            throw new ApiException("Failed to get app configuration: " . $e->getMessage());
+            $this->logger->error('Failed to get app configuration', ['exception' => $e]);
+            throw new ApiException('Failed to get app configuration', 0, $e);
         }
     }
 
@@ -451,8 +451,8 @@ class ConversationApiClient
                 $statusCode
             );
         } catch (GuzzleException $e) {
-            $this->logger->error("Sinch API connection test failed: " . $e->getMessage());
-            throw new ApiException("Connection test failed: " . $e->getMessage());
+            $this->logger->error('Sinch API connection test failed', ['exception' => $e]);
+            throw new ApiException('Connection test failed', 0, $e);
         }
     }
 
@@ -504,8 +504,8 @@ class ConversationApiClient
             $this->logger->debug("OAuth2 token obtained successfully");
             return $accessToken;
         } catch (GuzzleException $e) {
-            $this->logger->error("OAuth2 request failed: " . $e->getMessage());
-            throw new ApiException("OAuth2 request failed: " . $e->getMessage());
+            $this->logger->error('OAuth2 request failed', ['exception' => $e]);
+            throw new ApiException('OAuth2 request failed', 0, $e);
         }
     }
 
@@ -543,8 +543,8 @@ class ConversationApiClient
 
             return $this->handleResponse($response);
         } catch (GuzzleException $e) {
-            $this->logger->error("Failed to create template: " . $e->getMessage());
-            throw new ApiException("Failed to create template: " . $e->getMessage());
+            $this->logger->error('Failed to create template', ['exception' => $e]);
+            throw new ApiException('Failed to create template', 0, $e);
         }
     }
 
@@ -574,8 +574,8 @@ class ConversationApiClient
             $data = $this->handleResponse($response);
             return $data['templates'] ?? [];
         } catch (GuzzleException $e) {
-            $this->logger->error("Failed to list templates: " . $e->getMessage());
-            throw new ApiException("Failed to list templates: " . $e->getMessage());
+            $this->logger->error('Failed to list templates', ['exception' => $e]);
+            throw new ApiException('Failed to list templates', 0, $e);
         }
     }
 
@@ -651,7 +651,7 @@ class ConversationApiClient
                 // Success - return immediately
                 if ($statusCode >= 200 && $statusCode < 300) {
                     if ($attempt > 0) {
-                        $this->logger->info("Request succeeded after {$attempt} retries");
+                        $this->logger->info('Request succeeded after retries', ['attempts' => $attempt]);
                     }
                     return $response;
                 }
@@ -659,10 +659,12 @@ class ConversationApiClient
                 // Rate limit or server error - retry
                 if ($statusCode === 429 || $statusCode >= 500) {
                     if ($attempt < $maxRetries) {
-                        $this->logger->warning(
-                            "Request failed with {$statusCode}, retrying in {$delayMs}ms (attempt " .
-                            ($attempt + 1) . "/{$maxRetries})"
-                        );
+                        $this->logger->warning('Retrying failed request', [
+                            'status_code' => $statusCode,
+                            'delay_ms' => $delayMs,
+                            'attempt' => $attempt + 1,
+                            'max_retries' => $maxRetries,
+                        ]);
                         usleep($delayMs * 1000); // Convert ms to microseconds
                         $delayMs *= 2; // Exponential backoff
                         $attempt++;
@@ -674,10 +676,12 @@ class ConversationApiClient
                 return $response;
             } catch (GuzzleException $e) {
                 if ($attempt < $maxRetries) {
-                    $this->logger->warning(
-                        "Request threw exception: {$e->getMessage()}, retrying in {$delayMs}ms " .
-                        "(attempt " . ($attempt + 1) . "/{$maxRetries})"
-                    );
+                    $this->logger->warning('Retrying after exception', [
+                        'exception' => $e,
+                        'delay_ms' => $delayMs,
+                        'attempt' => $attempt + 1,
+                        'max_retries' => $maxRetries,
+                    ]);
                     usleep($delayMs * 1000);
                     $delayMs *= 2;
                     $attempt++;
@@ -949,15 +953,14 @@ class ConversationApiClient
         $error = json_decode($body, true);
         $message = $error['error']['message'] ?? 'Unknown API error';
 
-        // Log full error details for debugging
-        $this->logger->error(
-            sprintf(
-                "Sinch API error %d: %s\nFull response: %s",
-                $statusCode,
-                $message,
-                $body
-            )
-        );
+        $this->logger->error('Sinch API error response', [
+            'status_code' => $statusCode,
+            'message' => $message,
+        ]);
+        $this->logger->debug('Sinch API error response body', [
+            'status_code' => $statusCode,
+            'body' => $body,
+        ]);
 
         throw new ApiException("API request failed: {$message}", $statusCode);
     }
