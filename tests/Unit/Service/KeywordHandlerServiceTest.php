@@ -299,6 +299,124 @@ class KeywordHandlerServiceTest extends TestCase
         $this->assertNull($result);
     }
 
+    // --- handleInboundMessageForPatient: STOP ---
+
+    public function testForPatientStopOptsOutAllPlusSelf(): void
+    {
+        $this->mockPatientLookup('+15559999999', [
+            ['pid' => 10, 'fname' => 'Parent', 'lname' => 'Smith', 'phone_cell' => '555-999-9999'],
+            ['pid' => 11, 'fname' => 'Child', 'lname' => 'Smith', 'phone_cell' => '555-999-9999'],
+        ]);
+
+        $optedOut = [];
+        $this->consentService->expects($this->exactly(2))
+            ->method('optOut')
+            ->willReturnCallback(function (int $pid, string $phone, string $method) use (&$optedOut): void {
+                $this->assertSame('+15559999999', $phone);
+                $this->assertSame('sms_stop', $method);
+                $optedOut[] = $pid;
+            });
+
+        $this->templateService->method('render')->willReturn('Unsubscribed.');
+
+        $result = $this->service->handleInboundMessageForPatient(10, '+15559999999', 'STOP');
+
+        $this->assertSame('Unsubscribed.', $result);
+        $this->assertSame([10, 11], $optedOut);
+    }
+
+    public function testForPatientStopGuaranteesKnownPatientWhenPhoneLookupMisses(): void
+    {
+        // Phone lookup returns different patients (format mismatch scenario)
+        $this->mockPatientLookup('+15559999999', [
+            ['pid' => 20, 'fname' => 'Other', 'lname' => 'Person', 'phone_cell' => '555-999-9999'],
+        ]);
+
+        $optedOut = [];
+        $this->consentService->expects($this->exactly(2))
+            ->method('optOut')
+            ->willReturnCallback(function (int $pid, string $phone, string $method) use (&$optedOut): void {
+                $this->assertSame('+15559999999', $phone);
+                $this->assertSame('sms_stop', $method);
+                $optedOut[] = $pid;
+            });
+
+        $this->templateService->method('render')->willReturn('Unsubscribed.');
+
+        // Known patient 42 is NOT in the phone lookup results
+        $result = $this->service->handleInboundMessageForPatient(42, '+15559999999', 'STOP');
+
+        $this->assertSame('Unsubscribed.', $result);
+        $this->assertSame([20, 42], $optedOut);
+    }
+
+    public function testForPatientStopWorksEvenWithNoPhoneLookupResults(): void
+    {
+        $this->mockPatientLookup('+15559999999', []);
+
+        $this->consentService->expects($this->once())
+            ->method('optOut')
+            ->with(42, '+15559999999', 'sms_stop');
+
+        $this->templateService->method('render')->willReturn('Unsubscribed.');
+
+        $result = $this->service->handleInboundMessageForPatient(42, '+15559999999', 'STOP');
+
+        $this->assertSame('Unsubscribed.', $result);
+    }
+
+    // --- handleInboundMessageForPatient: START ---
+
+    public function testForPatientStartUsesKnownPatientId(): void
+    {
+        // No phone lookup mock needed — START skips it
+
+        $this->consentService->expects($this->once())
+            ->method('optIn')
+            ->with(42, '+15559999999', 'sms_start', null);
+
+        $this->templateService->expects($this->once())
+            ->method('render')
+            ->with('keyword_start', ['clinic_name' => 'Test Clinic'])
+            ->willReturn('Re-subscribed.');
+
+        $result = $this->service->handleInboundMessageForPatient(42, '+15559999999', 'START');
+
+        $this->assertSame('Re-subscribed.', $result);
+    }
+
+    // --- handleInboundMessageForPatient: HELP ---
+
+    public function testForPatientHelpResponds(): void
+    {
+        $this->templateService->expects($this->once())
+            ->method('render')
+            ->with('keyword_help', [
+                'clinic_name' => 'Test Clinic',
+                'phone' => '+15551234567',
+            ])
+            ->willReturn('For help, call us.');
+
+        $result = $this->service->handleInboundMessageForPatient(42, '+15559999999', 'HELP');
+
+        $this->assertSame('For help, call us.', $result);
+    }
+
+    // --- handleInboundMessageForPatient: non-keyword / edge cases ---
+
+    public function testForPatientReturnsNullForNonKeyword(): void
+    {
+        $this->assertNull(
+            $this->service->handleInboundMessageForPatient(42, '+15559999999', 'Hello doctor')
+        );
+    }
+
+    public function testForPatientReturnsNullForUnparseablePhone(): void
+    {
+        $result = $this->service->handleInboundMessageForPatient(42, 'abc', 'STOP');
+        $this->assertNull($result);
+    }
+
     // --- Helpers ---
 
     /**
