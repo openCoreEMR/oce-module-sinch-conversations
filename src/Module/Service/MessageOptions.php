@@ -37,7 +37,7 @@ class MessageOptions
     }
 
     /**
-     * Build the options array expected by ConversationApiClient::sendMessage()
+     * Build the options array expected by ConversationApiClient::sendMessageByChannelIdentity()
      *
      * @return array<string, mixed>
      */

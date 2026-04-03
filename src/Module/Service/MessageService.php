@@ -50,31 +50,20 @@ class MessageService
             $this->assertPatientEligible($patientId, $phoneNumber);
         }
 
-        $contactId = $this->getOrCreateContact($patientId, $phoneNumber);
-
-        $conversationId = $this->getOrCreateConversation($contactId, $patientId);
-
-        // Add configured clinic phone as sender if not already set
-        if ($options->sender === null) {
-            $senderPhone = $this->config->getClinicPhone();
-            if ($senderPhone !== '') {
-                $options = new MessageOptions(
-                    sender: $senderPhone,
-                    channel: Channel::SMS,
-                    templateKey: $options->templateKey,
-                    metadata: $options->metadata,
-                    channelPriority: $options->channelPriority,
-                    skipConsentCheck: $options->skipConsentCheck,
-                );
-                $this->logger->debug('Using configured sender', ['sender' => $senderPhone]);
-            }
-        }
+        $this->ensureContactRecord($patientId, $phoneNumber);
+        $conversationId = $this->getOrCreateConversation($patientId);
+        $channel = $options->channel ?? Channel::SMS;
 
         try {
-            $response = $this->apiClient->sendMessage($contactId, $message, $options->toApiOptions());
+            $response = $this->apiClient->sendMessageByChannelIdentity(
+                $phoneNumber,
+                $message,
+                $channel->value,
+                $options->toApiOptions()
+            );
         } catch (\Throwable $e) {
             $this->logger->error('Failed to send message via Sinch API', ['exception' => $e]);
-            throw new ValidationException("Failed to send message", 0, $e);
+            throw new ValidationException('Failed to send message', 0, $e);
         }
 
         $this->storeOutboundMessage($conversationId, $response, $message, $options);
@@ -118,7 +107,10 @@ class MessageService
             $dedupKey = $phoneNumber . ':' . $message;
             if (isset($sentMessages[$dedupKey])) {
                 $results['skipped']++;
-                $this->logger->debug("Skipping duplicate message to {$phoneNumber} for patient {$patientId}");
+                $this->logger->debug('Skipping duplicate message', [
+                    'phone' => $phoneNumber,
+                    'patientId' => $patientId,
+                ]);
                 continue;
             }
 
@@ -136,43 +128,41 @@ class MessageService
     }
 
     /**
-     * Get or create a Sinch contact for patient
+     * Ensure a local contact record exists for webhook/polling lookups
+     *
+     * The outbound send path doesn't need Sinch contacts (it sends by
+     * channel identity), but inbound webhook handlers and polling look up
+     * patients via oce_sinch_contacts. Write a local record so those
+     * lookups succeed — no Sinch API call needed.
      */
-    private function getOrCreateContact(int $patientId, string $phoneNumber): string
+    private function ensureContactRecord(int $patientId, string $phoneNumber): void
     {
-        $sql = "SELECT contact_id FROM oce_sinch_contacts
-                WHERE patient_id = ? AND channel_identity = ?";
-        $result = QueryUtils::querySingleRow($sql, [$patientId, $phoneNumber]);
-
-        if ($result) {
-            return $result['contact_id'];
-        }
-
-        $response = $this->apiClient->createContact($phoneNumber, 'SMS');
-        $contactId = $response['id'] ?? '';
-
-        if (!$contactId) {
-            throw new ValidationException("Failed to create Sinch contact");
-        }
-
+        // Use ON DUPLICATE KEY UPDATE so that if the patient's phone number
+        // changes, the contact record reflects the new number rather than
+        // keeping a stale one. The unique_patient_channel constraint
+        // (patient_id, channel) determines whether to insert or update.
         $sql = "INSERT INTO oce_sinch_contacts (
             patient_id, contact_id, channel, channel_identity,
             opted_in, created_at, updated_at
-        ) VALUES (?, ?, 'SMS', ?, TRUE, NOW(), NOW())";
+        ) VALUES (?, ?, 'SMS', ?, TRUE, NOW(), NOW())
+        ON DUPLICATE KEY UPDATE
+            channel_identity = VALUES(channel_identity),
+            updated_at = NOW()";
 
-        QueryUtils::sqlStatementThrowException($sql, [$patientId, $contactId, $phoneNumber]);
-
-        return $contactId;
+        QueryUtils::sqlStatementThrowException(
+            $sql,
+            [$patientId, uniqid('local_', true), $phoneNumber]
+        );
     }
 
     /**
-     * Get or create a conversation
+     * Get or create a local conversation record keyed on patient + channel
      */
-    private function getOrCreateConversation(string $contactId, int $patientId): string
+    private function getOrCreateConversation(int $patientId): string
     {
         $sql = "SELECT conversation_id FROM oce_sinch_conversations
-                WHERE contact_id = ? AND patient_id = ?";
-        $result = QueryUtils::querySingleRow($sql, [$contactId, $patientId]);
+                WHERE patient_id = ? AND channel = 'SMS'";
+        $result = QueryUtils::querySingleRow($sql, [$patientId]);
 
         if ($result) {
             return $result['conversation_id'];
@@ -181,11 +171,11 @@ class MessageService
         $conversationId = 'conv_' . uniqid();
 
         $sql = "INSERT INTO oce_sinch_conversations (
-            conversation_id, contact_id, patient_id, channel,
+            conversation_id, patient_id, channel,
             status, created_at, updated_at
-        ) VALUES (?, ?, ?, 'SMS', 'ACTIVE', NOW(), NOW())";
+        ) VALUES (?, ?, 'SMS', 'ACTIVE', NOW(), NOW())";
 
-        QueryUtils::sqlStatementThrowException($sql, [$conversationId, $contactId, $patientId]);
+        QueryUtils::sqlStatementThrowException($sql, [$conversationId, $patientId]);
 
         return $conversationId;
     }

@@ -4,7 +4,7 @@
 CREATE TABLE IF NOT EXISTS `oce_sinch_conversations` (
   `id` INT(11) PRIMARY KEY AUTO_INCREMENT NOT NULL,
   `conversation_id` VARCHAR(255) UNIQUE NOT NULL COMMENT 'Sinch conversation ID',
-  `contact_id` VARCHAR(255) NOT NULL COMMENT 'Sinch contact ID',
+  `contact_id` VARCHAR(255) DEFAULT NULL COMMENT 'Sinch contact ID (nullable — outbound path sends by channel identity)',
   `patient_id` BIGINT(20) DEFAULT NULL COMMENT 'Associated patient ID',
   `provider_id` BIGINT(20) DEFAULT NULL COMMENT 'Assigned provider ID',
   `channel` VARCHAR(50) DEFAULT 'SMS' COMMENT 'Primary channel (SMS, WHATSAPP, RCS, etc)',
