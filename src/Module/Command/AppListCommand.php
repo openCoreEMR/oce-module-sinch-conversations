@@ -30,6 +30,8 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 )]
 class AppListCommand extends Command
 {
+    use WritesExceptionChain;
+
     protected function configure(): void
     {
         $this
@@ -81,14 +83,10 @@ class AppListCommand extends Command
             $io->success(sprintf('Found %d app(s)', count($apps)));
 
             return Command::SUCCESS;
-        } catch (ApiException $e) {
-            $io->error('API Error: ' . $e->getMessage());
-            return Command::FAILURE;
         } catch (\Throwable $e) {
-            $io->error('Error: ' . $e->getMessage());
-            if ($output->isVerbose()) {
-                $io->text($e->getTraceAsString());
-            }
+            $label = $e instanceof ApiException ? 'API Error' : 'Error';
+            $io->error("{$label}: " . $e->getMessage());
+            $this->writeExceptionChain($io, $output, $e);
             return Command::FAILURE;
         }
     }
