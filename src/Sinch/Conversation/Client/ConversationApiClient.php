@@ -28,9 +28,11 @@ class ConversationApiClient
     private readonly SystemLogger $logger;
     private ?string $cachedAccessToken = null;
 
-    public function __construct(private readonly GlobalConfig $config)
-    {
-        $this->httpClient = new Client([
+    public function __construct(
+        private readonly GlobalConfig $config,
+        ?Client $httpClient = null
+    ) {
+        $this->httpClient = $httpClient ?? new Client([
             'base_uri' => self::BASE_URL,
             'timeout' => 30,
             'http_errors' => false,
@@ -470,21 +472,18 @@ class ConversationApiClient
             throw new ApiException("API Key ID and Secret are required for OAuth2 authentication");
         }
 
-        $authClient = new Client([
-            'base_uri' => "https://{$region}.auth.sinch.com",
-            'timeout' => 30,
-            'http_errors' => false,
-        ]);
-
         try {
             $this->logger->debug("Requesting OAuth2 token from Sinch");
 
-            $response = $authClient->post('/oauth2/token', [
-                'form_params' => [
-                    'grant_type' => 'client_credentials',
-                ],
-                'auth' => [$keyId, $keySecret],
-            ]);
+            $response = $this->httpClient->post(
+                "https://{$region}.auth.sinch.com/oauth2/token",
+                [
+                    'form_params' => [
+                        'grant_type' => 'client_credentials',
+                    ],
+                    'auth' => [$keyId, $keySecret],
+                ]
+            );
 
             $statusCode = $response->getStatusCode();
             $body = (string)$response->getBody();
@@ -523,12 +522,6 @@ class ConversationApiClient
         $region = $this->config->getSinchRegion();
         $accessToken = $this->getOAuth2Token();
 
-        $templateClient = new Client([
-            'base_uri' => "https://{$region}.template.api.sinch.com",
-            'timeout' => 30,
-            'http_errors' => false,
-        ]);
-
         try {
             $this->logger->debug(
                 "Creating template in Sinch",
@@ -536,8 +529,8 @@ class ConversationApiClient
             );
 
             $response = $this->executeWithRetry(
-                fn(): \Psr\Http\Message\ResponseInterface => $templateClient->post(
-                    "/v2/projects/{$projectId}/templates",
+                fn(): \Psr\Http\Message\ResponseInterface => $this->httpClient->post(
+                    "https://{$region}.template.api.sinch.com/v2/projects/{$projectId}/templates",
                     [
                         'headers' => [
                             'Content-Type' => 'application/json',
@@ -567,15 +560,9 @@ class ConversationApiClient
         $region = $this->config->getSinchRegion();
         $accessToken = $this->getOAuth2Token();
 
-        $templateClient = new Client([
-            'base_uri' => "https://{$region}.template.api.sinch.com",
-            'timeout' => 30,
-            'http_errors' => false,
-        ]);
-
         try {
-            $response = $templateClient->get(
-                "/v2/projects/{$projectId}/templates",
+            $response = $this->httpClient->get(
+                "https://{$region}.template.api.sinch.com/v2/projects/{$projectId}/templates",
                 [
                     'headers' => [
                         'Content-Type' => 'application/json',
