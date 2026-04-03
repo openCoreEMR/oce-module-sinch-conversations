@@ -166,3 +166,12 @@ CREATE TABLE IF NOT EXISTS `oce_sinch_appointment_reminders` (
   INDEX `idx_patient_id` (`patient_id`),
   INDEX `idx_sent_at` (`sent_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Webhook nonce tracking for replay protection.
+-- Store each nonce after successful HMAC verification and reject duplicates.
+-- Rows are pruned when expires_at has passed.
+CREATE TABLE IF NOT EXISTS `oce_sinch_webhook_nonces` (
+  `nonce` VARCHAR(255) COLLATE utf8mb4_bin NOT NULL PRIMARY KEY COMMENT 'Nonce from x-sinch-webhook-signature-nonce header',
+  `expires_at` DATETIME NOT NULL COMMENT 'When this nonce can be pruned (timestamp + tolerance window)',
+  INDEX `idx_expires_at` (`expires_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
