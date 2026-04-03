@@ -98,25 +98,29 @@ class WebhookController
             );
         }
 
-        $eventTypeRaw = $payload['trigger'] ?? null;
-        if (!is_string($eventTypeRaw) || $eventTypeRaw === '') {
-            $this->logger->error("Webhook missing trigger type", [
+        // Sinch uses discriminated union by field presence — the event type
+        // is determined by which top-level key exists in the payload.
+        // See https://developers.sinch.com/docs/conversation/callbacks.md
+        $eventType = $this->detectEventType($payload);
+
+        if ($eventType === null) {
+            $this->logger->error('Webhook payload has no recognized event key', [
                 'payload_keys' => array_keys($payload),
             ]);
             return new JsonResponse(
-                ['error' => 'Missing trigger type'],
+                ['error' => 'Unrecognized payload structure'],
                 Response::HTTP_BAD_REQUEST
             );
         }
 
-        $this->logger->info('Processing webhook event', ['trigger' => $eventTypeRaw]);
+        $this->logger->info('Processing webhook event', ['eventType' => $eventType]);
 
-        return match ($eventTypeRaw) {
-            'MESSAGE_INBOUND' => $this->handleMessageInbound($payload),
-            'MESSAGE_DELIVERY' => $this->handleMessageDelivery($payload),
-            'OPT_OUT' => $this->handleOptOut($payload),
-            'OPT_IN' => $this->handleOptIn($payload),
-            default => $this->handleUnknownEvent($eventTypeRaw),
+        return match ($eventType) {
+            'message' => $this->handleMessageInbound($payload),
+            'message_delivery_report' => $this->handleMessageDelivery($payload),
+            'opt_out_notification' => $this->handleOptOut($payload),
+            'opt_in_notification' => $this->handleOptIn($payload),
+            default => $this->handleUnknownEvent($eventType),
         };
     }
 
@@ -242,15 +246,44 @@ class WebhookController
     }
 
     /**
+     * Detect the event type from the webhook payload
+     *
+     * Sinch identifies the callback type by which event-specific key is
+     * present at the top level of the payload. Returns the key name, or
+     * null if no recognized key is found.
+     *
+     * @param array<string, mixed> $payload
+     */
+    private function detectEventType(array $payload): ?string
+    {
+        // Common metadata keys present in every Sinch callback.
+        // The event type is the single non-metadata key.
+        $metadataKeys = [
+            'app_id',
+            'project_id',
+            'accepted_time',
+            'event_time',
+            'message_metadata',
+            'correlation_id',
+            'channel_metadata',
+        ];
+
+        foreach ($payload as $key => $value) {
+            if (!in_array($key, $metadataKeys, true)) {
+                return $key;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Parse webhook payload from request
      *
-     * Sinch Conversations API sends webhooks as application/json with structure:
-     * {
-     *   "app_id": "...",
-     *   "trigger": "MESSAGE_INBOUND",
-     *   "message": { "id": "...", "direction": "TO_APP", "contact_message": {...}, ... },
-     *   "message_metadata": "..."
-     * }
+     * Sinch Conversations API sends webhooks as application/json. The event
+     * type is determined by field presence (discriminated union), not by an
+     * explicit type field. Common top-level keys include: app_id, project_id,
+     * accepted_time, event_time, message_metadata, correlation_id.
      *
      * @return array<string, mixed>
      */
@@ -258,7 +291,6 @@ class WebhookController
     {
         /** @var string $content */
         $content = $request->getContent();
-        /** @var array<string, mixed>|scalar|null $data */
         $data = json_decode($content, true);
 
         if (json_last_error() !== JSON_ERROR_NONE) {
@@ -266,7 +298,21 @@ class WebhookController
             return [];
         }
 
-        return is_array($data) ? $data : [];
+        if (!is_array($data) || array_is_list($data)) {
+            return [];
+        }
+
+        // json_decode with assoc=true produces string keys for JSON objects.
+        // PHPStan can't infer this after the is_array + !array_is_list checks,
+        // so filter to prove string keys.
+        $result = [];
+        foreach ($data as $key => $value) {
+            if (is_string($key)) {
+                $result[$key] = $value;
+            }
+        }
+
+        return $result;
     }
 
     /**
