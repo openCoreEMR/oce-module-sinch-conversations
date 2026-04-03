@@ -16,3 +16,4 @@ DROP TABLE IF EXISTS `oce_sinch_message_templates`;
 DROP TABLE IF EXISTS `oce_sinch_keyword_responses`;
 DROP TABLE IF EXISTS `oce_sinch_services`;
 DROP TABLE IF EXISTS `oce_sinch_appointment_reminders`;
+DROP TABLE IF EXISTS `oce_sinch_webhook_nonces`;

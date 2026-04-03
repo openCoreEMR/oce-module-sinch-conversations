@@ -75,6 +75,17 @@ class WebhookController
                 ['error' => $e->getMessage()],
                 Response::HTTP_UNAUTHORIZED
             );
+        } catch (\Throwable $e) {
+            $errorId = ErrorId::generate();
+            $this->logger->error('Webhook authentication error', [
+                'errorId' => $errorId,
+                'clientIp' => $clientIp,
+                'exception' => $e,
+            ]);
+            return new JsonResponse(
+                ['error' => 'Internal error', 'errorId' => $errorId],
+                Response::HTTP_INTERNAL_SERVER_ERROR
+            );
         }
 
         $payload = $this->parsePayload($request);
@@ -89,7 +100,9 @@ class WebhookController
 
         $eventTypeRaw = $payload['trigger'] ?? null;
         if (!is_string($eventTypeRaw) || $eventTypeRaw === '') {
-            $this->logger->error("Webhook missing trigger type");
+            $this->logger->error("Webhook missing trigger type", [
+                'payload_keys' => array_keys($payload),
+            ]);
             return new JsonResponse(
                 ['error' => 'Missing trigger type'],
                 Response::HTTP_BAD_REQUEST
@@ -139,6 +152,11 @@ class WebhookController
             throw new AccessDeniedException("Missing webhook signature headers");
         }
 
+        if (strlen($nonce) > 255) {
+            $this->logger->warning('Webhook request with oversized nonce', ['clientIp' => $clientIp]);
+            throw new AccessDeniedException("Invalid webhook signature headers");
+        }
+
         if (strcasecmp($algorithm, 'HmacSHA256') !== 0) {
             $this->logger->warning(
                 'Webhook request with unsupported signature algorithm',
@@ -171,6 +189,56 @@ class WebhookController
             $this->logger->warning('Webhook request with invalid HMAC signature', ['clientIp' => $clientIp]);
             throw new UnauthorizedException("Invalid webhook signature");
         }
+
+        // Atomically record the nonce; duplicate means replay
+        if (!$this->recordNonce($nonce, (int) $timestamp)) {
+            $this->logger->warning('Webhook request with replayed nonce', ['clientIp' => $clientIp]);
+            throw new UnauthorizedException("Invalid webhook signature");
+        }
+    }
+
+    /**
+     * Atomically record a nonce and prune expired entries
+     *
+     * Uses INSERT (not INSERT IGNORE) so a duplicate key error signals
+     * replay. This eliminates the race condition of check-then-insert.
+     * Uses FROM_UNIXTIME for DB-side timestamp conversion to avoid
+     * PHP/MySQL timezone mismatches.
+     *
+     * @return bool False when the nonce already exists (replay detected)
+     */
+    private function recordNonce(string $nonce, int $timestamp): bool
+    {
+        $expiresAtUnix = $timestamp + self::TIMESTAMP_TOLERANCE_SECONDS;
+
+        try {
+            QueryUtils::sqlStatementThrowException(
+                "INSERT INTO `oce_sinch_webhook_nonces` (`nonce`, `expires_at`) VALUES (?, FROM_UNIXTIME(?))",
+                [$nonce, $expiresAtUnix]
+            );
+        } catch (\Throwable $e) {
+            $isDuplicate = str_contains($e->getMessage(), 'Duplicate entry')
+                || (string) $e->getCode() === '23000';
+            if ($isDuplicate) {
+                return false;
+            }
+            throw $e;
+        }
+
+        // Prune expired nonces opportunistically. Failures must not cause
+        // the request to fail after the nonce is recorded, otherwise retries
+        // would be incorrectly rejected as replays.
+        try {
+            QueryUtils::sqlStatementThrowException(
+                "DELETE FROM `oce_sinch_webhook_nonces` WHERE `expires_at` < NOW()"
+            );
+        } catch (\Throwable $e) {
+            $this->logger->warning('Failed to prune expired webhook nonces', [
+                'exception' => $e,
+            ]);
+        }
+
+        return true;
     }
 
     /**

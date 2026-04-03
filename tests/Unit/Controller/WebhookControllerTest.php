@@ -231,6 +231,94 @@ class WebhookControllerTest extends TestCase
         $this->assertEquals(Response::HTTP_OK, $response->getStatusCode());
     }
 
+    public function testRejects401WhenNonceReplayed(): void
+    {
+        // Simulate a duplicate key error from the nonce INSERT
+        QueryUtils::setNextException(
+            new \RuntimeException('Duplicate entry \'abc123\' for key \'PRIMARY\'')
+        );
+
+        $request = $this->makeRequest('POST', ['trigger' => 'MESSAGE_INBOUND']);
+
+        $response = $this->controller->dispatch($request);
+
+        $this->assertEquals(Response::HTTP_UNAUTHORIZED, $response->getStatusCode());
+    }
+
+    public function testRecordsNonceOnSuccessfulAuth(): void
+    {
+        $request = $this->makeRequest('POST', ['trigger' => 'UNKNOWN_EVENT']);
+
+        $this->controller->dispatch($request);
+
+        $queries = QueryUtils::getQueries();
+        $nonceInserts = array_filter(
+            $queries,
+            fn (array $q): bool => str_contains($q['sql'], 'oce_sinch_webhook_nonces') && str_contains($q['sql'], 'INSERT')
+        );
+        $this->assertNotEmpty($nonceInserts, 'Nonce should be recorded after successful auth');
+    }
+
+    public function testPrunesExpiredNonces(): void
+    {
+        $request = $this->makeRequest('POST', ['trigger' => 'UNKNOWN_EVENT']);
+
+        $this->controller->dispatch($request);
+
+        $queries = QueryUtils::getQueries();
+        $pruneQueries = array_filter(
+            $queries,
+            fn (array $q): bool => str_contains($q['sql'], 'oce_sinch_webhook_nonces') && str_contains($q['sql'], 'DELETE')
+        );
+        $this->assertNotEmpty($pruneQueries, 'Expired nonces should be pruned after successful auth');
+    }
+
+    public function testFailedHmacDoesNotTouchNonceTable(): void
+    {
+        $mockConfig = $this->createMock(GlobalConfig::class);
+        $mockConfig->method('isIpInAllowlist')->willReturn(true);
+        $mockConfig->method('isWebhookAuthConfigured')->willReturn(true);
+        $mockConfig->method('verifyWebhookSignature')->willReturn(false);
+
+        $controller = new WebhookController(
+            $mockConfig,
+            $this->mockKeywordHandler,
+            $this->mockMessageService,
+            $this->mockConsentService
+        );
+
+        QueryUtils::clearQueries();
+
+        $request = $this->makeRequest('POST', ['trigger' => 'MESSAGE_INBOUND'], 'wrong_secret');
+        $controller->dispatch($request);
+
+        $nonceQueries = array_filter(
+            QueryUtils::getQueries(),
+            fn (array $q): bool => str_contains($q['sql'], 'oce_sinch_webhook_nonces')
+        );
+        $this->assertEmpty($nonceQueries, 'Failed HMAC should not touch nonce table');
+    }
+
+    public function testReturns500OnNonceDbError(): void
+    {
+        // Simulate a non-duplicate DB exception during nonce insert
+        QueryUtils::setNextException(
+            new \RuntimeException('Connection lost during query')
+        );
+
+        $request = $this->makeRequest('POST', ['trigger' => 'MESSAGE_INBOUND']);
+
+        $response = $this->controller->dispatch($request);
+
+        $this->assertEquals(Response::HTTP_INTERNAL_SERVER_ERROR, $response->getStatusCode());
+
+        $body = json_decode((string) $response->getContent(), true);
+        $this->assertArrayHasKey('errorId', $body);
+        $this->assertEquals('Internal error', $body['error']);
+        // Ensure no internal details are leaked
+        $this->assertStringNotContainsString('Connection lost', (string) $response->getContent());
+    }
+
     // --- Payload parsing tests ---
 
     public function testReturns400ForEmptyPayload(): void
