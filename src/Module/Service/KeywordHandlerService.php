@@ -31,7 +31,10 @@ class KeywordHandlerService
     }
 
     /**
-     * Process inbound message for keywords
+     * Process inbound message for keywords (webhook path)
+     *
+     * Use this when patient ID is not known upfront. Finds patients by
+     * phone number lookup.
      *
      * STOP/START/HELP operate at the phone-number level, not the patient level.
      * A phone number can belong to multiple patients (e.g. parent with children).
@@ -68,7 +71,52 @@ class KeywordHandlerService
             'STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT' =>
                 $this->handleStop($normalized, $patients),
             'START', 'UNSTOP', 'SUBSCRIBE' =>
-                $this->handleStart($normalized, $patients[0]),
+                $this->handleStart($normalized, (int) $patients[0]['pid']),
+            'HELP', 'INFO' =>
+                $this->handleHelp(),
+            default => null,
+        };
+    }
+
+    /**
+     * Process inbound message for keywords with a known patient ID (polling path)
+     *
+     * Use this when the caller already has the authoritative patient ID
+     * (e.g. from the conversation record). Skips the phone-number-based
+     * patient lookup for START, and guarantees the known patient is included
+     * in STOP even if the phone format doesn't match the database.
+     *
+     * STOP still applies to ALL patients sharing the number (carrier-level),
+     * plus the known patient as a guarantee.
+     * START applies to the known patient directly (no first-match ambiguity).
+     *
+     * @param int $patientId Known patient ID from the conversation record
+     * @param string $phoneNumber E.164 phone number
+     * @param string $messageBody
+     * @return string|null Response message, or null if not a keyword
+     */
+    public function handleInboundMessageForPatient(
+        int $patientId,
+        string $phoneNumber,
+        string $messageBody
+    ): ?string {
+        $keyword = $this->detectKeyword($messageBody);
+
+        if ($keyword === null) {
+            return null;
+        }
+
+        $normalized = PhoneNormalizer::toE164($phoneNumber);
+        if ($normalized === null) {
+            $this->logger->warning('Could not normalize phone number', ['phone' => $phoneNumber]);
+            return null;
+        }
+
+        return match (strtoupper($keyword)) {
+            'STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT' =>
+                $this->handleStopWithKnownPatient($normalized, $patientId),
+            'START', 'UNSTOP', 'SUBSCRIBE' =>
+                $this->handleStart($normalized, $patientId),
             'HELP', 'INFO' =>
                 $this->handleHelp(),
             default => null,
@@ -125,19 +173,55 @@ class KeywordHandlerService
     }
 
     /**
-     * Handle START keyword -- opt-in only the first matched patient
+     * Handle STOP keyword with a known patient guarantee
      *
-     * START cannot disambiguate which patient the sender means, so only
-     * the first match is opted in. Staff can opt in additional patients
-     * via the web form.
+     * Opt out all patients found by phone lookup (carrier-level), plus
+     * ensure the known patient is opted out even if the phone lookup
+     * missed them due to format mismatches or missing phone_cell.
      *
      * @param string $phoneNumber E.164
-     * @param array<string, mixed> $patient
+     * @param int $knownPatientId Authoritative patient ID from the conversation
      * @return string Response message
      */
-    private function handleStart(string $phoneNumber, array $patient): string
+    private function handleStopWithKnownPatient(string $phoneNumber, int $knownPatientId): string
     {
-        $this->consentService->optIn((int) $patient['pid'], $phoneNumber, 'sms_start', null);
+        $patients = $this->findPatientsByPhone($phoneNumber);
+
+        $knownPatientFound = false;
+        foreach ($patients as $patient) {
+            $pid = (int) $patient['pid'];
+            $this->consentService->optOut($pid, $phoneNumber, 'sms_stop');
+            if ($pid === $knownPatientId) {
+                $knownPatientFound = true;
+            }
+        }
+
+        if (!$knownPatientFound) {
+            $this->consentService->optOut($knownPatientId, $phoneNumber, 'sms_stop');
+        }
+
+        $variables = [
+            'clinic_name' => $this->config->getClinicName(),
+            'phone' => $this->config->getClinicPhone(),
+        ];
+
+        return $this->templateService->render('keyword_stop', $variables);
+    }
+
+    /**
+     * Handle START keyword -- opt-in the given patient
+     *
+     * From the webhook path this is the first phone-lookup match (since
+     * a keyword alone cannot disambiguate). From the polling path this
+     * is the authoritative patient from the conversation record.
+     *
+     * @param string $phoneNumber E.164
+     * @param int $patientId Patient to opt in
+     * @return string Response message
+     */
+    private function handleStart(string $phoneNumber, int $patientId): string
+    {
+        $this->consentService->optIn($patientId, $phoneNumber, 'sms_start', null);
 
         $variables = [
             'clinic_name' => $this->config->getClinicName(),

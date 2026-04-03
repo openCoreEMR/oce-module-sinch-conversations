@@ -154,7 +154,7 @@ class MessagePollingService
             return null;
         }
 
-        $response = $this->keywordHandler->handleInboundMessage($phoneNumber, $messageBody);
+        $response = $this->keywordHandler->handleInboundMessageForPatient($patientId, $phoneNumber, $messageBody);
         if ($response === null) {
             return null;
         }
