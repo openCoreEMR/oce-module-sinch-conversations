@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/openCoreEMR/oce-module-sinch-conversations/compare/1.0.0...1.0.1) (2026-04-06)
+
+
+### Bug Fixes
+
+* conditionally load module autoloader to prevent crash in Docker image ([#101](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/101)) ([b342a5d](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/b342a5d631e16ce823dc2a6a1b0c2d585b7efd76))
+
 ## [1.0.0](https://github.com/openCoreEMR/oce-module-sinch-conversations/compare/0.9.0...1.0.0) (2026-04-03)
 
 
