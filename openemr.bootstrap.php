@@ -14,10 +14,12 @@ declare(strict_types=1);
 
 namespace OpenCoreEMR\Modules\SinchConversations;
 
-// OpenEMR's $classLoader only handles PSR-4 namespace registration for module
-// source code. Third-party packages in the module's vendor/ (oce-lib-module-config,
-// Guzzle, etc.) are invisible without the module's own composer autoloader.
-require_once __DIR__ . '/vendor/autoload.php';
+// In local dev the module has its own vendor/; in the Docker image, dependencies
+// live in the top-level vendor/ and this file does not exist.
+$moduleAutoloader = __DIR__ . '/vendor/autoload.php';
+if (file_exists($moduleAutoloader)) {
+    require_once $moduleAutoloader;
+}
 
 /**
  * @var \OpenEMR\Core\ModulesClassLoader $classLoader Injected by the OpenEMR module loader

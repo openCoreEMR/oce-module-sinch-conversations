@@ -30,10 +30,12 @@ function oce_sinch_run_appointment_reminders(): void
         return;
     }
 
-    // Background services bypass openemr.bootstrap.php, so the module's composer
-    // autoloader isn't loaded yet. Without it, vendor classes like
-    // ModuleConfigDescriptor and ConfigFactory are not autoloadable.
-    require_once $moduleDir . '/vendor/autoload.php';
+    // In local dev the module has its own vendor/; in the Docker image,
+    // dependencies live in the top-level vendor/ and this file does not exist.
+    $moduleAutoloader = $moduleDir . '/vendor/autoload.php';
+    if (file_exists($moduleAutoloader)) {
+        require_once $moduleAutoloader;
+    }
 
     // The module's openemr.bootstrap.php registers namespaces via the
     // ModulesClassLoader, but background services bypass that path.
