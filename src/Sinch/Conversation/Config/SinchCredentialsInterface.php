@@ -1,7 +1,10 @@
 <?php
 
 /**
- * Configuration Interface for Sinch API Clients
+ * Sinch API credentials interface.
+ *
+ * Defines the credential getters required by Sinch API clients. Distinct from
+ * the generic OpenEMR module config layer (oce-lib-module-config).
  *
  * @package   OpenCoreEMR
  * @link      https://opencoreemr.com/
@@ -14,7 +17,7 @@ declare(strict_types=1);
 
 namespace OpenCoreEMR\Sinch\Conversation\Config;
 
-interface ConfigInterface
+interface SinchCredentialsInterface
 {
     public function getSinchProjectId(): string;
 

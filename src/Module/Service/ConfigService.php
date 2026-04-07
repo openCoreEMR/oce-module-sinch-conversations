@@ -155,6 +155,22 @@ class ConfigService
         }
     }
 
+    /**
+     * Save the webhook shared secret (encrypted in database mode).
+     */
+    public function saveWebhookSecret(string $secret): void
+    {
+        $this->saveEncryptedSetting(GlobalConfig::CONFIG_OPTION_WEBHOOK_SECRET, $secret);
+    }
+
+    /**
+     * Clear the stored webhook shared secret.
+     */
+    public function clearWebhookSecret(): void
+    {
+        $this->saveSetting(GlobalConfig::CONFIG_OPTION_WEBHOOK_SECRET, '');
+    }
+
     private function saveSetting(string $key, string $value): void
     {
         $this->libConfigService->saveSetting($key, $value);

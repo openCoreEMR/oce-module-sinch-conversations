@@ -14,7 +14,7 @@ declare(strict_types=1);
 
 namespace OpenCoreEMR\Sinch\Conversation\Config;
 
-class StandaloneConfig implements ConfigInterface
+class StandaloneConfig implements SinchCredentialsInterface
 {
     /**
      * @param array<string, string> $config

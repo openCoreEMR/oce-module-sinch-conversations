@@ -17,11 +17,14 @@ namespace OpenCoreEMR\Modules\SinchConversations;
 use OpenCoreEMR\ModuleConfig\ConfigAccessorInterface;
 use OpenCoreEMR\ModuleConfig\ConfigFactory;
 use OpenCoreEMR\Sinch\Conversation\Config\Region;
+use OpenCoreEMR\Sinch\Conversation\Config\SinchCredentialsInterface;
 use OpenEMR\Common\Crypto\CryptoGen;
 use Symfony\Component\HttpFoundation\IpUtils;
 
-class GlobalConfig
+class GlobalConfig implements SinchCredentialsInterface
 {
+    public const WEBHOOK_PATH = '/interface/modules/custom_modules/oce-module-sinch-conversations/public/webhook.php';
+
     private readonly bool $isExternalConfigMode;
 
     public function __construct(
@@ -134,6 +137,31 @@ class GlobalConfig
     public function getWebroot(): string
     {
         return $this->configAccessor->getString('webroot', '');
+    }
+
+    /**
+     * Get the fully qualified site address (scheme + host + webroot) for building absolute URLs.
+     *
+     * Set by OpenEMR in interface/globals.php from the "Site Address Override" global or resolved
+     * from request headers. Canonical source for the module's public-facing base URL.
+     */
+    public function getQualifiedSiteAddr(): string
+    {
+        return $this->configAccessor->getString('qualified_site_addr', '');
+    }
+
+    /**
+     * Get the absolute URL where this module receives Sinch webhooks.
+     *
+     * Returns empty string if qualified_site_addr is not configured.
+     */
+    public function getWebhookTargetUrl(): string
+    {
+        $siteAddr = $this->getQualifiedSiteAddr();
+        if ($siteAddr === '') {
+            return '';
+        }
+        return rtrim($siteAddr, '/') . self::WEBHOOK_PATH;
     }
 
     /**

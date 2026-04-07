@@ -21,7 +21,7 @@ use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
 use OpenCoreEMR\Modules\SinchConversations\Common\ArrayPath;
 use OpenCoreEMR\Modules\SinchConversations\Common\Json;
-use OpenCoreEMR\Sinch\Conversation\Config\ConfigInterface;
+use OpenCoreEMR\Sinch\Conversation\Config\SinchCredentialsInterface;
 use OpenCoreEMR\Sinch\Conversation\Exception\ApiException;
 
 class AppConfigurationClient
@@ -30,7 +30,7 @@ class AppConfigurationClient
     private readonly Client $httpClient;
     private ?string $cachedAccessToken = null;
 
-    public function __construct(private readonly ConfigInterface $config)
+    public function __construct(private readonly SinchCredentialsInterface $config)
     {
         $this->httpClient = new Client([
             'base_uri' => $config->getSinchApiBaseUrl(),
