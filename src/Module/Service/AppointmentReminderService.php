@@ -71,8 +71,19 @@ class AppointmentReminderService
             $pcEid = (int) $appointment['pc_eid'];
             $patientId = (int) $appointment['pc_pid'];
 
-            $phoneNumber = $appointment['phone_cell'] ?? '';
-            if ($phoneNumber === '') {
+            $rawPhone = $appointment['phone_cell'] ?? '';
+            if ($rawPhone === '') {
+                $results['skipped']++;
+                continue;
+            }
+
+            $phoneNumber = PhoneNormalizer::toE164($rawPhone);
+            if ($phoneNumber === null) {
+                $this->logger->warning('Skipping appointment reminder: unparseable phone number', [
+                    'pc_eid' => $pcEid,
+                    'patientId' => $patientId,
+                    'phone' => $rawPhone,
+                ]);
                 $results['skipped']++;
                 continue;
             }
@@ -193,6 +204,8 @@ class AppointmentReminderService
      *
      * The hipaa_allowsms check is handled in run() from the main query result.
      * This method checks only module-level consent in oce_sinch_patient_consent.
+     *
+     * @param string $phoneNumber E.164 normalized phone number
      */
     private function hasActiveConsent(int $patientId, string $phoneNumber): bool
     {

@@ -386,6 +386,33 @@ class AppointmentReminderServiceTest extends TestCase
         $this->assertSame(1, $results['sent']);
     }
 
+    // --- raw phone_cell format is normalized before consent lookup ---
+
+    public function testRunNormalizesPhoneCellBeforeConsentLookup(): void
+    {
+        // phone_cell is a raw 10-digit number as stored in patient_data,
+        // but consent is recorded in E.164 format (+1 prefix)
+        $this->mockUpcomingAppointments([
+            $this->makeAppointment(500, 80, '2026-04-01', '09:00:00', '5102551233', 'YES'),
+        ]);
+        $this->mockActiveConsent(80, '+15102551233');
+
+        $this->templateService->method('getAppointmentReminderTemplateKey')
+            ->willReturn('appointment_reminder_no_portal');
+        $this->templateService->method('render')
+            ->willReturn('Reminder for raw phone.');
+
+        $this->messageService->expects($this->once())
+            ->method('sendToPatient')
+            ->with(80, '+15102551233', 'Reminder for raw phone.', $this->anything())
+            ->willReturn(['id' => 'msg-raw-phone']);
+
+        $results = $this->service->run();
+
+        $this->assertSame(1, $results['sent']);
+        $this->assertSame(0, $results['skipped']);
+    }
+
     // --- cleanup ---
 
     public function testRunPurgesExpiredReminders(): void
