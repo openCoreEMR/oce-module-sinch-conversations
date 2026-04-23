@@ -287,8 +287,19 @@
                         if (data.app_config.channel_credentials && data.app_config.channel_credentials.length > 0) {
                             message += '\n{{ "Channels:"|xlt }}\n';
                             data.app_config.channel_credentials.forEach(channel => {
-                                message += '  - ' + (channel.channel || 'Unknown') + ': ' +
-                                          (channel.state || 'Unknown state') + '\n';
+                                // state can be a string or an object { status, description }
+                                let stateStatus = 'Unknown state';
+                                let stateDescription = '';
+                                if (channel.state && typeof channel.state === 'object') {
+                                    stateStatus = channel.state.status || 'Unknown state';
+                                    stateDescription = channel.state.description || '';
+                                } else if (channel.state) {
+                                    stateStatus = channel.state;
+                                }
+                                message += '  - ' + (channel.channel || 'Unknown') + ': ' + stateStatus + '\n';
+                                if (stateDescription) {
+                                    message += '    {{ "Description:"|xlt }} ' + stateDescription + '\n';
+                                }
                                 if (channel.static_bearer) {
                                     message += '    {{ "Bearer:"|xlt }} ' + channel.static_bearer.claimed_identity + '\n';
                                 }
