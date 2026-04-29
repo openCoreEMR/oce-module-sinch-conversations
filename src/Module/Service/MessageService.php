@@ -15,7 +15,9 @@ declare(strict_types=1);
 namespace OpenCoreEMR\Modules\SinchConversations\Service;
 
 use OpenCoreEMR\Modules\SinchConversations\Channel;
+use OpenCoreEMR\Modules\SinchConversations\ConsentState;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
+use OpenCoreEMR\Modules\SinchConversations\SkipReason;
 use OpenCoreEMR\Sinch\Conversation\Client\ConversationApiClient;
 use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
 use OpenEMR\Common\Database\QueryUtils;
@@ -231,7 +233,7 @@ class MessageService
         $hipaaAllowSms = $result['hipaa_allowsms'] ?? '';
 
         if ($hipaaAllowSms !== 'YES') {
-            $this->logBlock($patientId, 'hipaa_disallows_sms', [
+            $this->logBlock($patientId, SkipReason::HipaaDisallowsSms, [
                 'hipaa_allowsms' => $hipaaAllowSms === '' ? 'unset' : $hipaaAllowSms,
             ]);
             throw new ValidationException(
@@ -241,7 +243,7 @@ class MessageService
 
         $normalized = PhoneNormalizer::toE164($phoneNumber);
         if ($normalized === null) {
-            $this->logBlock($patientId, 'unparseable_phone', [
+            $this->logBlock($patientId, SkipReason::UnparseablePhone, [
                 'phone_last4' => PhoneNormalizer::last4($phoneNumber),
             ]);
             throw new ValidationException(
@@ -252,11 +254,11 @@ class MessageService
         $sql = "SELECT opted_in, opted_out
                 FROM oce_sinch_patient_consent
                 WHERE patient_id = ? AND phone_number = ?";
-        $consent = QueryUtils::querySingleRow($sql, [$patientId, $normalized]);
+        $consentState = ConsentState::fromRow(QueryUtils::querySingleRow($sql, [$patientId, $normalized]));
 
-        if (!$consent || !($consent['opted_in'] ?? false) || ($consent['opted_out'] ?? false)) {
-            $this->logBlock($patientId, 'no_active_consent', [
-                'consent_state' => $this->classifyConsent($consent),
+        if ($consentState !== ConsentState::Active) {
+            $this->logBlock($patientId, SkipReason::NoActiveConsent, [
+                'consent_state' => $consentState->value,
             ]);
             throw new ValidationException(
                 "Patient {$patientId} has not consented to messages at {$phoneNumber}"
@@ -269,34 +271,12 @@ class MessageService
      *
      * @param array<string, scalar|null> $extra additional cheap context to aid triage
      */
-    private function logBlock(int $patientId, string $reason, array $extra = []): void
+    private function logBlock(int $patientId, SkipReason $reason, array $extra = []): void
     {
         $this->logger->warning('Message send blocked', [
             'patient_id' => $patientId,
-            'reason' => $reason,
+            'reason' => $reason->value,
         ] + $extra);
-    }
-
-    /**
-     * Reduce a consent row to a stable state code for logging.
-     *
-     * Treat an empty array (no row found) as 'none' so the log code matches
-     * the gate above which uses `!$consent` to cover both null and empty.
-     *
-     * @param array<string, mixed>|null $consent
-     */
-    private function classifyConsent(?array $consent): string
-    {
-        if ($consent === null || $consent === []) {
-            return 'none';
-        }
-        if ((bool) ($consent['opted_out'] ?? false)) {
-            return 'opted_out';
-        }
-        if (!(bool) ($consent['opted_in'] ?? false)) {
-            return 'not_opted_in';
-        }
-        return 'active';
     }
 
     /**

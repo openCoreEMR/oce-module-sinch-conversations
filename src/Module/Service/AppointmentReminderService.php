@@ -18,30 +18,14 @@ declare(strict_types=1);
 
 namespace OpenCoreEMR\Modules\SinchConversations\Service;
 
+use OpenCoreEMR\Modules\SinchConversations\ConsentState;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
+use OpenCoreEMR\Modules\SinchConversations\SkipReason;
 use OpenEMR\Common\Database\QueryUtils;
 use OpenEMR\Common\Logging\SystemLogger;
 
 class AppointmentReminderService
 {
-    /**
-     * Stable reason codes emitted when a reminder is skipped or fails.
-     * Kept stable across releases so log consumers (alerts, dashboards)
-     * can pivot on them.
-     */
-    public const REASON_MISSING_PHONE = 'missing_phone';
-    public const REASON_UNPARSEABLE_PHONE = 'unparseable_phone';
-    public const REASON_HIPAA_DISALLOWS_SMS = 'hipaa_disallows_sms';
-    public const REASON_NO_ACTIVE_CONSENT = 'no_active_consent';
-
-    /**
-     * Sub-states for REASON_NO_ACTIVE_CONSENT to aid triage.
-     */
-    private const CONSENT_STATE_ACTIVE = 'active';
-    private const CONSENT_STATE_NONE = 'none';
-    private const CONSENT_STATE_OPTED_OUT = 'opted_out';
-    private const CONSENT_STATE_NOT_OPTED_IN = 'not_opted_in';
-
     private readonly SystemLogger $logger;
 
     public function __construct(
@@ -91,14 +75,14 @@ class AppointmentReminderService
 
             $rawPhone = $appointment['phone_cell'] ?? '';
             if ($rawPhone === '') {
-                $this->logSkip($pcEid, $patientId, self::REASON_MISSING_PHONE);
+                $this->logSkip($pcEid, $patientId, SkipReason::MissingPhone);
                 $results['skipped']++;
                 continue;
             }
 
             $phoneNumber = PhoneNormalizer::toE164($rawPhone);
             if ($phoneNumber === null) {
-                $this->logSkip($pcEid, $patientId, self::REASON_UNPARSEABLE_PHONE, [
+                $this->logSkip($pcEid, $patientId, SkipReason::UnparseablePhone, [
                     'phone_last4' => PhoneNormalizer::last4($rawPhone),
                 ]);
                 $results['skipped']++;
@@ -107,7 +91,7 @@ class AppointmentReminderService
 
             $hipaaAllowSms = (string) ($appointment['hipaa_allowsms'] ?? '');
             if ($hipaaAllowSms !== 'YES') {
-                $this->logSkip($pcEid, $patientId, self::REASON_HIPAA_DISALLOWS_SMS, [
+                $this->logSkip($pcEid, $patientId, SkipReason::HipaaDisallowsSms, [
                     'hipaa_allowsms' => $hipaaAllowSms === '' ? 'unset' : $hipaaAllowSms,
                 ]);
                 $results['skipped']++;
@@ -115,9 +99,9 @@ class AppointmentReminderService
             }
 
             $consentState = $this->getConsentState($patientId, $phoneNumber);
-            if ($consentState !== self::CONSENT_STATE_ACTIVE) {
-                $this->logSkip($pcEid, $patientId, self::REASON_NO_ACTIVE_CONSENT, [
-                    'consent_state' => $consentState,
+            if ($consentState !== ConsentState::Active) {
+                $this->logSkip($pcEid, $patientId, SkipReason::NoActiveConsent, [
+                    'consent_state' => $consentState->value,
                 ]);
                 $results['skipped']++;
                 continue;
@@ -224,38 +208,19 @@ class AppointmentReminderService
     }
 
     /**
-     * Classify module-level consent into a stable state for logging and gating.
+     * Classify module-level consent for a patient/phone.
      *
      * The hipaa_allowsms check is handled in run() from the main query result.
-     * This method checks only module-level consent in oce_sinch_patient_consent
-     * and returns one of:
-     * - CONSENT_STATE_ACTIVE: opted in and not opted out
-     * - CONSENT_STATE_NONE: no consent row exists for this patient/phone
-     * - CONSENT_STATE_OPTED_OUT: row exists with opted_out=true
-     * - CONSENT_STATE_NOT_OPTED_IN: row exists with opted_in=false
+     * This method checks only module-level consent in oce_sinch_patient_consent.
      *
      * @param string $phoneNumber E.164 normalized phone number
      */
-    private function getConsentState(int $patientId, string $phoneNumber): string
+    private function getConsentState(int $patientId, string $phoneNumber): ConsentState
     {
         $sql = "SELECT opted_in, opted_out
                 FROM oce_sinch_patient_consent
                 WHERE patient_id = ? AND phone_number = ?";
-        $consent = QueryUtils::querySingleRow($sql, [$patientId, $phoneNumber]);
-
-        if ($consent === null) {
-            return self::CONSENT_STATE_NONE;
-        }
-
-        if ((bool) ($consent['opted_out'] ?? false)) {
-            return self::CONSENT_STATE_OPTED_OUT;
-        }
-
-        if (!(bool) ($consent['opted_in'] ?? false)) {
-            return self::CONSENT_STATE_NOT_OPTED_IN;
-        }
-
-        return self::CONSENT_STATE_ACTIVE;
+        return ConsentState::fromRow(QueryUtils::querySingleRow($sql, [$patientId, $phoneNumber]));
     }
 
     /**
@@ -267,12 +232,12 @@ class AppointmentReminderService
      *
      * @param array<string, scalar|null> $extra additional cheap context to aid triage
      */
-    private function logSkip(int $pcEid, int $patientId, string $reason, array $extra = []): void
+    private function logSkip(int $pcEid, int $patientId, SkipReason $reason, array $extra = []): void
     {
         $this->logger->warning('Appointment reminder skipped', [
             'pc_eid' => $pcEid,
             'patient_id' => $patientId,
-            'reason' => $reason,
+            'reason' => $reason->value,
         ] + $extra);
     }
 
