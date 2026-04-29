@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.1.0](https://github.com/openCoreEMR/oce-module-sinch-conversations/compare/1.0.1...1.1.0) (2026-04-29)
+
+
+### Features
+
+* opt patients in via hipaa_allowsms transitions on the chart ([#114](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/114)) ([1cafe18](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/1cafe182df18d9fd9c425a014038dbe094024378))
+
+
+### Bug Fixes
+
+* emit structured warnings for appointment reminder skip decisions ([#115](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/115)) ([3849641](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/3849641470b6d98718f59c23e67c2d5e78ccf51f))
+* normalize phone number in appointment reminder consent check ([#107](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/107)) ([d4e56e2](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/d4e56e28f29ef0cf03a184fd64cc2fb0b0cfcd0c)), closes [#106](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/106)
+* render Sinch channel state object in Test API Connection result ([#110](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/110)) ([87c796e](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/87c796e8ee40e2f4380c7357051bb83d72b907cb))
+
+
+### Dependencies
+
+* bump googleapis/release-please-action from 4 to 5 ([#109](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/109)) ([06947e7](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/06947e7f79c9c99622b97d23364cd860f79563d9))
+
 ## [1.0.1](https://github.com/openCoreEMR/oce-module-sinch-conversations/compare/1.0.0...1.0.1) (2026-04-06)
 
 
