@@ -15,7 +15,9 @@ declare(strict_types=1);
 namespace OpenCoreEMR\Modules\SinchConversations\Service;
 
 use OpenCoreEMR\Modules\SinchConversations\Channel;
+use OpenCoreEMR\Modules\SinchConversations\ConsentState;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
+use OpenCoreEMR\Modules\SinchConversations\SkipReason;
 use OpenCoreEMR\Sinch\Conversation\Client\ConversationApiClient;
 use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
 use OpenEMR\Common\Database\QueryUtils;
@@ -219,6 +221,9 @@ class MessageService
      * Normalize the phone number to E.164 before checking consent so that
      * user-entered formats match the E.164 stored by Sinch callbacks.
      *
+     * Emit a structured warning before throwing so the block decision is
+     * visible at WARNING level, not just inferable from caught exceptions.
+     *
      * @throws ValidationException
      */
     private function assertPatientEligible(int $patientId, string $phoneNumber): void
@@ -228,6 +233,9 @@ class MessageService
         $hipaaAllowSms = $result['hipaa_allowsms'] ?? '';
 
         if ($hipaaAllowSms !== 'YES') {
+            $this->logBlock($patientId, SkipReason::HipaaDisallowsSms, [
+                'hipaa_allowsms' => $hipaaAllowSms === '' ? 'unset' : $hipaaAllowSms,
+            ]);
             throw new ValidationException(
                 "Patient {$patientId} has not allowed SMS (hipaa_allowsms is not YES)"
             );
@@ -235,6 +243,9 @@ class MessageService
 
         $normalized = PhoneNormalizer::toE164($phoneNumber);
         if ($normalized === null) {
+            $this->logBlock($patientId, SkipReason::UnparseablePhone, [
+                'phone_last4' => PhoneNormalizer::last4($phoneNumber),
+            ]);
             throw new ValidationException(
                 "Cannot check eligibility: unparseable phone number for patient {$patientId}"
             );
@@ -243,13 +254,29 @@ class MessageService
         $sql = "SELECT opted_in, opted_out
                 FROM oce_sinch_patient_consent
                 WHERE patient_id = ? AND phone_number = ?";
-        $consent = QueryUtils::querySingleRow($sql, [$patientId, $normalized]);
+        $consentState = ConsentState::fromRow(QueryUtils::querySingleRow($sql, [$patientId, $normalized]));
 
-        if (!$consent || !($consent['opted_in'] ?? false) || ($consent['opted_out'] ?? false)) {
+        if ($consentState !== ConsentState::Active) {
+            $this->logBlock($patientId, SkipReason::NoActiveConsent, [
+                'consent_state' => $consentState->value,
+            ]);
             throw new ValidationException(
                 "Patient {$patientId} has not consented to messages at {$phoneNumber}"
             );
         }
+    }
+
+    /**
+     * Emit a structured warning that a send was blocked at the eligibility gate.
+     *
+     * @param array<string, scalar|null> $extra additional cheap context to aid triage
+     */
+    private function logBlock(int $patientId, SkipReason $reason, array $extra = []): void
+    {
+        $this->logger->warning('Message send blocked', [
+            'patient_id' => $patientId,
+            'reason' => $reason->value,
+        ] + $extra);
     }
 
     /**

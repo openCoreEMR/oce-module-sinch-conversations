@@ -90,4 +90,26 @@ class PhoneNormalizerTest extends TestCase
         $this->assertCount(1, $unique, 'All formats should normalize to the same E.164 number');
         $this->assertSame('+15551234567', $unique[0]);
     }
+
+    #[DataProvider('last4Provider')]
+    public function testLast4(string $input, string $expected): void
+    {
+        $this->assertSame($expected, PhoneNormalizer::last4($input));
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function last4Provider(): array
+    {
+        return [
+            'E.164' => ['+15551234567', '4567'],
+            '10-digit' => ['5551234567', '4567'],
+            'formatted' => ['(555) 123-4567', '4567'],
+            'fewer than four digits' => ['12', '12'],
+            'no digits' => ['abc', ''],
+            'empty' => ['', ''],
+            'mixed letters and digits' => ['ext-9876', '9876'],
+        ];
+    }
 }

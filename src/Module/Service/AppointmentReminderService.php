@@ -18,7 +18,9 @@ declare(strict_types=1);
 
 namespace OpenCoreEMR\Modules\SinchConversations\Service;
 
+use OpenCoreEMR\Modules\SinchConversations\ConsentState;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
+use OpenCoreEMR\Modules\SinchConversations\SkipReason;
 use OpenEMR\Common\Database\QueryUtils;
 use OpenEMR\Common\Logging\SystemLogger;
 
@@ -73,28 +75,34 @@ class AppointmentReminderService
 
             $rawPhone = $appointment['phone_cell'] ?? '';
             if ($rawPhone === '') {
+                $this->logSkip($pcEid, $patientId, SkipReason::MissingPhone);
                 $results['skipped']++;
                 continue;
             }
 
             $phoneNumber = PhoneNormalizer::toE164($rawPhone);
             if ($phoneNumber === null) {
-                $this->logger->warning('Skipping appointment reminder: unparseable phone number', [
-                    'pc_eid' => $pcEid,
-                    'patientId' => $patientId,
-                    'phone' => $rawPhone,
+                $this->logSkip($pcEid, $patientId, SkipReason::UnparseablePhone, [
+                    'phone_last4' => PhoneNormalizer::last4($rawPhone),
                 ]);
                 $results['skipped']++;
                 continue;
             }
 
-            $hipaaAllowSms = $appointment['hipaa_allowsms'] ?? '';
+            $hipaaAllowSms = (string) ($appointment['hipaa_allowsms'] ?? '');
             if ($hipaaAllowSms !== 'YES') {
+                $this->logSkip($pcEid, $patientId, SkipReason::HipaaDisallowsSms, [
+                    'hipaa_allowsms' => $hipaaAllowSms === '' ? 'unset' : $hipaaAllowSms,
+                ]);
                 $results['skipped']++;
                 continue;
             }
 
-            if (!$this->hasActiveConsent($patientId, $phoneNumber)) {
+            $consentState = $this->getConsentState($patientId, $phoneNumber);
+            if ($consentState !== ConsentState::Active) {
+                $this->logSkip($pcEid, $patientId, SkipReason::NoActiveConsent, [
+                    'consent_state' => $consentState->value,
+                ]);
                 $results['skipped']++;
                 continue;
             }
@@ -200,26 +208,37 @@ class AppointmentReminderService
     }
 
     /**
-     * Check if patient has active SMS consent
+     * Classify module-level consent for a patient/phone.
      *
      * The hipaa_allowsms check is handled in run() from the main query result.
      * This method checks only module-level consent in oce_sinch_patient_consent.
      *
      * @param string $phoneNumber E.164 normalized phone number
      */
-    private function hasActiveConsent(int $patientId, string $phoneNumber): bool
+    private function getConsentState(int $patientId, string $phoneNumber): ConsentState
     {
         $sql = "SELECT opted_in, opted_out
                 FROM oce_sinch_patient_consent
                 WHERE patient_id = ? AND phone_number = ?";
-        $consent = QueryUtils::querySingleRow($sql, [$patientId, $phoneNumber]);
+        return ConsentState::fromRow(QueryUtils::querySingleRow($sql, [$patientId, $phoneNumber]));
+    }
 
-        if ($consent === null) {
-            return false;
-        }
-
-        return (bool) ($consent['opted_in'] ?? false)
-            && !((bool) ($consent['opted_out'] ?? false));
+    /**
+     * Emit a structured warning that a per-appointment skip decision was made.
+     *
+     * Every skip path increments the `skipped` counter; this helper makes the
+     * decision visible at WARNING level so a clinic seeing zero reminders can
+     * tell whether the cron is firing and why each appointment was dropped.
+     *
+     * @param array<string, scalar|null> $extra additional cheap context to aid triage
+     */
+    private function logSkip(int $pcEid, int $patientId, SkipReason $reason, array $extra = []): void
+    {
+        $this->logger->warning('Appointment reminder skipped', [
+            'pc_eid' => $pcEid,
+            'patient_id' => $patientId,
+            'reason' => $reason->value,
+        ] + $extra);
     }
 
     /**

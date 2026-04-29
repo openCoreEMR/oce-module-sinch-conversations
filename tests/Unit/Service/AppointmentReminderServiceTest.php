@@ -160,6 +160,34 @@ class AppointmentReminderServiceTest extends TestCase
 
         $this->assertSame(0, $results['sent']);
         $this->assertSame(1, $results['skipped']);
+
+        $this->assertSkipLogged(101, 43, 'no_active_consent', ['consent_state' => 'opted_out']);
+    }
+
+    public function testRunSkipsPatientWithNoConsentRow(): void
+    {
+        $this->mockUpcomingAppointments([
+            $this->makeAppointment(110, 49, '2026-04-01', '10:00:00', '+15554443322', 'YES'),
+        ]);
+        QueryUtils::setMockResult(
+            "SELECT opted_in, opted_out
+                FROM oce_sinch_patient_consent
+                WHERE patient_id = ? AND phone_number = ?",
+            [49, '+15554443322'],
+            []
+        );
+
+        $this->templateService->method('getAppointmentReminderTemplateKey')
+            ->willReturn('appointment_reminder_no_portal');
+
+        $this->messageService->expects($this->never())->method('sendToPatient');
+
+        $results = $this->service->run();
+
+        $this->assertSame(0, $results['sent']);
+        $this->assertSame(1, $results['skipped']);
+
+        $this->assertSkipLogged(110, 49, 'no_active_consent', ['consent_state' => 'none']);
     }
 
     // --- hipaa_allowsms = NO -> no reminder ---
@@ -180,6 +208,25 @@ class AppointmentReminderServiceTest extends TestCase
 
         $this->assertSame(0, $results['sent']);
         $this->assertSame(1, $results['skipped']);
+
+        $this->assertSkipLogged(102, 44, 'hipaa_disallows_sms', ['hipaa_allowsms' => 'NO']);
+    }
+
+    public function testRunSkipsPatientWithUnsetHipaaAllowSms(): void
+    {
+        $this->mockUpcomingAppointments([
+            $this->makeAppointment(103, 45, '2026-04-01', '12:00:00', '+15556665555', ''),
+        ]);
+
+        $this->templateService->method('getAppointmentReminderTemplateKey')
+            ->willReturn('appointment_reminder_no_portal');
+
+        $this->messageService->expects($this->never())->method('sendToPatient');
+
+        $results = $this->service->run();
+
+        $this->assertSame(1, $results['skipped']);
+        $this->assertSkipLogged(103, 45, 'hipaa_disallows_sms', ['hipaa_allowsms' => 'unset']);
     }
 
     // --- reminder already sent -> excluded by LEFT JOIN (not in results) ---
@@ -220,6 +267,43 @@ class AppointmentReminderServiceTest extends TestCase
 
         $this->assertSame(0, $results['sent']);
         $this->assertSame(1, $results['skipped']);
+
+        $this->assertSkipLogged(104, 46, 'missing_phone');
+    }
+
+    public function testRunSkipsPatientWithUnparseablePhone(): void
+    {
+        // 'abc' has no digits, so PhoneNormalizer::toE164() returns null
+        $this->mockUpcomingAppointments([
+            $this->makeAppointment(120, 55, '2026-04-01', '13:00:00', 'abc', 'YES'),
+        ]);
+
+        $this->templateService->method('getAppointmentReminderTemplateKey')
+            ->willReturn('appointment_reminder_no_portal');
+
+        $this->messageService->expects($this->never())->method('sendToPatient');
+
+        $results = $this->service->run();
+
+        $this->assertSame(1, $results['skipped']);
+        $this->assertSkipLogged(120, 55, 'unparseable_phone', ['phone_last4' => '']);
+    }
+
+    public function testRunUnparseablePhoneLogsLast4WhenDigitsPresent(): void
+    {
+        // '5551234' is 7 digits — too short to disambiguate without '+', so
+        // toE164() returns null. last4() should still extract '1234'.
+        $this->mockUpcomingAppointments([
+            $this->makeAppointment(121, 56, '2026-04-01', '13:00:00', '5551234', 'YES'),
+        ]);
+
+        $this->templateService->method('getAppointmentReminderTemplateKey')
+            ->willReturn('appointment_reminder_no_portal');
+
+        $results = $this->service->run();
+
+        $this->assertSame(1, $results['skipped']);
+        $this->assertSkipLogged(121, 56, 'unparseable_phone', ['phone_last4' => '1234']);
     }
 
     // --- send failure -> counted as failed ---
@@ -484,5 +568,42 @@ class AppointmentReminderServiceTest extends TestCase
             [$patientId, $phoneNumber],
             [['opted_in' => true, 'opted_out' => false]]
         );
+    }
+
+    /**
+     * Assert that a structured skip warning was logged with the expected fields.
+     *
+     * @param array<string, scalar|null> $extraContext additional context fields to match
+     */
+    private function assertSkipLogged(int $pcEid, int $patientId, string $reason, array $extraContext = []): void
+    {
+        $matches = array_filter(
+            SystemLogger::getLogs(),
+            static fn(array $log): bool => $log['level'] === 'warning'
+                && $log['message'] === 'Appointment reminder skipped'
+                && ($log['context']['pc_eid'] ?? null) === $pcEid
+                && ($log['context']['patient_id'] ?? null) === $patientId
+                && ($log['context']['reason'] ?? null) === $reason
+        );
+
+        $this->assertCount(
+            1,
+            $matches,
+            sprintf(
+                'Expected exactly one "Appointment reminder skipped" warning for pc_eid=%d patient_id=%d reason=%s',
+                $pcEid,
+                $patientId,
+                $reason
+            )
+        );
+
+        $log = array_values($matches)[0];
+        foreach ($extraContext as $key => $expected) {
+            $this->assertSame(
+                $expected,
+                $log['context'][$key] ?? null,
+                sprintf('Skip log context "%s" did not match', $key)
+            );
+        }
     }
 }

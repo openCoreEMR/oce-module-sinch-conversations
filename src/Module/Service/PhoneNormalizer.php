@@ -69,4 +69,20 @@ class PhoneNormalizer
 
         return $normalized;
     }
+
+    /**
+     * Return the last four digits of a phone number for safe identification in logs.
+     *
+     * Strips non-digit characters first so '(555) 123-4567' and '+15551234567'
+     * both yield '4567'. Returns an empty string if no digits are present.
+     */
+    public static function last4(string $phone): string
+    {
+        $digits = preg_replace('/[^0-9]/', '', $phone);
+        if ($digits === null || $digits === '') {
+            return '';
+        }
+
+        return substr($digits, -4);
+    }
 }
