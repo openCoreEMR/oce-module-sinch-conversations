@@ -100,10 +100,14 @@ class MessageServiceTest extends TestCase
             [['hipaa_allowsms' => 'NO']]
         );
 
-        $this->expectException(ValidationException::class);
-        $this->expectExceptionMessage('hipaa_allowsms is not YES');
+        try {
+            $this->service->sendToPatient(1, '+15559999999', 'Hello');
+            $this->fail('Expected ValidationException');
+        } catch (ValidationException $e) {
+            $this->assertStringContainsString('hipaa_allowsms is not YES', $e->getMessage());
+        }
 
-        $this->service->sendToPatient(1, '+15559999999', 'Hello');
+        $this->assertBlockLogged(1, 'hipaa_disallows_sms', ['hipaa_allowsms' => 'NO']);
     }
 
     public function testSendToPatientThrowsWhenHipaaFieldMissing(): void
@@ -114,10 +118,14 @@ class MessageServiceTest extends TestCase
             []
         );
 
-        $this->expectException(ValidationException::class);
-        $this->expectExceptionMessage('hipaa_allowsms is not YES');
+        try {
+            $this->service->sendToPatient(1, '+15559999999', 'Hello');
+            $this->fail('Expected ValidationException');
+        } catch (ValidationException $e) {
+            $this->assertStringContainsString('hipaa_allowsms is not YES', $e->getMessage());
+        }
 
-        $this->service->sendToPatient(1, '+15559999999', 'Hello');
+        $this->assertBlockLogged(1, 'hipaa_disallows_sms', ['hipaa_allowsms' => 'unset']);
     }
 
     public function testSendToPatientThrowsWhenNoConsent(): void
@@ -135,10 +143,14 @@ class MessageServiceTest extends TestCase
             []
         );
 
-        $this->expectException(ValidationException::class);
-        $this->expectExceptionMessage('has not consented');
+        try {
+            $this->service->sendToPatient(1, '+15559999999', 'Hello');
+            $this->fail('Expected ValidationException');
+        } catch (ValidationException $e) {
+            $this->assertStringContainsString('has not consented', $e->getMessage());
+        }
 
-        $this->service->sendToPatient(1, '+15559999999', 'Hello');
+        $this->assertBlockLogged(1, 'no_active_consent', ['consent_state' => 'none']);
     }
 
     public function testSendToPatientThrowsWhenOptedOut(): void
@@ -156,10 +168,32 @@ class MessageServiceTest extends TestCase
             [['opted_in' => true, 'opted_out' => true]]
         );
 
-        $this->expectException(ValidationException::class);
-        $this->expectExceptionMessage('has not consented');
+        try {
+            $this->service->sendToPatient(1, '+15559999999', 'Hello');
+            $this->fail('Expected ValidationException');
+        } catch (ValidationException $e) {
+            $this->assertStringContainsString('has not consented', $e->getMessage());
+        }
 
-        $this->service->sendToPatient(1, '+15559999999', 'Hello');
+        $this->assertBlockLogged(1, 'no_active_consent', ['consent_state' => 'opted_out']);
+    }
+
+    public function testSendToPatientLogsBlockForUnparseablePhone(): void
+    {
+        QueryUtils::setMockResult(
+            "SELECT hipaa_allowsms FROM patient_data WHERE pid = ?",
+            [1],
+            [['hipaa_allowsms' => 'YES']]
+        );
+
+        try {
+            $this->service->sendToPatient(1, 'abcdef', 'Hello');
+            $this->fail('Expected ValidationException');
+        } catch (ValidationException $e) {
+            $this->assertStringContainsString('unparseable phone number', $e->getMessage());
+        }
+
+        $this->assertBlockLogged(1, 'unparseable_phone', ['phone_last4' => '']);
     }
 
     public function testSendToPatientSkipsConsentCheckWhenOptionSet(): void
@@ -348,5 +382,40 @@ class MessageServiceTest extends TestCase
         $results = $this->service->sendBatch([1], 'Test');
 
         $this->assertEquals(1, $results['sent']);
+    }
+
+    /**
+     * Assert that a structured block warning was logged with the expected fields.
+     *
+     * @param array<string, scalar|null> $extraContext additional context fields to match
+     */
+    private function assertBlockLogged(int $patientId, string $reason, array $extraContext = []): void
+    {
+        $matches = array_filter(
+            SystemLogger::getLogs(),
+            static fn(array $log): bool => $log['level'] === 'warning'
+                && $log['message'] === 'Message send blocked'
+                && ($log['context']['patient_id'] ?? null) === $patientId
+                && ($log['context']['reason'] ?? null) === $reason
+        );
+
+        $this->assertCount(
+            1,
+            $matches,
+            sprintf(
+                'Expected exactly one "Message send blocked" warning for patient_id=%d reason=%s',
+                $patientId,
+                $reason
+            )
+        );
+
+        $log = array_values($matches)[0];
+        foreach ($extraContext as $key => $expected) {
+            $this->assertSame(
+                $expected,
+                $log['context'][$key] ?? null,
+                sprintf('Block log context "%s" did not match', $key)
+            );
+        }
     }
 }

@@ -219,6 +219,9 @@ class MessageService
      * Normalize the phone number to E.164 before checking consent so that
      * user-entered formats match the E.164 stored by Sinch callbacks.
      *
+     * Emit a structured warning before throwing so the block decision is
+     * visible at WARNING level, not just inferable from caught exceptions.
+     *
      * @throws ValidationException
      */
     private function assertPatientEligible(int $patientId, string $phoneNumber): void
@@ -228,6 +231,9 @@ class MessageService
         $hipaaAllowSms = $result['hipaa_allowsms'] ?? '';
 
         if ($hipaaAllowSms !== 'YES') {
+            $this->logBlock($patientId, 'hipaa_disallows_sms', [
+                'hipaa_allowsms' => $hipaaAllowSms === '' ? 'unset' : $hipaaAllowSms,
+            ]);
             throw new ValidationException(
                 "Patient {$patientId} has not allowed SMS (hipaa_allowsms is not YES)"
             );
@@ -235,6 +241,9 @@ class MessageService
 
         $normalized = PhoneNormalizer::toE164($phoneNumber);
         if ($normalized === null) {
+            $this->logBlock($patientId, 'unparseable_phone', [
+                'phone_last4' => PhoneNormalizer::last4($phoneNumber),
+            ]);
             throw new ValidationException(
                 "Cannot check eligibility: unparseable phone number for patient {$patientId}"
             );
@@ -246,10 +255,48 @@ class MessageService
         $consent = QueryUtils::querySingleRow($sql, [$patientId, $normalized]);
 
         if (!$consent || !($consent['opted_in'] ?? false) || ($consent['opted_out'] ?? false)) {
+            $this->logBlock($patientId, 'no_active_consent', [
+                'consent_state' => $this->classifyConsent($consent),
+            ]);
             throw new ValidationException(
                 "Patient {$patientId} has not consented to messages at {$phoneNumber}"
             );
         }
+    }
+
+    /**
+     * Emit a structured warning that a send was blocked at the eligibility gate.
+     *
+     * @param array<string, scalar|null> $extra additional cheap context to aid triage
+     */
+    private function logBlock(int $patientId, string $reason, array $extra = []): void
+    {
+        $this->logger->warning('Message send blocked', [
+            'patient_id' => $patientId,
+            'reason' => $reason,
+        ] + $extra);
+    }
+
+    /**
+     * Reduce a consent row to a stable state code for logging.
+     *
+     * Treat an empty array (no row found) as 'none' so the log code matches
+     * the gate above which uses `!$consent` to cover both null and empty.
+     *
+     * @param array<string, mixed>|null $consent
+     */
+    private function classifyConsent(?array $consent): string
+    {
+        if ($consent === null || $consent === []) {
+            return 'none';
+        }
+        if ((bool) ($consent['opted_out'] ?? false)) {
+            return 'opted_out';
+        }
+        if (!(bool) ($consent['opted_in'] ?? false)) {
+            return 'not_opted_in';
+        }
+        return 'active';
     }
 
     /**
