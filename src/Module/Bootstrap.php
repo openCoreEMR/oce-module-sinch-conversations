@@ -19,8 +19,11 @@ use OpenCoreEMR\ModuleConfig\ConfigFactory;
 use OpenCoreEMR\ModuleConfig\GlobalsRegistrar;
 use OpenEMR\Common\Logging\SystemLogger;
 use OpenEMR\Common\Twig\TwigContainer;
+use OpenCoreEMR\Modules\SinchConversations\Listener\PatientConsentListener;
 use OpenEMR\Core\Kernel;
 use OpenEMR\Core\OEGlobalsBag;
+use OpenEMR\Events\Patient\PatientCreatedEvent;
+use OpenEMR\Events\Patient\PatientUpdatedEvent;
 use OpenEMR\Menu\MenuEvent;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
@@ -67,7 +70,22 @@ class Bootstrap
             return;
         }
 
+        $this->subscribeToPatientConsentEvents();
+
         $this->logger->debug('Sinch Conversations module is enabled');
+    }
+
+    private function subscribeToPatientConsentEvents(): void
+    {
+        $listener = $this->getPatientConsentListener();
+        $this->eventDispatcher->addListener(
+            PatientCreatedEvent::EVENT_HANDLE,
+            $listener->onPatientCreated(...)
+        );
+        $this->eventDispatcher->addListener(
+            PatientUpdatedEvent::EVENT_HANDLE,
+            $listener->onPatientUpdated(...)
+        );
     }
 
     private function addGlobalSettings(): void
@@ -162,6 +180,14 @@ class Bootstrap
             $this->getTemplateService(),
             $this->getMessageService()
         );
+    }
+
+    /**
+     * Get Patient Consent Listener
+     */
+    public function getPatientConsentListener(): PatientConsentListener
+    {
+        return new PatientConsentListener($this->getConsentService());
     }
 
     /**
