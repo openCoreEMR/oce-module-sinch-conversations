@@ -47,14 +47,29 @@ April 11, 2025.
 3. The module checks this field before sending — messages are blocked
    immediately
 
-## Opt-In (Re-subscribe)
+## Opt-In via Patient Chart
 
-A patient who previously opted out can opt back in:
+Staff capture verbal or written consent during registration or any
+subsequent visit. The chart-driven opt-in flow:
 
-1. The patient provides new consent (verbally or in writing)
-2. A staff member sets **Allow SMS** to Yes in the patient chart
-3. The `ConsentService` records a new opt-in
-4. The patient resumes receiving messages
+1. The patient provides consent (verbally or in writing) and a mobile number
+2. A staff member registers the patient (or edits the chart) with
+   **Allow SMS** (`hipaa_allowsms`) set to Yes and `phone_cell` populated
+3. `PatientConsentListener` observes the `patient.created` /
+   `patient.updated` event, detects the blank/NO → YES transition on
+   `hipaa_allowsms`, and calls `ConsentService::optIn()`
+4. `ConsentService` writes the row to `oce_sinch_patient_consent`
+   (`opted_in=TRUE`, `opted_out=FALSE`, `opt_in_method='chart_hipaa_allowsms'`)
+   and sends the opt-in confirmation SMS
+5. The patient resumes receiving automated messages
+
+The same listener handles the reverse: a YES → NO transition on
+`hipaa_allowsms` calls `ConsentService::optOut()` so the chart-side
+opt-out flow described above also produces a consent row update.
+
+The listener is a no-op when the chart save does not change
+`hipaa_allowsms`, when the new value matches the current value, or when
+`phone_cell` is blank on both the old and new patient record.
 
 > **Note:** If the carrier blocked messages at the network level after
 > a STOP, the patient may also need to text START to the same number

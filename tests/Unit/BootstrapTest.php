@@ -19,6 +19,7 @@ use OpenCoreEMR\Modules\SinchConversations\Controller\ConversationController;
 use OpenCoreEMR\Modules\SinchConversations\Controller\InboxController;
 use OpenCoreEMR\Modules\SinchConversations\Controller\SettingsController;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
+use OpenCoreEMR\Modules\SinchConversations\Listener\PatientConsentListener;
 use OpenCoreEMR\Modules\SinchConversations\Service\ConfigService;
 use OpenCoreEMR\Modules\SinchConversations\Service\ConsentService;
 use OpenCoreEMR\Modules\SinchConversations\Service\ConsentSyncService;
@@ -33,6 +34,8 @@ use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockGlobalsAccessor;
 use OpenCoreEMR\Sinch\Conversation\Client\ConversationApiClient;
 use OpenEMR\Common\Logging\SystemLogger;
 use OpenEMR\Events\Globals\GlobalsInitializedEvent;
+use OpenEMR\Events\Patient\PatientCreatedEvent;
+use OpenEMR\Events\Patient\PatientUpdatedEvent;
 use OpenEMR\Menu\MenuEvent;
 use OpenEMR\Services\Globals\GlobalSetting;
 use OpenEMR\Services\Globals\GlobalsService;
@@ -176,6 +179,39 @@ class BootstrapTest extends TestCase
         $service = $this->bootstrap->getKeywordHandlerService();
 
         $this->assertInstanceOf(KeywordHandlerService::class, $service);
+    }
+
+    public function testGetPatientConsentListenerReturnsListener(): void
+    {
+        $listener = $this->bootstrap->getPatientConsentListener();
+
+        $this->assertInstanceOf(PatientConsentListener::class, $listener);
+    }
+
+    public function testSubscribeToEventsRegistersPatientConsentListenersWhenEnabled(): void
+    {
+        $this->bootstrap->subscribeToEvents();
+
+        $this->assertNotEmpty($this->eventDispatcher->getListeners(PatientCreatedEvent::EVENT_HANDLE));
+        $this->assertNotEmpty($this->eventDispatcher->getListeners(PatientUpdatedEvent::EVENT_HANDLE));
+    }
+
+    public function testSubscribeToEventsDoesNotRegisterPatientConsentListenersWhenDisabled(): void
+    {
+        $disabledGlobals = new MockGlobalsAccessor([
+            GlobalConfig::CONFIG_OPTION_ENABLED => '0',
+            GlobalConfig::CONFIG_OPTION_PROJECT_ID => 'test-project',
+            GlobalConfig::CONFIG_OPTION_APP_ID => 'test-app',
+            GlobalConfig::CONFIG_OPTION_API_KEY => 'test-key',
+            GlobalConfig::CONFIG_OPTION_API_SECRET => base64_encode('test-secret'),
+            GlobalConfig::CONFIG_OPTION_REGION => 'us',
+        ]);
+        $bootstrap = new Bootstrap($this->eventDispatcher, configAccessor: $disabledGlobals);
+
+        $bootstrap->subscribeToEvents();
+
+        $this->assertEmpty($this->eventDispatcher->getListeners(PatientCreatedEvent::EVENT_HANDLE));
+        $this->assertEmpty($this->eventDispatcher->getListeners(PatientUpdatedEvent::EVENT_HANDLE));
     }
 
     public function testGetConfigServiceReturnsService(): void
