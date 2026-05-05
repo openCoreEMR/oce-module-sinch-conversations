@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace OpenEMR\Events\Globals;
 
+use OpenEMR\Services\Globals\GlobalsService;
 use Symfony\Contracts\EventDispatcher\Event;
 
 /**
@@ -26,14 +27,11 @@ class GlobalsInitializedEvent extends Event
 {
     public const EVENT_HANDLE = 'globals.initialized';
 
-    private ?object $globalsService;
-
-    public function __construct(?object $globalsService = null)
+    public function __construct(private readonly GlobalsService $globalsService)
     {
-        $this->globalsService = $globalsService;
     }
 
-    public function getGlobalsService(): ?object
+    public function getGlobalsService(): GlobalsService
     {
         return $this->globalsService;
     }

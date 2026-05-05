@@ -323,10 +323,11 @@ tasks:
   # === Quick Workflows ===
 
   setup:
-    desc: Complete setup (install deps + tools, prebuild OpenEMR, start Docker)
+    desc: Complete setup (install deps, prebuild OpenEMR, start Docker)
     cmds:
     - task: composer:install
-    - task: tools:install
+    # openemr:prebuild deps on tools:install, so the OpenEMR source is
+    # installed transitively — no need to call tools:install here too.
     - task: openemr:prebuild
     - task: dev:start
     - task: dev:port
