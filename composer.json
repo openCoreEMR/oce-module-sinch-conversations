@@ -48,65 +48,11 @@
     "ergebnis/composer-normalize": "^2.44",
     "maglnet/composer-require-checker": "^4.0",
     "opencoreemr/openemr-phpstan-rules": "^0.9",
-    "openemr/openemr": ">=8.0.0 || 8.1.0.x-dev || dev-master",
     "phpstan/phpstan": "^2.1",
     "phpunit/phpunit": "^11.0",
     "rector/rector": "^2.0",
     "squizlabs/php_codesniffer": "^4.0"
   },
-  "repositories": [
-    {
-      "type": "package",
-      "package": {
-        "name": "openemr/openemr",
-        "version": "8.0.0",
-        "autoload": {
-          "psr-4": {
-            "OpenEMR\\": "src/"
-          }
-        },
-        "source": {
-          "type": "git",
-          "url": "https://github.com/openemr/openemr.git",
-          "reference": "v8_0_0"
-        }
-      }
-    },
-    {
-      "type": "package",
-      "package": {
-        "name": "openemr/openemr",
-        "version": "8.1.0.x-dev",
-        "autoload": {
-          "psr-4": {
-            "OpenEMR\\": "src/"
-          }
-        },
-        "source": {
-          "type": "git",
-          "url": "https://github.com/openemr/openemr.git",
-          "reference": "rel-810"
-        }
-      }
-    },
-    {
-      "type": "package",
-      "package": {
-        "name": "openemr/openemr",
-        "version": "dev-master",
-        "autoload": {
-          "psr-4": {
-            "OpenEMR\\": "src/"
-          }
-        },
-        "source": {
-          "type": "git",
-          "url": "https://github.com/openemr/openemr.git",
-          "reference": "master"
-        }
-      }
-    }
-  ],
   "minimum-stability": "dev",
   "prefer-stable": true,
   "autoload": {

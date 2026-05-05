@@ -36,5 +36,10 @@ jobs:
     - name: Install dependencies
       run: composer install --prefer-dist --no-progress --no-interaction
 
+    # PHPStan resolves OpenEMR\… types from the tooling sub-vendor (loaded via
+    # phpstan.neon's bootstrapFiles). See tools/openemr/README.md and issue #118.
+    - name: Install OpenEMR source for PHPStan
+      run: composer install --working-dir=tools/openemr --prefer-dist --no-progress --no-interaction
+
     - name: Run PHPStan
       run: composer phpstan

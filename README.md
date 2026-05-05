@@ -390,24 +390,29 @@ task check                    # Run all code quality checks
 
 ### Docker Development Environment
 
-Quick setup for local module development:
+Quick setup for local module development (or just run `task setup`):
 
 ```bash
-# 1. Clone and install dependencies
+# 1. Clone and install module dependencies
 git clone https://github.com/opencoreemr/oce-module-sinch-conversations.git
 cd oce-module-sinch-conversations
 composer install
 
-# 2. Pre-build OpenEMR (optional but recommended - saves 5-10 min)
-cd vendor/openemr/openemr
+# 2. Install OpenEMR source under tools/openemr (used by PHPStan + Docker bind mount).
+#    OpenEMR source is intentionally NOT a runtime dep of this module — see
+#    tools/openemr/README.md and issue #118.
+composer install --working-dir=tools/openemr
+
+# 3. Pre-build OpenEMR (optional but recommended - saves 5-10 min)
+cd tools/openemr/vendor/openemr/openemr
 composer install --no-dev
 npm install --legacy-peer-deps && npm run build
-cd ../../..
+cd -
 
-# 3. Start Docker environment
+# 4. Start Docker environment
 docker compose up -d --wait
 
-# 4. Get the port and open in browser
+# 5. Get the port and open in browser
 docker compose port openemr 80
 # Visit http://localhost:PORT and login with admin/pass
 ```

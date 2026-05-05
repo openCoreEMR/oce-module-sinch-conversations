@@ -34,18 +34,18 @@ private function redirect(Request $request): RedirectResponse
 
 ## Researching OpenEMR Code and Dependencies
 
-**CRITICAL: Always check OpenEMR's actual requirements in `vendor/openemr/openemr/composer.json`**
+**CRITICAL: Always check OpenEMR's actual requirements in `tools/openemr/vendor/openemr/openemr/composer.json`**
 
 When you need to understand OpenEMR's code, dependencies, or version constraints:
 
 ### Always Do:
-- **Check `vendor/openemr/openemr/composer.json`** for OpenEMR's exact dependency versions
-- **Look in `vendor/openemr/openemr/src/`** for OpenEMR core classes
+- **Check `tools/openemr/vendor/openemr/openemr/composer.json`** for OpenEMR's exact dependency versions
+- **Look in `tools/openemr/vendor/openemr/openemr/src/`** for OpenEMR core classes
 - **Match OpenEMR's Symfony version constraints** - They use exact versions (e.g., `6.4.15`), not ranges
 - **Use `^6.4` constraints** for Symfony packages to stay compatible with OpenEMR 6.4.x
 
 ### Never Do:
-- Search online for OpenEMR version requirements -> Check `vendor/openemr/openemr/composer.json`
+- Search online for OpenEMR version requirements -> Check `tools/openemr/vendor/openemr/openemr/composer.json`
 - Guess at version constraints -> Verify against OpenEMR's actual versions
 - Use `^6.0 || ^7.0` for Symfony -> Use `^6.4` to match OpenEMR's 6.4.x versions
 - Assume OpenEMR uses latest versions -> They pin specific versions
@@ -54,7 +54,7 @@ When you need to understand OpenEMR's code, dependencies, or version constraints
 
 ```bash
 # Check what Symfony versions OpenEMR uses
-cat vendor/openemr/openemr/composer.json | grep symfony
+cat tools/openemr/vendor/openemr/openemr/composer.json | grep symfony
 
 # Result shows exact versions:
 # "symfony/console": "6.4.15",
@@ -85,7 +85,7 @@ Always include these in `composer.json` with version constraints that match Open
 }
 ```
 
-**Note:** Version constraints must match OpenEMR's installed versions. Always verify in `vendor/openemr/openemr/composer.json`.
+**Note:** Version constraints must match OpenEMR's installed versions. Always verify in `tools/openemr/vendor/openemr/openemr/composer.json`.
 
 ## Composer Require Checker Configuration
 

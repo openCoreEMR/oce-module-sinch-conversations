@@ -99,6 +99,23 @@ task check
 task module:cleanup
 ```
 
+### OpenEMR source lives under `tools/openemr/`, not `vendor/`
+
+OpenEMR is intentionally NOT a runtime dependency of this module. Its source tree is
+installed at `tools/openemr/vendor/openemr/openemr/` via a sub-composer
+(`tools/openemr/composer.json`) and made available to:
+
+- **PHPStan** — `phpstan.neon` loads `tools/openemr/vendor/autoload.php` via `bootstrapFiles`
+- **Local Docker dev** — `compose.yml` bind-mounts `tools/openemr/vendor/openemr/openemr` to `/var/www/.../openemr`
+
+Do **not** add `openemr/openemr` to the root `composer.json`. If you do, the module's
+`vendor/autoload.php` will register a competing PSR-4 mapping for `OpenEMR\\` → our
+vendor's `src/`, classes will resolve to our copy, and `__DIR__`-relative `require_once`
+inside those classes will re-load procedural files under a different path → fatal
+`Cannot redeclare …` on patient demographics and elsewhere. See
+[issue #118](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/118)
+and [`tools/openemr/README.md`](tools/openemr/README.md).
+
 ### Configuration Modes
 
 The module supports two configuration modes:
