@@ -93,7 +93,11 @@
     "php-lint": "git ls-files -z '*.php' | xargs -0 -n1 php -l",
     "phpcbf": "phpcbf",
     "phpcs": "phpcs",
-    "phpstan": "phpstan --memory-limit=1g analyse",
+    "phpstan": [
+      "@phpstan-ensure-tools",
+      "phpstan --memory-limit=1g analyse"
+    ],
+    "phpstan-ensure-tools": "test -f tools/openemr/vendor/autoload.php || composer install --working-dir=tools/openemr --no-progress --no-interaction",
     "phpunit": "phpunit --testdox",
     "phpunit-coverage": "phpunit --coverage-html htmlcov --coverage-text",
     "rector": "rector process --dry-run",

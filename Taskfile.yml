@@ -287,6 +287,8 @@ tasks:
 
   openemr:prebuild:
     desc: Pre-build OpenEMR dependencies in tools/openemr (speeds up first Docker start)
+    deps:
+    - tools:install
     cmds:
     - echo "Building OpenEMR dependencies..."
     - cd tools/openemr/vendor/openemr/openemr && composer install --no-dev

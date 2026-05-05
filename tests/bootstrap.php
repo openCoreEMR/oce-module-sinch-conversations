@@ -20,10 +20,11 @@ require_once __DIR__ . '/../vendor/autoload.php';
 // Suppress error_log output during tests by redirecting to null
 ini_set('error_log', '/dev/null');
 
-// Load mock classes before anything else to prevent "class not found" errors.
-// OpenEMR\… classes referenced from the module's runtime code must be mocked
-// here because openemr/openemr is intentionally NOT on the runtime autoloader
-// (see issue #118 and tools/openemr/README.md).
+// Declare mock classes before any test code runs so that subsequent references
+// to OpenEMR\… classes (via the Composer autoloader registered above) find the
+// mock already in place and never trigger autoload of the real class. OpenEMR
+// types must be mocked here because openemr/openemr is intentionally NOT on
+// the runtime autoloader (see issue #118 and tools/openemr/README.md).
 require_once __DIR__ . '/Mocks/MockKernel.php';
 require_once __DIR__ . '/Mocks/MockTwigContainer.php';
 require_once __DIR__ . '/Mocks/MockSystemLogger.php';
