@@ -19,7 +19,7 @@ The Taskfile drives everything:
 
 ```bash
 task tools:install    # install OpenEMR source here
-task openemr:prebuild # composer install --no-dev + npm install + npm run build inside it
+task openemr:prebuild # composer install --no-dev + npm install --legacy-peer-deps + npm run build inside it
 task setup            # the full first-time bring-up (calls both of the above)
 ```
 

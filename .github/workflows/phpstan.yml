@@ -25,11 +25,15 @@ jobs:
         coverage: none
         tools: composer:v2
 
+    # composer.lock is gitignored in this repo, so key off the composer.json
+    # files instead — they change when deps change.
     - name: Cache Composer dependencies
       uses: actions/cache@v5
       with:
-        path: vendor
-        key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+        path: |
+          vendor
+          tools/openemr/vendor
+        key: ${{ runner.os }}-composer-${{ hashFiles('composer.json', 'tools/openemr/composer.json') }}
         restore-keys: |
           ${{ runner.os }}-composer-
 
