@@ -106,5 +106,4 @@ services:
 
 volumes:
   databasevolume: {}
-  sitesvolume: {}
   logvolume: {}

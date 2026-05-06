@@ -110,10 +110,13 @@ cd tools/openemr/vendor/openemr/openemr && composer install --no-dev && npm inst
   - Skips slow `chown` operations that take 5-10 minutes on macOS bind mounts
   - Much faster startup (~30 seconds instead of 10 minutes)
 - **Pre-built OpenEMR**: Mount pre-built OpenEMR from `tools/openemr/vendor/openemr/openemr`
-  - Run `composer install --no-dev` and `npm install && npm run build` locally first
+  - Run `composer install --no-dev` and `npm install --legacy-peer-deps && npm run build` locally first
   - Container uses pre-built artifacts, no need to rebuild inside Docker
   - OpenEMR is here (not under root `vendor/`) on purpose — see "Why is OpenEMR under `tools/openemr/`?" above
-- **Persistent data**: Patient data, configurations, and uploads live in `sitesvolume` Docker volume
+- **Persistent data**: Patient data, configurations, and uploads live on the host
+  inside `tools/openemr/vendor/openemr/openemr/sites/` (bind-mounted into the
+  container). Database data lives in the `databasevolume` Docker volume.
   - Survives container restarts
-  - Use `docker compose down -v` to completely reset
+  - `docker compose down -v` resets the database volume; to fully reset, also
+    delete `tools/openemr/vendor/openemr/openemr/sites/` (or run `task workflow:nuke`)
 - **Live reload**: Code changes are immediately reflected since bind mounts update in real-time

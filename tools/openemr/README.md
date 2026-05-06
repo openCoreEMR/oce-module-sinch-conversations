@@ -5,7 +5,7 @@ This directory exists so the OpenEMR source tree is available **outside** the mo
 It serves two purposes:
 
 1. **PHPStan type resolution.** `phpstan.neon` loads `tools/openemr/vendor/autoload.php` via `bootstrapFiles`, so PHPStan can resolve `OpenEMR\…` symbols.
-2. **Local Docker bind mount.** `compose.yml` bind-mounts `./tools/openemr/vendor/openemr/openemr` to `/var/www/localhost/htdocs/openemr` inside the dev container. `task openemr:prebuild` runs `composer install --no-dev` and `npm install && npm run build` here so the dev container starts quickly.
+2. **Local Docker bind mount.** `compose.yml` bind-mounts `./tools/openemr/vendor/openemr/openemr` to `/var/www/localhost/htdocs/openemr` inside the dev container. `task openemr:prebuild` runs `composer install --no-dev` and `npm install --legacy-peer-deps && npm run build` here so the dev container starts quickly.
 
 ## Why not put `openemr/openemr` in the root `composer.json`?
 
