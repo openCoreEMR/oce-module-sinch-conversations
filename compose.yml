@@ -2,19 +2,21 @@
 # Uses a simplified entrypoint that just runs the installer and starts Apache
 # (avoids the slow chown operations in the standard openemr.sh entrypoint)
 #
-# IMPORTANT: Pre-build OpenEMR dependencies locally for faster startup:
-#   cd vendor/openemr/openemr
-#   composer install --no-dev
-#   npm install --legacy-peer-deps && npm run build
-#   cd ../../..
+# OpenEMR source lives under tools/openemr/vendor/openemr/openemr (NOT the root
+# vendor/) — see tools/openemr/README.md and issue #118 for why.
 #
-# Usage:
-#   1. composer install (installs module + downloads OpenEMR source)
-#   2. Pre-build OpenEMR (see above - optional but recommended)
-#   3. docker compose up -d --wait
-#   4. docker compose port openemr 80  (get assigned port)
-#   5. Login: admin / pass
-#   6. Admin > Modules > Manage Modules > Enable module
+# Usage (or just run `task setup`, which does all of this):
+#   1. composer install                                        (module deps)
+#   2. composer install --working-dir=tools/openemr            (OpenEMR source)
+#   3. Pre-build OpenEMR (optional — speeds up first start):
+#        cd tools/openemr/vendor/openemr/openemr
+#        composer install --no-dev
+#        npm install --legacy-peer-deps && npm run build
+#        cd -
+#   4. docker compose up -d --wait
+#   5. docker compose port openemr 80  (get assigned port)
+#   6. Login: admin / pass
+#   7. Admin > Modules > Manage Modules > Enable module
 
 services:
   mysql:
@@ -47,9 +49,14 @@ services:
       # Custom entrypoint scripts (installer + apache, no complex setup)
     - ./docker/entrypoint.sh:/custom-entrypoint.sh:ro
     - ./docker/entrypoint.php:/custom-entrypoint.php:ro
-      # Mount OpenEMR directly to runtime location (pre-built with composer/npm)
-    - ./vendor/openemr/openemr:/var/www/localhost/htdocs/openemr:rw
-      # Mount our module into the custom_modules directory
+      # Mount OpenEMR directly to runtime location (pre-built with composer/npm).
+      # NOTE: source is tools/openemr/vendor/..., NOT root vendor/ — see issue #118.
+    - ./tools/openemr/vendor/openemr/openemr:/var/www/localhost/htdocs/openemr:rw
+      # Mount our module into the custom_modules directory.
+      # The whole worktree (including tools/openemr/vendor/openemr/openemr/) is
+      # re-exposed at a nested path here. That's harmless: the module's
+      # vendor/autoload.php no longer registers any OpenEMR\\ PSR-4 mapping,
+      # so the nested copy is never autoloaded.
     - .:/var/www/localhost/htdocs/openemr/interface/modules/custom_modules/oce-module-sinch-conversations:rw
       # Persistent volume for logs only (sites uses bind mount for dev)
     - logvolume:/var/log
@@ -99,5 +106,4 @@ services:
 
 volumes:
   databasevolume: {}
-  sitesvolume: {}
   logvolume: {}

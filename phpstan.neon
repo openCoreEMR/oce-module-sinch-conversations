@@ -16,9 +16,15 @@ parameters:
     # PHP version
     phpVersion: 80200
 
+    # OpenEMR source lives in the tooling sub-vendor (see tools/openemr/README.md
+    # and issue #118). Load its autoloader so PHPStan can resolve OpenEMR\… types.
+    bootstrapFiles:
+        - tools/openemr/vendor/autoload.php
+
     # Ignore errors in vendor (optional - may not exist in worktrees)
     excludePaths:
         - vendor (?)
+        - tools/openemr/vendor (?)
 
     # Additional checks
     checkMissingCallableSignature: true

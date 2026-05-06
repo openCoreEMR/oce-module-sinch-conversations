@@ -10,24 +10,35 @@ This directory contains Docker configuration for testing the Sinch Conversations
 # 1. Install module dependencies
 composer install
 
-# 2. Build OpenEMR dependencies (OPTIONAL - speeds up first start)
+# 2. Install OpenEMR source under tools/openemr (used by PHPStan + this Docker mount)
+composer install --working-dir=tools/openemr
+
+# 3. Build OpenEMR dependencies (OPTIONAL - speeds up first start)
 #    If you skip this, the container will build them automatically (slower)
-cd vendor/openemr/openemr
+cd tools/openemr/vendor/openemr/openemr
 composer install --no-dev
 npm install --legacy-peer-deps
 npm run build
-cd ../../..
+cd -
 
-# 3. Start the environment
+# 4. Start the environment
 docker compose up -d --wait
 
-# 4. Get the assigned port
+# 5. Get the assigned port
 docker compose port openemr 80      # OpenEMR HTTP (e.g., 0.0.0.0:32768)
 
-# 5. Open browser to http://localhost:PORT and login
+# 6. Open browser to http://localhost:PORT and login
 ```
 
-**Pro Tip:** Pre-building OpenEMR's dependencies (step 2) saves ~5-10 minutes on first container start. The Docker entrypoint detects existing builds and skips rebuilding.
+(Or just run `task setup`, which does steps 1–5.)
+
+**Pro Tip:** Pre-building OpenEMR's dependencies (step 3) saves ~5-10 minutes on first container start. The Docker entrypoint detects existing builds and skips rebuilding.
+
+## Why is OpenEMR under `tools/openemr/` instead of `vendor/`?
+
+Because putting `openemr/openemr` in the module's root `composer.json` causes the module's `vendor/autoload.php` to register a PSR-4 mapping for `OpenEMR\\` → our vendor's `src/` alongside OpenEMR core's identical mapping. At runtime, class lookups can resolve to **our** vendor copy, and several OpenEMR classes use `__DIR__`-relative `require_once` to load procedural-function files. Loading the same file under a different absolute path bypasses `require_once`'s dedup → `Cannot redeclare …` fatal.
+
+The fix: keep OpenEMR source at `tools/openemr/vendor/openemr/openemr/`, where it's available to PHPStan (via `phpstan.neon`'s `bootstrapFiles`) and to this Docker bind mount, but **never** registered in the module's runtime autoloader. See [issue #118](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/118) and `tools/openemr/README.md`.
 
 ## Default Credentials
 
@@ -76,7 +87,7 @@ docker compose down -v
 docker compose restart openemr
 
 # Rebuild OpenEMR dependencies after updating OpenEMR version
-cd vendor/openemr/openemr && composer install --no-dev && npm install --legacy-peer-deps && npm run build && cd ../../..
+cd tools/openemr/vendor/openemr/openemr && composer install --no-dev && npm install --legacy-peer-deps && npm run build && cd -
 ```
 
 **Note:** We use `docker compose exec` to run commands in already-running containers:
@@ -98,10 +109,14 @@ cd vendor/openemr/openemr && composer install --no-dev && npm install --legacy-p
   - Starts Apache immediately
   - Skips slow `chown` operations that take 5-10 minutes on macOS bind mounts
   - Much faster startup (~30 seconds instead of 10 minutes)
-- **Pre-built OpenEMR**: Mount pre-built OpenEMR from `vendor/openemr/openemr`
-  - Run `composer install --no-dev` and `npm install && npm run build` locally first
+- **Pre-built OpenEMR**: Mount pre-built OpenEMR from `tools/openemr/vendor/openemr/openemr`
+  - Run `composer install --no-dev` and `npm install --legacy-peer-deps && npm run build` locally first
   - Container uses pre-built artifacts, no need to rebuild inside Docker
-- **Persistent data**: Patient data, configurations, and uploads live in `sitesvolume` Docker volume
+  - OpenEMR is here (not under root `vendor/`) on purpose — see "Why is OpenEMR under `tools/openemr/`?" above
+- **Persistent data**: Patient data, configurations, and uploads live on the host
+  inside `tools/openemr/vendor/openemr/openemr/sites/` (bind-mounted into the
+  container). Database data lives in the `databasevolume` Docker volume.
   - Survives container restarts
-  - Use `docker compose down -v` to completely reset
+  - `docker compose down -v` resets the database volume; to fully reset, also
+    delete `tools/openemr/vendor/openemr/openemr/sites/` (or run `task workflow:nuke`)
 - **Live reload**: Code changes are immediately reflected since bind mounts update in real-time

@@ -272,6 +272,12 @@ tasks:
     - composer update
     - echo "✅ Composer dependencies updated"
 
+  tools:install:
+    desc: Install OpenEMR source under tools/openemr (for PHPStan + Docker bind mount)
+    cmds:
+    - composer install --working-dir=tools/openemr
+    - echo "✅ OpenEMR source installed under tools/openemr/vendor/openemr/openemr"
+
   docs:sinch:
     desc: Fetch latest Sinch API documentation for AI agents
     cmds:
@@ -280,12 +286,14 @@ tasks:
     - echo "✅ Sinch API docs updated in .local/llms.txt"
 
   openemr:prebuild:
-    desc: Pre-build OpenEMR dependencies (speeds up first Docker start)
+    desc: Pre-build OpenEMR dependencies in tools/openemr (speeds up first Docker start)
+    deps:
+    - tools:install
     cmds:
     - echo "Building OpenEMR dependencies..."
-    - cd vendor/openemr/openemr && composer install --no-dev
-    - cd vendor/openemr/openemr && npm install --legacy-peer-deps
-    - cd vendor/openemr/openemr && npm run build
+    - cd tools/openemr/vendor/openemr/openemr && composer install --no-dev
+    - cd tools/openemr/vendor/openemr/openemr && npm install --legacy-peer-deps
+    - cd tools/openemr/vendor/openemr/openemr && npm run build
     - echo "✅ OpenEMR dependencies built"
 
   git:clean:
@@ -296,20 +304,21 @@ tasks:
     - echo "✅ Untracked files removed (preserved .local/)"
 
   vendor:clean:
-    desc: Remove vendor directory (forces complete reinstall of dependencies)
-    prompt: This will DELETE the entire vendor directory. Continue?
+    desc: Remove vendor directories (root and tools/openemr) — forces complete reinstall
+    prompt: This will DELETE the root vendor/ AND tools/openemr/vendor/ directories. Continue?
     preconditions:
     - sh: test -z "$(docker compose volumes -q)"
       msg: |
         ❌ Docker volumes still exist. You must run 'task dev:purge' first.
 
-        Reason: OpenEMR stores crypto keys in both the database (volume) and filesystem (vendor).
-        Removing vendor without removing volumes will break encryption and make the database unusable.
+        Reason: OpenEMR stores crypto keys in both the database (volume) and filesystem
+        (tools/openemr/vendor/openemr/openemr/sites). Removing the OpenEMR vendor without
+        removing volumes will break encryption and make the database unusable.
 
         Run: task workflow:nuke (to remove both) or task dev:purge (then task vendor:clean)
     cmds:
-    - git clean -fdx vendor/
-    - echo "✅ Vendor directory removed"
+    - git clean -fdx vendor/ tools/openemr/vendor/
+    - echo "✅ Vendor directories removed (root + tools/openemr)"
 
   # === Quick Workflows ===
 
@@ -317,6 +326,8 @@ tasks:
     desc: Complete setup (install deps, prebuild OpenEMR, start Docker)
     cmds:
     - task: composer:install
+    # openemr:prebuild deps on tools:install, so the OpenEMR source is
+    # installed transitively — no need to call tools:install here too.
     - task: openemr:prebuild
     - task: dev:start
     - task: dev:port

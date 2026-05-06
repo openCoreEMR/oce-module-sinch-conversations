@@ -25,16 +25,25 @@ jobs:
         coverage: none
         tools: composer:v2
 
+    # composer.lock is gitignored in this repo, so key off the composer.json
+    # files instead — they change when deps change.
     - name: Cache Composer dependencies
       uses: actions/cache@v5
       with:
-        path: vendor
-        key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+        path: |
+          vendor
+          tools/openemr/vendor
+        key: ${{ runner.os }}-composer-${{ hashFiles('composer.json', 'tools/openemr/composer.json') }}
         restore-keys: |
           ${{ runner.os }}-composer-
 
     - name: Install dependencies
       run: composer install --prefer-dist --no-progress --no-interaction
+
+    # PHPStan resolves OpenEMR\… types from the tooling sub-vendor (loaded via
+    # phpstan.neon's bootstrapFiles). See tools/openemr/README.md and issue #118.
+    - name: Install OpenEMR source for PHPStan
+      run: composer install --working-dir=tools/openemr --prefer-dist --no-progress --no-interaction
 
     - name: Run PHPStan
       run: composer phpstan
