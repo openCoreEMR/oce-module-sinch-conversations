@@ -116,7 +116,9 @@ abstract class AbstractModuleCommand extends Command
         $candidates = [
             // Docker container path (when module is symlinked into OpenEMR)
             '/var/www/localhost/htdocs/openemr',
-            // Development: module has OpenEMR as a composer dependency
+            // Development: OpenEMR installed under tools/openemr (current layout — see issue #118)
+            __DIR__ . '/../../../../tools/openemr/vendor/openemr/openemr',
+            // Development: module has OpenEMR as a (legacy) composer dependency
             __DIR__ . '/../../../../vendor/openemr/openemr',
             __DIR__ . '/../../../../../vendor/openemr/openemr',
             // Development: module is inside OpenEMR's custom_modules
