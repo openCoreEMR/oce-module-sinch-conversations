@@ -15,7 +15,7 @@ declare(strict_types=1);
 namespace OpenCoreEMR\Modules\SinchConversations\Service;
 
 use OpenCoreEMR\Modules\SinchConversations\Channel;
-use OpenCoreEMR\Modules\SinchConversations\ConsentState;
+use OpenCoreEMR\Modules\SinchConversations\ConsentBlock;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\SkipReason;
 use OpenCoreEMR\Sinch\Conversation\Client\ConversationApiClient;
@@ -216,54 +216,109 @@ class MessageService
     /**
      * Assert patient is eligible to receive messages
      *
-     * Check both OpenEMR's hipaa_allowsms field and module-level consent.
-     * Query consent directly to avoid circular dependency (ConsentService depends on MessageService).
-     * Normalize the phone number to E.164 before checking consent so that
-     * user-entered formats match the E.164 stored by Sinch callbacks.
-     *
-     * Emit a structured warning before throwing so the block decision is
-     * visible at WARNING level, not just inferable from caught exceptions.
+     * Delegates to diagnose() so the gate and the diagnostic verdict surface
+     * cannot drift apart — every check (chart hipaa_allowsms, phone parsability,
+     * module-side opt-out, carrier block) is evaluated in exactly one place.
+     * This method only adds the side effects: a structured WARNING log and a
+     * ValidationException.
      *
      * @throws ValidationException
      */
     private function assertPatientEligible(int $patientId, string $phoneNumber): void
     {
-        $sql = "SELECT hipaa_allowsms FROM patient_data WHERE pid = ?";
+        $verdict = $this->diagnose($patientId, $phoneNumber);
+        if ($verdict['can_send']) {
+            return;
+        }
+
+        $reason = SkipReason::from((string) $verdict['reason']);
+        $this->logBlock($patientId, $reason, $verdict['context']);
+        throw new ValidationException(match ($reason) {
+            SkipReason::HipaaDisallowsSms => "Patient {$patientId} has not allowed SMS (hipaa_allowsms is not YES)",
+            SkipReason::MissingPhone => "Patient {$patientId} has no phone number on file",
+            SkipReason::UnparseablePhone => "Cannot check eligibility: unparseable phone number"
+                . " for patient {$patientId}",
+            SkipReason::CarrierBlocked => "Patient {$patientId}'s phone {$phoneNumber} is carrier-blocked",
+            SkipReason::ModuleOptOut => "Patient {$patientId} has explicitly opted out of messages at {$phoneNumber}",
+        });
+    }
+
+    /**
+     * Run the same checks as assertPatientEligible(), but return a structured
+     * verdict instead of throwing. Used by diagnostic surfaces (the calendar
+     * SMS-status renderer, support tools) that need to answer "would a send
+     * to this patient succeed right now?" without actually attempting one.
+     *
+     * Looks up phone_cell from patient_data when $phoneNumber is null, so
+     * UI callers can pass just the patient id.
+     *
+     * @return array{
+     *     can_send: bool,
+     *     reason: ?string,
+     *     context: array<string, scalar|null>,
+     *     phone: ?string
+     * }
+     */
+    public function diagnose(int $patientId, ?string $phoneNumber = null): array
+    {
+        $sql = "SELECT hipaa_allowsms, phone_cell FROM patient_data WHERE pid = ?";
         $result = QueryUtils::querySingleRow($sql, [$patientId]);
-        $hipaaAllowSms = $result['hipaa_allowsms'] ?? '';
+        $hipaaAllowSms = is_string($result['hipaa_allowsms'] ?? null) ? $result['hipaa_allowsms'] : '';
 
         if ($hipaaAllowSms !== 'YES') {
-            $this->logBlock($patientId, SkipReason::HipaaDisallowsSms, [
-                'hipaa_allowsms' => $hipaaAllowSms === '' ? 'unset' : $hipaaAllowSms,
-            ]);
-            throw new ValidationException(
-                "Patient {$patientId} has not allowed SMS (hipaa_allowsms is not YES)"
-            );
+            return [
+                'can_send' => false,
+                'reason' => SkipReason::HipaaDisallowsSms->value,
+                'context' => ['hipaa_allowsms' => $hipaaAllowSms === '' ? 'unset' : $hipaaAllowSms],
+                'phone' => null,
+            ];
         }
 
-        $normalized = PhoneNormalizer::toE164($phoneNumber);
+        $rawPhone = $phoneNumber;
+        if ($rawPhone === null) {
+            $rawPhone = is_string($result['phone_cell'] ?? null) ? trim($result['phone_cell']) : '';
+        }
+        if ($rawPhone === '') {
+            return [
+                'can_send' => false,
+                'reason' => SkipReason::MissingPhone->value,
+                'context' => [],
+                'phone' => null,
+            ];
+        }
+
+        $normalized = PhoneNormalizer::toE164($rawPhone);
         if ($normalized === null) {
-            $this->logBlock($patientId, SkipReason::UnparseablePhone, [
-                'phone_last4' => PhoneNormalizer::last4($phoneNumber),
-            ]);
-            throw new ValidationException(
-                "Cannot check eligibility: unparseable phone number for patient {$patientId}"
-            );
+            return [
+                'can_send' => false,
+                'reason' => SkipReason::UnparseablePhone->value,
+                'context' => ['phone_last4' => PhoneNormalizer::last4($rawPhone)],
+                'phone' => null,
+            ];
         }
 
-        $sql = "SELECT opted_in, opted_out
+        $sql = "SELECT opted_in, opted_out, carrier_blocked, carrier_block_reason
                 FROM oce_sinch_patient_consent
                 WHERE patient_id = ? AND phone_number = ?";
-        $consentState = ConsentState::fromRow(QueryUtils::querySingleRow($sql, [$patientId, $normalized]));
-
-        if ($consentState !== ConsentState::Active) {
-            $this->logBlock($patientId, SkipReason::NoActiveConsent, [
-                'consent_state' => $consentState->value,
-            ]);
-            throw new ValidationException(
-                "Patient {$patientId} has not consented to messages at {$phoneNumber}"
-            );
+        // QueryUtils::querySingleRow returns false on no row; normalize to
+        // null so ConsentBlock::evaluate's ?array contract holds.
+        $row = QueryUtils::querySingleRow($sql, [$patientId, $normalized]) ?: null;
+        $block = ConsentBlock::evaluate($row);
+        if ($block !== null) {
+            return [
+                'can_send' => false,
+                'reason' => $block->reason->value,
+                'context' => $block->context,
+                'phone' => $normalized,
+            ];
         }
+
+        return [
+            'can_send' => true,
+            'reason' => null,
+            'context' => [],
+            'phone' => $normalized,
+        ];
     }
 
     /**

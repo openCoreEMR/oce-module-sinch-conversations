@@ -17,15 +17,18 @@ namespace OpenCoreEMR\Modules\SinchConversations;
 /**
  * Why a patient was not (or could not be) sent a message.
  *
- * Values are written into log context (`reason` field) and are part of the
- * observability contract — keep them stable across releases. Used by both
- * the appointment-reminder cron (skip decisions) and the send-path
- * eligibility gate (block decisions).
+ * Values are written into log context (`reason` field) and consumed by
+ * dashboards/alerts. Treat them as stable by default; only change a value
+ * when its meaning genuinely changes (in which case keeping the old name
+ * would mislead readers and downstream consumers more than the rename
+ * does). Used by both the appointment-reminder cron (skip decisions) and
+ * the send-path eligibility gate (block decisions).
  */
 enum SkipReason: string
 {
     case MissingPhone = 'missing_phone';
     case UnparseablePhone = 'unparseable_phone';
     case HipaaDisallowsSms = 'hipaa_disallows_sms';
-    case NoActiveConsent = 'no_active_consent';
+    case ModuleOptOut = 'module_opt_out';
+    case CarrierBlocked = 'carrier_blocked';
 }

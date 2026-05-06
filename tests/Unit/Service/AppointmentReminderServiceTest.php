@@ -142,9 +142,10 @@ class AppointmentReminderServiceTest extends TestCase
             $this->makeAppointment(101, 43, '2026-04-01', '10:00:00', '+15558888888', 'YES'),
         ]);
 
-        // hipaa_allowsms = YES (from main query) but opted_out = true in consent
+        // hipaa_allowsms = YES (from main query) but opted_out = true in
+        // module table — the explicit opt-out overrides the chart YES.
         QueryUtils::setMockResult(
-            "SELECT opted_in, opted_out
+            "SELECT opted_in, opted_out, carrier_blocked, carrier_block_reason
                 FROM oce_sinch_patient_consent
                 WHERE patient_id = ? AND phone_number = ?",
             [43, '+15558888888'],
@@ -161,20 +162,29 @@ class AppointmentReminderServiceTest extends TestCase
         $this->assertSame(0, $results['sent']);
         $this->assertSame(1, $results['skipped']);
 
-        $this->assertSkipLogged(101, 43, 'no_active_consent', ['consent_state' => 'opted_out']);
+        $this->assertSkipLogged(101, 43, 'module_opt_out', ['consent_state' => 'opted_out']);
     }
 
-    public function testRunSkipsPatientWithNoConsentRow(): void
+    public function testRunSkipsPatientWithCarrierBlockEvenWithoutOptOut(): void
     {
+        // setCarrierBlock() can leave a row with carrier_blocked=TRUE but
+        // opted_out=FALSE before the paired optOut() runs (or if optOut
+        // failed). The reminder cron must still skip these patients and
+        // surface carrier_block_reason in the log.
         $this->mockUpcomingAppointments([
-            $this->makeAppointment(110, 49, '2026-04-01', '10:00:00', '+15554443322', 'YES'),
+            $this->makeAppointment(120, 60, '2026-04-01', '12:00:00', '+15555550000', 'YES'),
         ]);
         QueryUtils::setMockResult(
-            "SELECT opted_in, opted_out
+            "SELECT opted_in, opted_out, carrier_blocked, carrier_block_reason
                 FROM oce_sinch_patient_consent
                 WHERE patient_id = ? AND phone_number = ?",
-            [49, '+15554443322'],
-            []
+            [60, '+15555550000'],
+            [[
+                'opted_in' => false,
+                'opted_out' => false,
+                'carrier_blocked' => true,
+                'carrier_block_reason' => 'consent_api_sync',
+            ]]
         );
 
         $this->templateService->method('getAppointmentReminderTemplateKey')
@@ -187,7 +197,71 @@ class AppointmentReminderServiceTest extends TestCase
         $this->assertSame(0, $results['sent']);
         $this->assertSame(1, $results['skipped']);
 
-        $this->assertSkipLogged(110, 49, 'no_active_consent', ['consent_state' => 'none']);
+        $this->assertSkipLogged(120, 60, 'carrier_blocked', ['carrier_block_reason' => 'consent_api_sync']);
+    }
+
+    public function testRunReportsCarrierBlockedSkipReasonWhenBothFlagsSet(): void
+    {
+        // Steady state: setCarrierBlock() then optOut() leaves both flags
+        // TRUE. The cron must log carrier_blocked (the more specific
+        // cause) so the carrier_block_reason context survives — not
+        // module_opt_out, which would mask it.
+        $this->mockUpcomingAppointments([
+            $this->makeAppointment(125, 65, '2026-04-01', '13:00:00', '+15555556666', 'YES'),
+        ]);
+        QueryUtils::setMockResult(
+            "SELECT opted_in, opted_out, carrier_blocked, carrier_block_reason
+                FROM oce_sinch_patient_consent
+                WHERE patient_id = ? AND phone_number = ?",
+            [65, '+15555556666'],
+            [[
+                'opted_in' => false,
+                'opted_out' => true,
+                'carrier_blocked' => true,
+                'carrier_block_reason' => 'smpp_255',
+            ]]
+        );
+
+        $this->templateService->method('getAppointmentReminderTemplateKey')
+            ->willReturn('appointment_reminder_no_portal');
+
+        $this->messageService->expects($this->never())->method('sendToPatient');
+
+        $results = $this->service->run();
+
+        $this->assertSame(0, $results['sent']);
+        $this->assertSame(1, $results['skipped']);
+
+        $this->assertSkipLogged(125, 65, 'carrier_blocked', ['carrier_block_reason' => 'smpp_255']);
+    }
+
+    public function testRunSendsReminderWhenChartYesAndNoConsentRow(): void
+    {
+        // Under chart-as-source-of-truth, chart YES with no module-side
+        // exception row is sufficient to send. (Pre-flip behavior skipped
+        // these patients as 'no_active_consent' — this test pins the new
+        // positive case.)
+        $this->mockUpcomingAppointments([
+            $this->makeAppointment(110, 49, '2026-04-01', '10:00:00', '+15554443322', 'YES'),
+        ]);
+        QueryUtils::setMockResult(
+            "SELECT opted_in, opted_out, carrier_blocked, carrier_block_reason
+                FROM oce_sinch_patient_consent
+                WHERE patient_id = ? AND phone_number = ?",
+            [49, '+15554443322'],
+            []
+        );
+
+        $this->templateService->method('getAppointmentReminderTemplateKey')
+            ->willReturn('appointment_reminder_no_portal');
+        $this->templateService->method('render')->willReturn('Reminder');
+
+        $this->messageService->expects($this->once())->method('sendToPatient');
+
+        $results = $this->service->run();
+
+        $this->assertSame(1, $results['sent']);
+        $this->assertSame(0, $results['skipped']);
     }
 
     // --- hipaa_allowsms = NO -> no reminder ---
@@ -367,13 +441,13 @@ class AppointmentReminderServiceTest extends TestCase
         // First: eligible, send succeeds
         $this->mockActiveConsent(50, '+15550001111');
 
-        // Second: no consent record -> skipped
+        // Second: explicit opt-out -> skipped
         QueryUtils::setMockResult(
-            "SELECT opted_in, opted_out
+            "SELECT opted_in, opted_out, carrier_blocked, carrier_block_reason
                 FROM oce_sinch_patient_consent
                 WHERE patient_id = ? AND phone_number = ?",
             [51, '+15550002222'],
-            []
+            [['opted_in' => true, 'opted_out' => true]]
         );
 
         // Third: eligible, send succeeds
@@ -562,7 +636,7 @@ class AppointmentReminderServiceTest extends TestCase
     private function mockActiveConsent(int $patientId, string $phoneNumber): void
     {
         QueryUtils::setMockResult(
-            "SELECT opted_in, opted_out
+            "SELECT opted_in, opted_out, carrier_blocked, carrier_block_reason
                 FROM oce_sinch_patient_consent
                 WHERE patient_id = ? AND phone_number = ?",
             [$patientId, $phoneNumber],
