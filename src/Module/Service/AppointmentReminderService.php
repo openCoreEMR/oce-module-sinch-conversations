@@ -18,7 +18,7 @@ declare(strict_types=1);
 
 namespace OpenCoreEMR\Modules\SinchConversations\Service;
 
-use OpenCoreEMR\Modules\SinchConversations\ConsentState;
+use OpenCoreEMR\Modules\SinchConversations\ConsentBlock;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\SkipReason;
 use OpenEMR\Common\Database\QueryUtils;
@@ -98,11 +98,13 @@ class AppointmentReminderService
                 continue;
             }
 
-            $consentState = $this->getConsentState($patientId, $phoneNumber);
-            if ($consentState !== ConsentState::Active) {
-                $this->logSkip($pcEid, $patientId, SkipReason::NoActiveConsent, [
-                    'consent_state' => $consentState->value,
-                ]);
+            // Chart hipaa_allowsms='YES' (checked above) is the source of
+            // truth for opt-in. Module table is consulted only for explicit
+            // blocks (patient opt-out via STOP, carrier blocks, etc.).
+            // Absence of a row is fine — it just means no block on file.
+            $block = ConsentBlock::evaluate($this->getConsentRow($patientId, $phoneNumber));
+            if ($block !== null) {
+                $this->logSkip($pcEid, $patientId, $block->reason, $block->context);
                 $results['skipped']++;
                 continue;
             }
@@ -208,19 +210,24 @@ class AppointmentReminderService
     }
 
     /**
-     * Classify module-level consent for a patient/phone.
+     * Read the module-side exception row for a patient/phone, or null if none.
      *
-     * The hipaa_allowsms check is handled in run() from the main query result.
-     * This method checks only module-level consent in oce_sinch_patient_consent.
+     * The chart hipaa_allowsms check (the actual opt-in signal) is handled
+     * in run() from the main query result. This method only inspects the
+     * module's exception store so callers can detect explicit opt-outs and
+     * carrier blocks that should override the chart's YES.
      *
      * @param string $phoneNumber E.164 normalized phone number
+     * @return array<string, mixed>|null
      */
-    private function getConsentState(int $patientId, string $phoneNumber): ConsentState
+    private function getConsentRow(int $patientId, string $phoneNumber): ?array
     {
-        $sql = "SELECT opted_in, opted_out
+        $sql = "SELECT opted_in, opted_out, carrier_blocked, carrier_block_reason
                 FROM oce_sinch_patient_consent
                 WHERE patient_id = ? AND phone_number = ?";
-        return ConsentState::fromRow(QueryUtils::querySingleRow($sql, [$patientId, $phoneNumber]));
+        // QueryUtils::querySingleRow returns false on no row; normalize so
+        // the declared ?array return holds.
+        return QueryUtils::querySingleRow($sql, [$patientId, $phoneNumber]) ?: null;
     }
 
     /**

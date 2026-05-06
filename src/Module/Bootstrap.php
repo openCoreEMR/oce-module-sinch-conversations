@@ -19,9 +19,13 @@ use OpenCoreEMR\ModuleConfig\ConfigFactory;
 use OpenCoreEMR\ModuleConfig\GlobalsRegistrar;
 use OpenEMR\Common\Logging\SystemLogger;
 use OpenEMR\Common\Twig\TwigContainer;
+use OpenCoreEMR\Modules\SinchConversations\Listener\AppointmentSmsStatusJsListener;
+use OpenCoreEMR\Modules\SinchConversations\Listener\AppointmentSmsStatusListener;
 use OpenCoreEMR\Modules\SinchConversations\Listener\PatientConsentListener;
+use OpenCoreEMR\Modules\SinchConversations\Render\EligibilityAlertRenderer;
 use OpenEMR\Core\Kernel;
 use OpenEMR\Core\OEGlobalsBag;
+use OpenEMR\Events\Appointments\AppointmentRenderEvent;
 use OpenEMR\Events\Patient\PatientCreatedEvent;
 use OpenEMR\Events\Patient\PatientUpdatedEvent;
 use OpenEMR\Menu\MenuEvent;
@@ -36,6 +40,7 @@ class Bootstrap
     private readonly SessionAccessor $session;
     private readonly \Twig\Environment $twig;
     private readonly SystemLogger $logger;
+    private ?EligibilityAlertRenderer $eligibilityAlertRenderer = null;
 
     public function __construct(
         private readonly EventDispatcherInterface $eventDispatcher,
@@ -71,6 +76,7 @@ class Bootstrap
         }
 
         $this->subscribeToPatientConsentEvents();
+        $this->subscribeToAppointmentRenderEvents();
 
         $this->logger->debug('Sinch Conversations module is enabled');
     }
@@ -85,6 +91,21 @@ class Bootstrap
         $this->eventDispatcher->addListener(
             PatientUpdatedEvent::EVENT_HANDLE,
             $listener->onPatientUpdated(...)
+        );
+    }
+
+    private function subscribeToAppointmentRenderEvents(): void
+    {
+        $listener = $this->getAppointmentSmsStatusListener();
+        $this->eventDispatcher->addListener(
+            AppointmentRenderEvent::RENDER_BELOW_PATIENT,
+            $listener->onRenderBelowPatient(...)
+        );
+
+        $jsListener = $this->getAppointmentSmsStatusJsListener();
+        $this->eventDispatcher->addListener(
+            AppointmentRenderEvent::RENDER_JAVASCRIPT,
+            $jsListener->onRenderJavascript(...)
         );
     }
 
@@ -188,6 +209,46 @@ class Bootstrap
     public function getPatientConsentListener(): PatientConsentListener
     {
         return new PatientConsentListener($this->getConsentService());
+    }
+
+    /**
+     * Get Appointment SMS Status Listener
+     */
+    public function getAppointmentSmsStatusListener(): AppointmentSmsStatusListener
+    {
+        return new AppointmentSmsStatusListener(
+            $this->getMessageService(),
+            $this->getEligibilityAlertRenderer()
+        );
+    }
+
+    /**
+     * Get Appointment SMS Status JS Listener
+     */
+    public function getAppointmentSmsStatusJsListener(): AppointmentSmsStatusJsListener
+    {
+        return new AppointmentSmsStatusJsListener();
+    }
+
+    /**
+     * Get Eligibility Alert Renderer (memoized — stateless and shared
+     * between the listener and the controller).
+     */
+    public function getEligibilityAlertRenderer(): EligibilityAlertRenderer
+    {
+        return $this->eligibilityAlertRenderer ??= new EligibilityAlertRenderer();
+    }
+
+    /**
+     * Get Eligibility Controller
+     */
+    public function getEligibilityController(): Controller\EligibilityController
+    {
+        return new Controller\EligibilityController(
+            $this->getMessageService(),
+            $this->getEligibilityAlertRenderer(),
+            $this->logger
+        );
     }
 
     /**

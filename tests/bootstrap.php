@@ -37,6 +37,7 @@ require_once __DIR__ . '/Mocks/MockGlobalsInitializedEvent.php';
 require_once __DIR__ . '/Mocks/MockPatientCreatedEvent.php';
 require_once __DIR__ . '/Mocks/MockPatientUpdatedEvent.php';
 require_once __DIR__ . '/Mocks/MockMenuEvent.php';
+require_once __DIR__ . '/Mocks/MockAppointmentRenderEvent.php';
 require_once __DIR__ . '/Mocks/MockGlobalSetting.php';
 require_once __DIR__ . '/Mocks/MockGlobalsService.php';
 

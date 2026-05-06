@@ -51,12 +51,12 @@ class MessageServiceTest extends TestCase
     private function mockPatientEligible(int $patientId, string $phoneNumber): void
     {
         QueryUtils::setMockResult(
-            "SELECT hipaa_allowsms FROM patient_data WHERE pid = ?",
+            "SELECT hipaa_allowsms, phone_cell FROM patient_data WHERE pid = ?",
             [$patientId],
             [['hipaa_allowsms' => 'YES']]
         );
         QueryUtils::setMockResult(
-            "SELECT opted_in, opted_out
+            "SELECT opted_in, opted_out, carrier_blocked, carrier_block_reason
                 FROM oce_sinch_patient_consent
                 WHERE patient_id = ? AND phone_number = ?",
             [$patientId, $phoneNumber],
@@ -95,7 +95,7 @@ class MessageServiceTest extends TestCase
     public function testSendToPatientThrowsWhenHipaaDisallowsSms(): void
     {
         QueryUtils::setMockResult(
-            "SELECT hipaa_allowsms FROM patient_data WHERE pid = ?",
+            "SELECT hipaa_allowsms, phone_cell FROM patient_data WHERE pid = ?",
             [1],
             [['hipaa_allowsms' => 'NO']]
         );
@@ -113,7 +113,7 @@ class MessageServiceTest extends TestCase
     public function testSendToPatientThrowsWhenHipaaFieldMissing(): void
     {
         QueryUtils::setMockResult(
-            "SELECT hipaa_allowsms FROM patient_data WHERE pid = ?",
+            "SELECT hipaa_allowsms, phone_cell FROM patient_data WHERE pid = ?",
             [1],
             []
         );
@@ -128,40 +128,43 @@ class MessageServiceTest extends TestCase
         $this->assertBlockLogged(1, 'hipaa_disallows_sms', ['hipaa_allowsms' => 'unset']);
     }
 
-    public function testSendToPatientThrowsWhenNoConsent(): void
+    public function testSendToPatientAllowsWhenChartYesAndNoModuleRow(): void
     {
+        // Under chart-as-source-of-truth: chart YES + absence of any module
+        // exception row = OK to send. Pre-flip behavior required an explicit
+        // opted_in row; this test pins the new positive case.
         QueryUtils::setMockResult(
-            "SELECT hipaa_allowsms FROM patient_data WHERE pid = ?",
+            "SELECT hipaa_allowsms, phone_cell FROM patient_data WHERE pid = ?",
             [1],
             [['hipaa_allowsms' => 'YES']]
         );
         QueryUtils::setMockResult(
-            "SELECT opted_in, opted_out
+            "SELECT opted_in, opted_out, carrier_blocked, carrier_block_reason
                 FROM oce_sinch_patient_consent
                 WHERE patient_id = ? AND phone_number = ?",
             [1, '+15559999999'],
             []
         );
+        $this->mockExistingConversation(1, 'conv-allow');
 
-        try {
-            $this->service->sendToPatient(1, '+15559999999', 'Hello');
-            $this->fail('Expected ValidationException');
-        } catch (ValidationException $e) {
-            $this->assertStringContainsString('has not consented', $e->getMessage());
-        }
+        $this->apiClient->expects($this->once())
+            ->method('sendMessageByChannelIdentity')
+            ->willReturn(['id' => 'msg-allow']);
 
-        $this->assertBlockLogged(1, 'no_active_consent', ['consent_state' => 'none']);
+        $result = $this->service->sendToPatient(1, '+15559999999', 'Hello');
+
+        $this->assertSame('msg-allow', $result['id']);
     }
 
     public function testSendToPatientThrowsWhenOptedOut(): void
     {
         QueryUtils::setMockResult(
-            "SELECT hipaa_allowsms FROM patient_data WHERE pid = ?",
+            "SELECT hipaa_allowsms, phone_cell FROM patient_data WHERE pid = ?",
             [1],
             [['hipaa_allowsms' => 'YES']]
         );
         QueryUtils::setMockResult(
-            "SELECT opted_in, opted_out
+            "SELECT opted_in, opted_out, carrier_blocked, carrier_block_reason
                 FROM oce_sinch_patient_consent
                 WHERE patient_id = ? AND phone_number = ?",
             [1, '+15559999999'],
@@ -172,16 +175,86 @@ class MessageServiceTest extends TestCase
             $this->service->sendToPatient(1, '+15559999999', 'Hello');
             $this->fail('Expected ValidationException');
         } catch (ValidationException $e) {
-            $this->assertStringContainsString('has not consented', $e->getMessage());
+            $this->assertStringContainsString('explicitly opted out', $e->getMessage());
         }
 
-        $this->assertBlockLogged(1, 'no_active_consent', ['consent_state' => 'opted_out']);
+        $this->assertBlockLogged(1, 'module_opt_out', ['consent_state' => 'opted_out']);
+    }
+
+    public function testSendToPatientThrowsWhenCarrierBlockedEvenWithoutOptOut(): void
+    {
+        // setCarrierBlock() writes opted_in=FALSE, opted_out=FALSE,
+        // carrier_blocked=TRUE before the paired optOut() call. If the
+        // optOut() write hasn't happened (or failed), the row exists with
+        // carrier_blocked=TRUE / opted_out=FALSE — sends must still be
+        // blocked, and the carrier_block_reason must surface in the log.
+        QueryUtils::setMockResult(
+            "SELECT hipaa_allowsms, phone_cell FROM patient_data WHERE pid = ?",
+            [1],
+            [['hipaa_allowsms' => 'YES']]
+        );
+        QueryUtils::setMockResult(
+            "SELECT opted_in, opted_out, carrier_blocked, carrier_block_reason
+                FROM oce_sinch_patient_consent
+                WHERE patient_id = ? AND phone_number = ?",
+            [1, '+15559999999'],
+            [[
+                'opted_in' => false,
+                'opted_out' => false,
+                'carrier_blocked' => true,
+                'carrier_block_reason' => 'smpp_255',
+            ]]
+        );
+
+        try {
+            $this->service->sendToPatient(1, '+15559999999', 'Hello');
+            $this->fail('Expected ValidationException');
+        } catch (ValidationException $e) {
+            $this->assertStringContainsString('carrier-blocked', $e->getMessage());
+        }
+
+        $this->assertBlockLogged(1, 'carrier_blocked', ['carrier_block_reason' => 'smpp_255']);
+    }
+
+    public function testSendToPatientReportsCarrierBlockedWhenBothFlagsSet(): void
+    {
+        // Steady state of the carrier-block flow: setCarrierBlock() then
+        // optOut() leaves opted_out=TRUE AND carrier_blocked=TRUE. The
+        // gate must report CarrierBlocked, not ModuleOptOut — the carrier
+        // block is the more specific cause and reporting opt-out would
+        // mask the carrier_block_reason context.
+        QueryUtils::setMockResult(
+            "SELECT hipaa_allowsms, phone_cell FROM patient_data WHERE pid = ?",
+            [1],
+            [['hipaa_allowsms' => 'YES']]
+        );
+        QueryUtils::setMockResult(
+            "SELECT opted_in, opted_out, carrier_blocked, carrier_block_reason
+                FROM oce_sinch_patient_consent
+                WHERE patient_id = ? AND phone_number = ?",
+            [1, '+15559999999'],
+            [[
+                'opted_in' => false,
+                'opted_out' => true,
+                'carrier_blocked' => true,
+                'carrier_block_reason' => 'smpp_255',
+            ]]
+        );
+
+        try {
+            $this->service->sendToPatient(1, '+15559999999', 'Hello');
+            $this->fail('Expected ValidationException');
+        } catch (ValidationException $e) {
+            $this->assertStringContainsString('carrier-blocked', $e->getMessage());
+        }
+
+        $this->assertBlockLogged(1, 'carrier_blocked', ['carrier_block_reason' => 'smpp_255']);
     }
 
     public function testSendToPatientLogsBlockForUnparseablePhone(): void
     {
         QueryUtils::setMockResult(
-            "SELECT hipaa_allowsms FROM patient_data WHERE pid = ?",
+            "SELECT hipaa_allowsms, phone_cell FROM patient_data WHERE pid = ?",
             [1],
             [['hipaa_allowsms' => 'YES']]
         );
@@ -314,7 +387,7 @@ class MessageServiceTest extends TestCase
             [['phone_cell' => '+15551111111']]
         );
         QueryUtils::setMockResult(
-            "SELECT hipaa_allowsms FROM patient_data WHERE pid = ?",
+            "SELECT hipaa_allowsms, phone_cell FROM patient_data WHERE pid = ?",
             [1],
             [['hipaa_allowsms' => 'NO']]
         );
@@ -382,6 +455,192 @@ class MessageServiceTest extends TestCase
         $results = $this->service->sendBatch([1], 'Test');
 
         $this->assertEquals(1, $results['sent']);
+    }
+
+    // --- diagnose ---
+
+    public function testDiagnoseReturnsCanSendWhenChartYesAndNoModuleException(): void
+    {
+        QueryUtils::setMockResult(
+            "SELECT hipaa_allowsms, phone_cell FROM patient_data WHERE pid = ?",
+            [42],
+            [['hipaa_allowsms' => 'YES', 'phone_cell' => '(555) 111-2222']]
+        );
+        QueryUtils::setMockResult(
+            "SELECT opted_in, opted_out, carrier_blocked, carrier_block_reason
+                FROM oce_sinch_patient_consent
+                WHERE patient_id = ? AND phone_number = ?",
+            [42, '+15551112222'],
+            []
+        );
+
+        $verdict = $this->service->diagnose(42);
+
+        $this->assertTrue($verdict['can_send']);
+        $this->assertNull($verdict['reason']);
+        $this->assertSame('+15551112222', $verdict['phone']);
+    }
+
+    public function testDiagnoseReturnsHipaaDisallowsWhenChartNo(): void
+    {
+        QueryUtils::setMockResult(
+            "SELECT hipaa_allowsms, phone_cell FROM patient_data WHERE pid = ?",
+            [42],
+            [['hipaa_allowsms' => 'NO', 'phone_cell' => '+15551112222']]
+        );
+
+        $verdict = $this->service->diagnose(42);
+
+        $this->assertFalse($verdict['can_send']);
+        $this->assertSame('hipaa_disallows_sms', $verdict['reason']);
+        $this->assertSame('NO', $verdict['context']['hipaa_allowsms']);
+    }
+
+    public function testDiagnoseReturnsHipaaDisallowsWhenChartUnset(): void
+    {
+        QueryUtils::setMockResult(
+            "SELECT hipaa_allowsms, phone_cell FROM patient_data WHERE pid = ?",
+            [42],
+            []
+        );
+
+        $verdict = $this->service->diagnose(42);
+
+        $this->assertFalse($verdict['can_send']);
+        $this->assertSame('hipaa_disallows_sms', $verdict['reason']);
+        $this->assertSame('unset', $verdict['context']['hipaa_allowsms']);
+    }
+
+    public function testDiagnoseReturnsMissingPhoneWhenChartHasNoCell(): void
+    {
+        QueryUtils::setMockResult(
+            "SELECT hipaa_allowsms, phone_cell FROM patient_data WHERE pid = ?",
+            [42],
+            [['hipaa_allowsms' => 'YES', 'phone_cell' => '   ']]
+        );
+
+        $verdict = $this->service->diagnose(42);
+
+        $this->assertFalse($verdict['can_send']);
+        $this->assertSame('missing_phone', $verdict['reason']);
+        $this->assertNull($verdict['phone']);
+    }
+
+    public function testDiagnoseReturnsUnparseablePhoneWhenChartCellInvalid(): void
+    {
+        QueryUtils::setMockResult(
+            "SELECT hipaa_allowsms, phone_cell FROM patient_data WHERE pid = ?",
+            [42],
+            [['hipaa_allowsms' => 'YES', 'phone_cell' => 'not-a-phone']]
+        );
+
+        $verdict = $this->service->diagnose(42);
+
+        $this->assertFalse($verdict['can_send']);
+        $this->assertSame('unparseable_phone', $verdict['reason']);
+    }
+
+    public function testDiagnoseReturnsModuleOptOutWhenExceptionRecorded(): void
+    {
+        QueryUtils::setMockResult(
+            "SELECT hipaa_allowsms, phone_cell FROM patient_data WHERE pid = ?",
+            [42],
+            [['hipaa_allowsms' => 'YES', 'phone_cell' => '+15551112222']]
+        );
+        QueryUtils::setMockResult(
+            "SELECT opted_in, opted_out, carrier_blocked, carrier_block_reason
+                FROM oce_sinch_patient_consent
+                WHERE patient_id = ? AND phone_number = ?",
+            [42, '+15551112222'],
+            [['opted_in' => true, 'opted_out' => true]]
+        );
+
+        $verdict = $this->service->diagnose(42);
+
+        $this->assertFalse($verdict['can_send']);
+        $this->assertSame('module_opt_out', $verdict['reason']);
+        $this->assertSame('opted_out', $verdict['context']['consent_state']);
+    }
+
+    public function testDiagnoseReturnsCarrierBlockedWithReason(): void
+    {
+        QueryUtils::setMockResult(
+            "SELECT hipaa_allowsms, phone_cell FROM patient_data WHERE pid = ?",
+            [42],
+            [['hipaa_allowsms' => 'YES', 'phone_cell' => '+15551112222']]
+        );
+        QueryUtils::setMockResult(
+            "SELECT opted_in, opted_out, carrier_blocked, carrier_block_reason
+                FROM oce_sinch_patient_consent
+                WHERE patient_id = ? AND phone_number = ?",
+            [42, '+15551112222'],
+            [[
+                'opted_in' => false,
+                'opted_out' => false,
+                'carrier_blocked' => true,
+                'carrier_block_reason' => 'smpp_255',
+            ]]
+        );
+
+        $verdict = $this->service->diagnose(42);
+
+        $this->assertFalse($verdict['can_send']);
+        $this->assertSame('carrier_blocked', $verdict['reason']);
+        $this->assertSame('smpp_255', $verdict['context']['carrier_block_reason']);
+    }
+
+    public function testDiagnoseReportsCarrierBlockedWhenBothFlagsSet(): void
+    {
+        // Steady-state row from the carrier-block flow: both flags TRUE.
+        // diagnose() must surface the carrier_block reason on the calendar
+        // verdict surface, not collapse it into module_opt_out.
+        QueryUtils::setMockResult(
+            "SELECT hipaa_allowsms, phone_cell FROM patient_data WHERE pid = ?",
+            [42],
+            [['hipaa_allowsms' => 'YES', 'phone_cell' => '+15551112222']]
+        );
+        QueryUtils::setMockResult(
+            "SELECT opted_in, opted_out, carrier_blocked, carrier_block_reason
+                FROM oce_sinch_patient_consent
+                WHERE patient_id = ? AND phone_number = ?",
+            [42, '+15551112222'],
+            [[
+                'opted_in' => false,
+                'opted_out' => true,
+                'carrier_blocked' => true,
+                'carrier_block_reason' => 'smpp_255',
+            ]]
+        );
+
+        $verdict = $this->service->diagnose(42);
+
+        $this->assertFalse($verdict['can_send']);
+        $this->assertSame('carrier_blocked', $verdict['reason']);
+        $this->assertSame('smpp_255', $verdict['context']['carrier_block_reason']);
+    }
+
+    public function testDiagnoseUsesExplicitPhoneWhenProvided(): void
+    {
+        // When the caller passes a phone, diagnose() must check that pair
+        // rather than the chart's phone_cell. This covers send paths that
+        // target a non-chart number.
+        QueryUtils::setMockResult(
+            "SELECT hipaa_allowsms, phone_cell FROM patient_data WHERE pid = ?",
+            [42],
+            [['hipaa_allowsms' => 'YES', 'phone_cell' => '+15550000000']]
+        );
+        QueryUtils::setMockResult(
+            "SELECT opted_in, opted_out, carrier_blocked, carrier_block_reason
+                FROM oce_sinch_patient_consent
+                WHERE patient_id = ? AND phone_number = ?",
+            [42, '+15559998888'],
+            []
+        );
+
+        $verdict = $this->service->diagnose(42, '+15559998888');
+
+        $this->assertTrue($verdict['can_send']);
+        $this->assertSame('+15559998888', $verdict['phone']);
     }
 
     /**

@@ -32,39 +32,6 @@ class ConsentService
     }
 
     /**
-     * Check if patient has active consent
-     *
-     * Normalizes the phone number to E.164 before lookup so that consent
-     * recorded as +15551234567 is found regardless of input format.
-     *
-     * @param int $patientId
-     * @param string $phoneNumber
-     * @return bool
-     */
-    public function hasConsent(int $patientId, string $phoneNumber): bool
-    {
-        $normalized = PhoneNormalizer::toE164($phoneNumber);
-        if ($normalized === null) {
-            $this->logger->warning('Cannot check consent with unparseable phone number', [
-                'patientId' => $patientId,
-                'phone' => $phoneNumber,
-            ]);
-            return false;
-        }
-
-        $sql = "SELECT opted_in, opted_out
-                FROM oce_sinch_patient_consent
-                WHERE patient_id = ? AND phone_number = ?";
-        $result = QueryUtils::querySingleRow($sql, [$patientId, $normalized]);
-
-        if (!$result) {
-            return false;
-        }
-
-        return ($result['opted_in'] ?? false) && !($result['opted_out'] ?? false);
-    }
-
-    /**
      * Record opt-in and send confirmation message
      *
      * Only syncs hipaa_allowsms when the channel is SMS, since that flag
@@ -95,17 +62,34 @@ class ConsentService
         }
         $phoneNumber = $normalized;
 
+        // An explicit opt-in clears every module-side exception, including a
+        // prior carrier_blocked. Provably correct for channel-confirmed
+        // signals (STOP→START, sinch_OPT_IN webhook): the carrier just
+        // delivered the message that triggered this opt-in, so the block
+        // is by definition gone. Optimistic for staff-driven signals
+        // (web_form, in_person, staff toggles): we don't know whether the
+        // carrier still blocks, but the next send attempt re-detects via
+        // setCarrierBlock() on delivery failure. That self-healing loop
+        // is strictly better than the alternative — leaving the row in
+        // (opted_out=FALSE, carrier_blocked=TRUE) deadlocks the patient
+        // because the eligibility gate refuses every send and no other
+        // code path clears the block from a re-subscribe signal.
+        $priorBlock = $this->getCarrierBlock($patientId, $phoneNumber);
+
         $sql = "INSERT INTO oce_sinch_patient_consent (
             patient_id, phone_number, opted_in, opt_in_method,
             opt_in_date, opt_in_ip_address, opted_out,
+            carrier_blocked, carrier_blocked_at,
             created_at, updated_at
-        ) VALUES (?, ?, TRUE, ?, NOW(), ?, FALSE, NOW(), NOW())
+        ) VALUES (?, ?, TRUE, ?, NOW(), ?, FALSE, FALSE, NULL, NOW(), NOW())
         ON DUPLICATE KEY UPDATE
             opted_in = TRUE,
             opt_in_method = VALUES(opt_in_method),
             opt_in_date = NOW(),
             opt_in_ip_address = VALUES(opt_in_ip_address),
             opted_out = FALSE,
+            carrier_blocked = FALSE,
+            carrier_blocked_at = NULL,
             updated_at = NOW()";
 
         QueryUtils::sqlStatementThrowException($sql, [
@@ -114,6 +98,21 @@ class ConsentService
             $method,
             $ipAddress,
         ]);
+
+        // Audit breadcrumb: a deliverability incident bisect months later
+        // should be able to see "this opt-in cleared a prior block" without
+        // having to reconstruct it from the row diff (carrier_blocked_at
+        // gets nulled by the upsert above, so this log line preserves the
+        // when/why for forensics).
+        if ($priorBlock !== null) {
+            $this->logger->info('Opt-in cleared prior carrier block', [
+                'patientId' => $patientId,
+                'method' => $method,
+                'channel' => $channel?->value,
+                'prior_carrier_blocked_at' => $priorBlock['carrier_blocked_at'],
+                'prior_carrier_block_reason' => $priorBlock['carrier_block_reason'],
+            ]);
+        }
 
         if ($channel === Channel::SMS) {
             $this->syncHipaaAllowSms($patientId, 'YES');
@@ -166,14 +165,25 @@ class ConsentService
         }
         $phoneNumber = $normalized;
 
-        $sql = "UPDATE oce_sinch_patient_consent
-                SET opted_out = TRUE,
-                    opt_out_method = ?,
+        // Use INSERT ... ON DUPLICATE KEY UPDATE so the opt-out is recorded
+        // even when no consent row exists yet. Under the chart-as-source-of
+        // -truth model, many patients legitimately have no module row until
+        // their first opt-out signal arrives (e.g., STOP keyword or a
+        // channel-native opt-out webhook). An UPDATE-only write would
+        // silently fail to persist these and leave the gating check seeing
+        // ConsentState::None on the next send.
+        $sql = "INSERT INTO oce_sinch_patient_consent (
+                    patient_id, phone_number, opted_in, opted_out,
+                    opt_out_method, opt_out_date,
+                    created_at, updated_at
+                ) VALUES (?, ?, FALSE, TRUE, ?, NOW(), NOW(), NOW())
+                ON DUPLICATE KEY UPDATE
+                    opted_out = TRUE,
+                    opt_out_method = VALUES(opt_out_method),
                     opt_out_date = NOW(),
-                    updated_at = NOW()
-                WHERE patient_id = ? AND phone_number = ?";
+                    updated_at = NOW()";
 
-        QueryUtils::sqlStatementThrowException($sql, [$method, $patientId, $phoneNumber]);
+        QueryUtils::sqlStatementThrowException($sql, [$patientId, $phoneNumber, $method]);
 
         if ($channel === Channel::SMS) {
             $this->syncHipaaAllowSms($patientId, 'NO');
@@ -329,13 +339,28 @@ class ConsentService
     }
 
     /**
-     * Send initial opt-in confirmation message
+     * Send the initial opt-in confirmation message
      *
-     * @param int $patientId
-     * @param string $phoneNumber
+     * Public so that PatientConsentListener can send a welcome SMS on a
+     * chart-driven NO->YES transition without going through optIn() (which
+     * would write a redundant module-level row — under the chart-as-source
+     * -of-truth model, the chart already records the consent intent).
+     *
+     * Normalizes the phone before delegating to MessageService so chart
+     * formats like "(555) 123-4567" reach the API as E.164. Callers that
+     * already hold a normalized number pay no penalty (PhoneNormalizer is
+     * idempotent for E.164 input).
      */
-    private function sendOptInConfirmation(int $patientId, string $phoneNumber): void
+    public function sendOptInConfirmation(int $patientId, string $phoneNumber): void
     {
+        $normalized = PhoneNormalizer::toE164($phoneNumber);
+        if ($normalized === null) {
+            $this->logger->warning('Cannot send opt-in confirmation: unparseable phone', [
+                'patientId' => $patientId,
+            ]);
+            return;
+        }
+
         $variables = [
             'clinic_name' => $this->config->getClinicName(),
             'opt_out' => 'Reply STOP to opt-out',
@@ -343,7 +368,7 @@ class ConsentService
 
         $message = $this->templateService->render('opt_in_confirmation', $variables);
 
-        $this->messageService->sendToPatient($patientId, $phoneNumber, $message, new MessageOptions(
+        $this->messageService->sendToPatient($patientId, $normalized, $message, new MessageOptions(
             templateKey: 'opt_in_confirmation',
             skipConsentCheck: true,
         ));

@@ -28,6 +28,7 @@
     "OpenEMR\\Core\\OEGlobalsBag",
     "OpenEMR\\Services\\Utils\\SQLUpgradeService",
     "ModuleManagerListener",
+    "OpenEMR\\Events\\Appointments\\AppointmentRenderEvent",
     "OpenEMR\\Events\\Globals\\GlobalsInitializedEvent",
     "OpenEMR\\Events\\Patient\\PatientCreatedEvent",
     "OpenEMR\\Events\\Patient\\PatientUpdatedEvent",

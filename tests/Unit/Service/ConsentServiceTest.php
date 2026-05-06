@@ -53,60 +53,6 @@ class ConsentServiceTest extends TestCase
         );
     }
 
-    // --- hasConsent ---
-
-    public function testHasConsentReturnsTrueWhenOptedIn(): void
-    {
-        QueryUtils::setMockResult(
-            "SELECT opted_in, opted_out
-                FROM oce_sinch_patient_consent
-                WHERE patient_id = ? AND phone_number = ?",
-            [1, '+15551234567'],
-            [['opted_in' => true, 'opted_out' => false]]
-        );
-
-        $this->assertTrue($this->service->hasConsent(1, '+15551234567'));
-    }
-
-    public function testHasConsentReturnsFalseWhenOptedOut(): void
-    {
-        QueryUtils::setMockResult(
-            "SELECT opted_in, opted_out
-                FROM oce_sinch_patient_consent
-                WHERE patient_id = ? AND phone_number = ?",
-            [1, '+15551234567'],
-            [['opted_in' => true, 'opted_out' => true]]
-        );
-
-        $this->assertFalse($this->service->hasConsent(1, '+15551234567'));
-    }
-
-    public function testHasConsentReturnsFalseWhenNoRecord(): void
-    {
-        QueryUtils::setMockResult(
-            "SELECT opted_in, opted_out
-                FROM oce_sinch_patient_consent
-                WHERE patient_id = ? AND phone_number = ?",
-            [1, '+15551234567'],
-            []
-        );
-
-        $this->assertFalse($this->service->hasConsent(1, '+15551234567'));
-    }
-
-    public function testHasConsentReturnsFalseWhenNotOptedIn(): void
-    {
-        QueryUtils::setMockResult(
-            "SELECT opted_in, opted_out
-                FROM oce_sinch_patient_consent
-                WHERE patient_id = ? AND phone_number = ?",
-            [1, '+15551234567'],
-            [['opted_in' => false, 'opted_out' => false]]
-        );
-
-        $this->assertFalse($this->service->hasConsent(1, '+15551234567'));
-    }
-
     // --- optIn ---
 
     public function testOptInInsertsConsentAndSendsConfirmation(): void
@@ -174,19 +120,55 @@ class ConsentServiceTest extends TestCase
         $this->assertEmpty($consentQueries);
     }
 
+    // --- sendOptInConfirmation ---
+
+    public function testSendOptInConfirmationNormalizesPhoneBeforeSend(): void
+    {
+        $this->templateService->method('render')->willReturn('Welcome!');
+        $this->messageService->expects($this->once())
+            ->method('sendToPatient')
+            ->with(1, '+15551234567', 'Welcome!', $this->anything());
+
+        // Pass a chart-format phone; the service must normalize before
+        // delegating to MessageService so the API receives E.164.
+        $this->service->sendOptInConfirmation(1, '(555) 123-4567');
+    }
+
+    public function testSendOptInConfirmationSkipsUnparseablePhone(): void
+    {
+        $this->messageService->expects($this->never())->method('sendToPatient');
+
+        $this->service->sendOptInConfirmation(1, 'not-a-phone');
+
+        $logs = SystemLogger::getLogs();
+        $warnings = array_filter(
+            $logs,
+            fn(array $log): bool => $log['level'] === 'warning'
+                && str_contains($log['message'], 'unparseable phone')
+        );
+        $this->assertNotEmpty($warnings);
+    }
+
     // --- optOut ---
 
-    public function testOptOutSmsSyncsHipaaAllowSms(): void
+    public function testOptOutSmsUpsertsAndSyncsHipaaAllowSms(): void
     {
         $this->service->optOut(1, '+15551234567', 'sms_stop', Channel::SMS);
 
         $queries = QueryUtils::getQueries();
-        $updateQueries = array_filter($queries, fn($q) => str_contains($q['sql'], 'UPDATE oce_sinch_patient_consent'));
-        $this->assertNotEmpty($updateQueries);
-
-        // Verify the method param is first bind
-        $update = array_values($updateQueries)[0];
-        $this->assertEquals('sms_stop', $update['binds'][0]);
+        // optOut now upserts so a STOP-first patient (no prior module row)
+        // still gets a persistent opt-out record.
+        $upsertQueries = array_values(array_filter(
+            $queries,
+            fn(array $q): bool => str_contains($q['sql'], 'INSERT INTO oce_sinch_patient_consent')
+                && str_contains($q['sql'], 'ON DUPLICATE KEY UPDATE')
+                && str_contains($q['sql'], 'opted_out')
+        ));
+        $this->assertNotEmpty($upsertQueries);
+        $upsert = $upsertQueries[0];
+        $this->assertSame(1, $upsert['binds'][0]);
+        $this->assertSame('+15551234567', $upsert['binds'][1]);
+        $this->assertSame('sms_stop', $upsert['binds'][2]);
 
         // Verify hipaa_allowsms is synced to NO for SMS channel
         $hipaaQueries = array_filter($queries, fn($q) => str_contains($q['sql'], 'UPDATE patient_data SET hipaa_allowsms'));
@@ -225,15 +207,39 @@ class ConsentServiceTest extends TestCase
         $this->assertEquals('NO', $hipaaUpdate['binds'][0]);
     }
 
+    public function testOptOutPersistsRowEvenWhenNoPriorConsentExists(): void
+    {
+        // Under chart-as-source-of-truth, many patients have no module row
+        // until their first opt-out arrives. The upsert must record the
+        // opt-out so a later NO->YES chart toggle doesn't silently undo it.
+        $this->service->optOut(7, '+15554443333', 'sms_stop', Channel::SMS);
+
+        $upsertQueries = array_values(array_filter(
+            QueryUtils::getQueries(),
+            fn(array $q): bool => str_contains($q['sql'], 'INSERT INTO oce_sinch_patient_consent')
+                && str_contains($q['sql'], 'opted_out')
+                && str_contains($q['sql'], 'ON DUPLICATE KEY UPDATE')
+        ));
+        $this->assertCount(1, $upsertQueries);
+        $this->assertSame(7, $upsertQueries[0]['binds'][0]);
+        $this->assertSame('+15554443333', $upsertQueries[0]['binds'][1]);
+        $this->assertSame('sms_stop', $upsertQueries[0]['binds'][2]);
+    }
+
     public function testOptOutWhatsAppDoesNotSyncHipaaAllowSms(): void
     {
         $this->service->optOut(1, '+15551234567', 'sinch_WHATSAPP', Channel::WHATSAPP);
 
         $queries = QueryUtils::getQueries();
 
-        // Consent record should still be updated
-        $updateQueries = array_filter($queries, fn($q) => str_contains($q['sql'], 'UPDATE oce_sinch_patient_consent'));
-        $this->assertNotEmpty($updateQueries);
+        // Consent record is still upserted regardless of channel
+        $upsertQueries = array_filter(
+            $queries,
+            fn(array $q): bool => str_contains($q['sql'], 'INSERT INTO oce_sinch_patient_consent')
+                && str_contains($q['sql'], 'ON DUPLICATE KEY UPDATE')
+                && str_contains($q['sql'], 'opted_out')
+        );
+        $this->assertNotEmpty($upsertQueries);
 
         // hipaa_allowsms must NOT be touched for non-SMS channels
         $hipaaQueries = array_filter($queries, fn($q) => str_contains($q['sql'], 'UPDATE patient_data SET hipaa_allowsms'));
@@ -400,27 +406,82 @@ class ConsentServiceTest extends TestCase
         $this->assertNull($this->service->getCarrierBlock(1, '+15551234567'));
     }
 
-    // --- optIn does not clear carrier_blocked ---
+    // --- optIn clears carrier_blocked (re-subscribe deadlock fix) ---
 
-    public function testOptInDoesNotTouchCarrierBlockColumns(): void
+    public function testOptInClearsCarrierBlockColumnsToBreakResubscribeDeadlock(): void
     {
+        // Without this, a STOP→START flow leaves the row in
+        // (opted_out=FALSE, carrier_blocked=TRUE) — and the eligibility gate
+        // refuses every send forever because no other code path clears the
+        // block from a re-subscribe signal.
+        $this->templateService->method('render')->willReturn('Welcome!');
+        $this->messageService->method('sendToPatient');
+
+        $this->service->optIn(1, '+15551234567', 'sms_start');
+
+        $upsertQueries = array_values(array_filter(
+            QueryUtils::getQueries(),
+            fn(array $q): bool => str_contains($q['sql'], 'INSERT INTO oce_sinch_patient_consent')
+                && str_contains($q['sql'], 'opted_in')
+        ));
+        $this->assertNotEmpty($upsertQueries);
+        $sql = $upsertQueries[0]['sql'];
+        $this->assertStringContainsString('carrier_blocked = FALSE', $sql);
+        $this->assertStringContainsString('carrier_blocked_at = NULL', $sql);
+    }
+
+    public function testOptInLogsAuditBreadcrumbWhenClearingPriorCarrierBlock(): void
+    {
+        // Forensics: months later, an oncall debugging "why did this patient
+        // start receiving sends after we blocked them?" must be able to see
+        // that an opt-in cleared a known prior block (and what the original
+        // block reason was) without having to reconstruct from row diffs.
+        QueryUtils::setMockResult(
+            "SELECT carrier_blocked_at, carrier_block_reason
+                FROM oce_sinch_patient_consent
+                WHERE patient_id = ? AND phone_number = ? AND carrier_blocked = TRUE",
+            [1, '+15551234567'],
+            [['carrier_blocked_at' => '2026-04-03 10:00:00', 'carrier_block_reason' => 'smpp_255']]
+        );
+        $this->templateService->method('render')->willReturn('Welcome!');
+        $this->messageService->method('sendToPatient');
+
+        $this->service->optIn(1, '+15551234567', 'sms_start');
+
+        $logs = SystemLogger::getLogs();
+        $clearedLogs = array_values(array_filter(
+            $logs,
+            fn(array $log): bool => $log['level'] === 'info'
+                && str_contains($log['message'], 'cleared prior carrier block')
+        ));
+        $this->assertNotEmpty($clearedLogs);
+        $this->assertSame('2026-04-03 10:00:00', $clearedLogs[0]['context']['prior_carrier_blocked_at']);
+        $this->assertSame('smpp_255', $clearedLogs[0]['context']['prior_carrier_block_reason']);
+    }
+
+    public function testOptInDoesNotLogCarrierClearWhenNoPriorBlock(): void
+    {
+        // The audit breadcrumb must not fire on every opt-in — only when
+        // there was actually a block to clear. Otherwise the log noise
+        // would drown the signal.
+        QueryUtils::setMockResult(
+            "SELECT carrier_blocked_at, carrier_block_reason
+                FROM oce_sinch_patient_consent
+                WHERE patient_id = ? AND phone_number = ? AND carrier_blocked = TRUE",
+            [1, '+15551234567'],
+            []
+        );
         $this->templateService->method('render')->willReturn('Welcome!');
         $this->messageService->method('sendToPatient');
 
         $this->service->optIn(1, '+15551234567', 'web_form');
 
-        // Verify none of the queries issued by optIn() reference carrier_blocked.
-        // The optIn SQL uses its own INSERT...ON DUPLICATE KEY UPDATE that must not
-        // clear the carrier_blocked flag — that is only cleared by successful delivery.
-        $queries = QueryUtils::getQueries();
-        foreach ($queries as $query) {
-            if (str_contains($query['sql'], 'hipaa_allowsms')) {
-                continue; // Skip the hipaa sync query
-            }
-            if (str_contains($query['sql'], 'oce_sinch_patient_consent')) {
-                $this->assertStringNotContainsString('carrier_blocked', $query['sql']);
-            }
-        }
+        $logs = SystemLogger::getLogs();
+        $clearedLogs = array_filter(
+            $logs,
+            fn(array $log): bool => str_contains($log['message'], 'cleared prior carrier block')
+        );
+        $this->assertEmpty($clearedLogs);
     }
 
     public function testGetCarrierBlockSkipsUnparseablePhone(): void

@@ -55,11 +55,16 @@ class QueryUtils
     }
 
     /**
+     * Faithful mock of the real OpenEMR helper, which has no declared return
+     * type and returns `false` (not `null`) on no row. Tests catch boundary
+     * bugs only if the mock matches that quirk — otherwise code that fails
+     * a `?array` type check at runtime passes the test suite.
+     *
      * @param string $sql
      * @param array<mixed> $binds
-     * @return array<string, mixed>|null
+     * @return array<string, mixed>|false
      */
-    public static function querySingleRow(string $sql, array $binds = []): ?array
+    public static function querySingleRow(string $sql, array $binds = []): array|false
     {
         self::$queries[] = ['sql' => $sql, 'binds' => $binds];
 
@@ -68,12 +73,12 @@ class QueryUtils
         // Check queue first for sequential results
         if (!empty(self::$mockResultQueue[$key])) {
             $results = array_shift(self::$mockResultQueue[$key]);
-            return !empty($results) ? $results[0] : null;
+            return !empty($results) ? $results[0] : false;
         }
 
         // Fall back to static mock results
         $results = self::$mockResults[$key] ?? [];
-        return !empty($results) ? $results[0] : null;
+        return !empty($results) ? $results[0] : false;
     }
 
     /**

@@ -27,6 +27,7 @@ class SkipReasonTest extends TestCase
         $this->assertSame('missing_phone', SkipReason::MissingPhone->value);
         $this->assertSame('unparseable_phone', SkipReason::UnparseablePhone->value);
         $this->assertSame('hipaa_disallows_sms', SkipReason::HipaaDisallowsSms->value);
-        $this->assertSame('no_active_consent', SkipReason::NoActiveConsent->value);
+        $this->assertSame('module_opt_out', SkipReason::ModuleOptOut->value);
+        $this->assertSame('carrier_blocked', SkipReason::CarrierBlocked->value);
     }
 }

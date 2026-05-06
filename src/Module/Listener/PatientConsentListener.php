@@ -1,7 +1,23 @@
 <?php
 
 /**
- * Translates patient_data hipaa_allowsms transitions into ConsentService calls
+ * Sends an opt-in welcome SMS when the chart hipaa_allowsms field flips to YES
+ *
+ * Under the chart-as-source-of-truth model, hipaa_allowsms is itself the
+ * consent record — the module does not mirror it into oce_sinch_patient_consent.
+ * This listener exists only to send the patient a welcome message on the
+ * transition, so they know they will start receiving SMS from the clinic.
+ *
+ * Coverage note: this listener subscribes to PatientUpdatedEvent /
+ * PatientCreatedEvent. Several legacy chart save paths
+ * (interface/patient_file/summary/demographics_save.php and
+ * interface/new/new_patient_save.php) dispatch PatientUpdatedEventAux or
+ * no event at all, so a NO->YES toggle through those UI paths will not
+ * fire the welcome SMS. The patient is still eligible for reminders the
+ * moment the chart shows YES — MessageService::assertPatientEligible()
+ * reads hipaa_allowsms live at send time, independent of any event. The
+ * welcome SMS is therefore best-effort; reliable coverage is tracked
+ * separately. Eligibility coverage is not affected.
  *
  * @package   OpenCoreEMR
  * @link      https://opencoreemr.com
@@ -14,16 +30,15 @@ declare(strict_types=1);
 
 namespace OpenCoreEMR\Modules\SinchConversations\Listener;
 
-use OpenCoreEMR\Modules\SinchConversations\Channel;
+use OpenCoreEMR\Modules\SinchConversations\ConsentBlock;
 use OpenCoreEMR\Modules\SinchConversations\Service\ConsentService;
+use OpenCoreEMR\Modules\SinchConversations\SkipReason;
 use OpenEMR\Common\Logging\SystemLogger;
 use OpenEMR\Events\Patient\PatientCreatedEvent;
 use OpenEMR\Events\Patient\PatientUpdatedEvent;
 
 class PatientConsentListener
 {
-    public const CONSENT_METHOD = 'chart_hipaa_allowsms';
-
     private readonly SystemLogger $logger;
 
     public function __construct(
@@ -44,7 +59,7 @@ class PatientConsentListener
             $this->logSkipped('created', $pid, $phone);
             return;
         }
-        $this->consentService->optIn($pid, $phone, self::CONSENT_METHOD, null, Channel::SMS);
+        $this->sendWelcomeIfNotBlocked($pid, $phone);
     }
 
     public function onPatientUpdated(PatientUpdatedEvent $event): void
@@ -59,7 +74,10 @@ class PatientConsentListener
         $oldData = $event->getDataBeforeUpdate();
         $oldYes = is_array($oldData) && $this->isAllowSmsYes($oldData);
         $newYes = $this->isAllowSmsYes($newData);
-        if ($oldYes === $newYes) {
+
+        // Only react to NO->YES. YES->NO needs no module-side action under
+        // chart-as-source-of-truth: the chart NO already gates future sends.
+        if (!$newYes || $oldYes) {
             return;
         }
 
@@ -78,10 +96,41 @@ class PatientConsentListener
             return;
         }
 
-        if ($newYes) {
-            $this->consentService->optIn($pid, $phone, self::CONSENT_METHOD, null, Channel::SMS);
-        } else {
-            $this->consentService->optOut($pid, $phone, self::CONSENT_METHOD, Channel::SMS);
+        $this->sendWelcomeIfNotBlocked($pid, $phone);
+    }
+
+    /**
+     * Send the welcome SMS unless a module-side block applies
+     *
+     * A staff chart toggle should not silently override either a patient's
+     * channel-native opt-out (e.g., a prior STOP) or a known carrier block.
+     * sendOptInConfirmation() bypasses the normal eligibility gate
+     * (skipConsentCheck=true), so this listener is the only thing standing
+     * between a chart toggle and a send to a number we already know is
+     * blocked. Reuses ConsentBlock::evaluate so the block ordering and
+     * context shape match the send gate, the appointment-reminder cron,
+     * and the diagnostic verdict surface.
+     */
+    private function sendWelcomeIfNotBlocked(int $pid, string $phone): void
+    {
+        $block = ConsentBlock::evaluate($this->consentService->getConsent($pid, $phone));
+        if ($block !== null) {
+            $message = match ($block->reason) {
+                SkipReason::CarrierBlocked => 'Skipped welcome SMS: carrier block present',
+                SkipReason::ModuleOptOut => 'Skipped welcome SMS: module opt-out present',
+                default => 'Skipped welcome SMS: ' . $block->reason->value,
+            };
+            $this->logger->info($message, ['patientId' => $pid] + $block->context);
+            return;
+        }
+
+        try {
+            $this->consentService->sendOptInConfirmation($pid, $phone);
+        } catch (\Throwable $e) {
+            $this->logger->error('Failed to send opt-in confirmation', [
+                'patientId' => $pid,
+                'exception' => $e,
+            ]);
         }
     }
 
