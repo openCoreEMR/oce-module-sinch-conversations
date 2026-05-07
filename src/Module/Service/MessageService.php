@@ -17,6 +17,7 @@ namespace OpenCoreEMR\Modules\SinchConversations\Service;
 use OpenCoreEMR\Modules\SinchConversations\Channel;
 use OpenCoreEMR\Modules\SinchConversations\ConsentBlock;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
+use OpenCoreEMR\Modules\SinchConversations\Logging\ExceptionContext;
 use OpenCoreEMR\Modules\SinchConversations\SkipReason;
 use OpenCoreEMR\Sinch\Conversation\Client\ConversationApiClient;
 use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
@@ -64,7 +65,10 @@ class MessageService
                 $options->toApiOptions()
             );
         } catch (\Throwable $e) {
-            $this->logger->error('Failed to send message via Sinch API', ['exception' => $e]);
+            $this->logger->error(
+                'Failed to send message via Sinch API',
+                ['exception' => ExceptionContext::fromThrowable($e)]
+            );
             throw new ValidationException('Failed to send message', 0, $e);
         }
 

@@ -16,6 +16,7 @@ namespace OpenCoreEMR\Modules\SinchConversations\Controller;
 
 use OpenCoreEMR\Modules\SinchConversations\ErrorId;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
+use OpenCoreEMR\Modules\SinchConversations\Logging\ExceptionContext;
 use OpenCoreEMR\Modules\SinchConversations\Service\MessagePollingService;
 use OpenCoreEMR\Modules\SinchConversations\SessionAccessor;
 use OpenCoreEMR\Sinch\Conversation\Exception\AccessDeniedException;
@@ -118,7 +119,7 @@ class InboxController
             $errorId = ErrorId::generate();
             $this->logger->error('Failed to refresh messages', [
                 'errorId' => $errorId,
-                'exception' => $e,
+                'exception' => ExceptionContext::fromThrowable($e),
             ]);
             $this->session->setFlash('inbox_message', "Error refreshing messages (ref: $errorId)");
         }

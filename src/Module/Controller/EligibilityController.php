@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace OpenCoreEMR\Modules\SinchConversations\Controller;
 
+use OpenCoreEMR\Modules\SinchConversations\Logging\ExceptionContext;
 use OpenCoreEMR\Modules\SinchConversations\Render\EligibilityAlertRenderer;
 use OpenCoreEMR\Modules\SinchConversations\Service\MessageService;
 use Psr\Log\LoggerInterface;
@@ -65,7 +66,7 @@ class EligibilityController
         } catch (\Throwable $e) {
             $this->logger->error('Failed to diagnose SMS eligibility for endpoint request', [
                 'patientId' => $pid,
-                'exception' => $e,
+                'exception' => ExceptionContext::fromThrowable($e),
             ]);
             return $this->htmlResponse($this->renderer->renderEmpty());
         }

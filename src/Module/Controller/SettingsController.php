@@ -16,6 +16,7 @@ namespace OpenCoreEMR\Modules\SinchConversations\Controller;
 
 use OpenCoreEMR\Modules\SinchConversations\ErrorId;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
+use OpenCoreEMR\Modules\SinchConversations\Logging\ExceptionContext;
 use OpenCoreEMR\Modules\SinchConversations\Service\ConfigService;
 use OpenCoreEMR\Modules\SinchConversations\Service\TemplateSyncService;
 use OpenCoreEMR\Modules\SinchConversations\SessionAccessor;
@@ -142,7 +143,7 @@ class SettingsController
             $errorId = ErrorId::generate();
             $this->logger->error('Error saving settings', [
                 'errorId' => $errorId,
-                'exception' => $e,
+                'exception' => ExceptionContext::fromThrowable($e),
             ]);
             $this->session->setFlash('settings_message', "Error saving settings (ref: $errorId). Please try again.");
             return $this->redirect($request);
@@ -216,7 +217,7 @@ class SettingsController
             $errorId = ErrorId::generate();
             $this->logger->error('API connection test failed', [
                 'errorId' => $errorId,
-                'exception' => $e,
+                'exception' => ExceptionContext::fromThrowable($e),
             ]);
             return new JsonResponse([
                 'success' => false,
@@ -307,7 +308,7 @@ class SettingsController
             $this->logger->error('Failed to send test SMS', [
                 'phone' => $phoneNumber,
                 'errorId' => $errorId,
-                'exception' => $e,
+                'exception' => ExceptionContext::fromThrowable($e),
             ]);
             return new JsonResponse([
                 'success' => false,
@@ -374,7 +375,7 @@ class SettingsController
             $errorId = ErrorId::generate();
             $this->logger->error('Template sync failed', [
                 'errorId' => $errorId,
-                'exception' => $e,
+                'exception' => ExceptionContext::fromThrowable($e),
             ]);
             return new JsonResponse([
                 'success' => false,

@@ -20,6 +20,7 @@ namespace OpenCoreEMR\Modules\SinchConversations\Service;
 
 use OpenCoreEMR\Modules\SinchConversations\ErrorId;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
+use OpenCoreEMR\Modules\SinchConversations\Logging\ExceptionContext;
 use OpenCoreEMR\Sinch\Conversation\Client\ConversationApiClient;
 use OpenEMR\Common\Database\QueryUtils;
 use OpenEMR\Common\Logging\SystemLogger;
@@ -102,7 +103,7 @@ class ConsentSyncService
                         'patientId' => $patientId,
                         'phone' => $normalized,
                         'errorId' => $errorId,
-                        'exception' => $e,
+                        'exception' => ExceptionContext::fromThrowable($e),
                     ]);
                 }
             }
@@ -181,7 +182,7 @@ class ConsentSyncService
                     'patientId' => $patientId,
                     'phone' => $phone,
                     'errorId' => $errorId,
-                    'exception' => $e,
+                    'exception' => ExceptionContext::fromThrowable($e),
                 ]);
             }
         }

@@ -17,6 +17,7 @@ namespace OpenCoreEMR\Modules\SinchConversations\Controller;
 use OpenCoreEMR\Modules\SinchConversations\Channel;
 use OpenCoreEMR\Modules\SinchConversations\ErrorId;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
+use OpenCoreEMR\Modules\SinchConversations\Logging\ExceptionContext;
 use OpenCoreEMR\Modules\SinchConversations\Service\ConsentService;
 use OpenCoreEMR\Modules\SinchConversations\Service\KeywordHandlerService;
 use OpenCoreEMR\Modules\SinchConversations\Service\MessageOptions;
@@ -83,7 +84,7 @@ class WebhookController
             $this->logger->error('Webhook authentication error', [
                 'errorId' => $errorId,
                 'clientIp' => $clientIp,
-                'exception' => $e,
+                'exception' => ExceptionContext::fromThrowable($e),
             ]);
             return new JsonResponse(
                 ['error' => 'Internal error', 'errorId' => $errorId],
@@ -241,7 +242,7 @@ class WebhookController
             );
         } catch (\Throwable $e) {
             $this->logger->warning('Failed to prune expired webhook nonces', [
-                'exception' => $e,
+                'exception' => ExceptionContext::fromThrowable($e),
             ]);
         }
 
@@ -378,7 +379,7 @@ class WebhookController
             $this->logger->error('Failed to process inbound message', [
                 'messageId' => $messageId,
                 'errorId' => $errorId,
-                'exception' => $e,
+                'exception' => ExceptionContext::fromThrowable($e),
             ]);
 
             return new JsonResponse(
@@ -416,7 +417,7 @@ class WebhookController
             $this->logger->error('Failed to process delivery report', [
                 'messageId' => $messageId,
                 'errorId' => $errorId,
-                'exception' => $e,
+                'exception' => ExceptionContext::fromThrowable($e),
             ]);
 
             return new JsonResponse(
@@ -435,7 +436,7 @@ class WebhookController
             $this->logger->error('Carrier block detection failed (delivery status already recorded)', [
                 'messageId' => $messageId,
                 'errorId' => $errorId,
-                'exception' => $e,
+                'exception' => ExceptionContext::fromThrowable($e),
             ]);
         }
 
@@ -514,7 +515,7 @@ class WebhookController
                     'patientId' => $patientId,
                     'identity' => $identity,
                     'errorId' => $errorId,
-                    'exception' => $e,
+                    'exception' => ExceptionContext::fromThrowable($e),
                 ]);
             }
         }
@@ -595,7 +596,7 @@ class WebhookController
             $this->logger->error('Failed to process OPT_IN', [
                 'identity' => $identity,
                 'errorId' => $errorId,
-                'exception' => $e,
+                'exception' => ExceptionContext::fromThrowable($e),
             ]);
 
             return new JsonResponse(
@@ -912,7 +913,7 @@ class WebhookController
             $this->logger->error('Failed to send keyword response', [
                 'phone' => $normalized,
                 'errorId' => $errorId,
-                'exception' => $e,
+                'exception' => ExceptionContext::fromThrowable($e),
             ]);
             return "Failed to send auto-response (ref: $errorId)";
         }
