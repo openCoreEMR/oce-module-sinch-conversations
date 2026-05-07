@@ -16,6 +16,7 @@ declare(strict_types=1);
 namespace OpenCoreEMR\Modules\SinchConversations\Listener;
 
 use OpenCoreEMR\Modules\SinchConversations\Bootstrap;
+use OpenCoreEMR\Modules\SinchConversations\Common\Json;
 use OpenCoreEMR\Modules\SinchConversations\Render\EligibilityAlertRenderer;
 use OpenEMR\Core\OEGlobalsBag;
 use OpenEMR\Events\Appointments\AppointmentRenderEvent;
@@ -52,10 +53,10 @@ class AppointmentSmsStatusJsListener
 
         // Embed every dynamic value as JSON so any future webroot change
         // (or test that injects a quote) cannot break out of the JS string.
-        $jsUrl = json_encode($url);
-        $jsPlaceholderId = json_encode(EligibilityAlertRenderer::PLACEHOLDER_ID);
-        $jsEventName = json_encode(self::PATIENT_SET_EVENT);
-        $jsInputName = json_encode('form_pid');
+        $jsUrl = Json::encode($url);
+        $jsPlaceholderId = Json::encode(EligibilityAlertRenderer::PLACEHOLDER_ID);
+        $jsEventName = Json::encode(self::PATIENT_SET_EVENT);
+        $jsInputName = Json::encode('form_pid');
 
         echo <<<JS
 (function () {

@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace OpenCoreEMR\Modules\SinchConversations\Service;
 
+use OpenCoreEMR\Modules\SinchConversations\Common\Json;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
 use OpenEMR\Common\Database\QueryUtils;
@@ -83,7 +84,8 @@ class TemplateService
             throw new ValidationException("Template not found: {$templateKey}");
         }
 
-        $required = json_decode((string) $template['required_variables'], true) ?? [];
+        $rawRequired = (string) $template['required_variables'];
+        $required = $rawRequired === '' ? [] : Json::decode($rawRequired);
 
         foreach ($required as $var) {
             if (!isset($variables[$var]) || $variables[$var] === '') {
@@ -183,7 +185,7 @@ class TemplateService
                 $data['category'] ?? 'general',
                 $data['communication_type'] ?? 'individual',
                 $data['body'],
-                json_encode($data['required_variables'] ?? []),
+                Json::encode($data['required_variables'] ?? []),
                 $data['template_key'],
             ]);
 
@@ -202,7 +204,7 @@ class TemplateService
             $data['category'] ?? 'general',
             $data['communication_type'] ?? 'individual',
             $data['body'],
-            json_encode($data['required_variables'] ?? []),
+            Json::encode($data['required_variables'] ?? []),
             $data['compliance_confidence'] ?? 95,
             $data['sinch_approved'] ?? true,
             $data['active'] ?? true,

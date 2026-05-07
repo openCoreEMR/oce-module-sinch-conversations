@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace OpenCoreEMR\Modules\SinchConversations\Command;
 
+use OpenCoreEMR\Modules\SinchConversations\Common\Json;
 use OpenCoreEMR\Sinch\Conversation\Client\AppConfigurationClient;
 use OpenCoreEMR\Sinch\Conversation\Config\StandaloneConfig;
 use OpenCoreEMR\Sinch\Conversation\Exception\ApiException;
@@ -189,7 +190,7 @@ class ConsentCheckCommand extends Command
             $io->text('Consent-related fields found: ' . implode(', ', array_keys($consentFields)));
             if ($io->isVerbose()) {
                 try {
-                    $json = json_encode($consentFields, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR);
+                    $json = Json::encode($consentFields, JSON_PRETTY_PRINT);
                 } catch (\JsonException $e) {
                     $json = 'Failed to encode consent fields to JSON: ' . $e->getMessage();
                 }
@@ -272,7 +273,7 @@ class ConsentCheckCommand extends Command
 
                 if ($hasData && $io->isVerbose()) {
                     try {
-                        $io->text(json_encode($consent, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));
+                        $io->text(Json::encode($consent, JSON_PRETTY_PRINT));
                     } catch (\JsonException $e) {
                         $io->warning('Failed to JSON-encode consent payload: ' . $e->getMessage());
                     }

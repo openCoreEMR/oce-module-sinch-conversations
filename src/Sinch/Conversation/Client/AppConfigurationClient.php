@@ -19,6 +19,7 @@ namespace OpenCoreEMR\Sinch\Conversation\Client;
 
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
+use OpenCoreEMR\Modules\SinchConversations\Common\Json;
 use OpenCoreEMR\Sinch\Conversation\Config\ConfigInterface;
 use OpenCoreEMR\Sinch\Conversation\Exception\ApiException;
 
@@ -73,10 +74,21 @@ class AppConfigurationClient
             ]);
 
             $statusCode = $response->getStatusCode();
-            $body = json_decode((string)$response->getBody(), true);
+            $rawBody = (string)$response->getBody();
+            try {
+                $body = Json::decode($rawBody);
+            } catch (\JsonException $e) {
+                throw new ApiException('Malformed OAuth2 response', $statusCode, $e);
+            }
+            if (!is_array($body)) {
+                throw new ApiException('Unexpected OAuth2 response shape', $statusCode);
+            }
 
             if ($statusCode !== 200) {
                 $error = $body['error_description'] ?? $body['error'] ?? 'Unknown error';
+                if (!is_string($error) || $error === '') {
+                    $error = 'Unknown error';
+                }
                 throw new ApiException("OAuth2 authentication failed: {$error}", $statusCode);
             }
 
@@ -571,11 +583,26 @@ class AppConfigurationClient
         $body = (string)$response->getBody();
 
         if ($statusCode >= 200 && $statusCode < 300) {
-            return json_decode($body, true) ?? [];
+            if ($body === '') {
+                return [];
+            }
+            try {
+                $decoded = Json::decode($body);
+            } catch (\JsonException $e) {
+                throw new ApiException('Malformed Sinch response', $statusCode, $e);
+            }
+            return is_array($decoded) ? $decoded : [];
         }
 
-        $error = json_decode($body, true);
-        $message = $error['error']['message'] ?? 'Unknown API error';
+        $message = 'Unknown API error';
+        try {
+            $error = Json::decode($body);
+            if (is_array($error) && isset($error['error']['message']) && is_string($error['error']['message'])) {
+                $message = $error['error']['message'];
+            }
+        } catch (\JsonException) {
+            // Non-JSON error body; keep the generic message.
+        }
 
         throw new ApiException("API request failed: {$message}", $statusCode);
     }

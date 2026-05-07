@@ -15,6 +15,7 @@ declare(strict_types=1);
 namespace OpenCoreEMR\Modules\SinchConversations\Service;
 
 use OpenCoreEMR\Modules\SinchConversations\Channel;
+use OpenCoreEMR\Modules\SinchConversations\Common\Json;
 use OpenCoreEMR\Modules\SinchConversations\ConsentBlock;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Logging\ExceptionContext;
@@ -208,7 +209,7 @@ class MessageService
             $response['id'] ?? uniqid('msg_'),
             $message,
             $options->templateKey,
-            json_encode($options->metadata ?: []),
+            Json::encode($options->metadata ?: []),
         ]);
 
         $sql = "UPDATE oce_sinch_conversations

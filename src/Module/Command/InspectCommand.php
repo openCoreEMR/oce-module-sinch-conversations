@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace OpenCoreEMR\Modules\SinchConversations\Command;
 
+use OpenCoreEMR\Modules\SinchConversations\Common\Json;
 use OpenCoreEMR\Sinch\Conversation\Client\AppConfigurationClient;
 use OpenCoreEMR\Sinch\Conversation\Config\StandaloneConfig;
 use OpenCoreEMR\Sinch\Conversation\Exception\ApiException;
@@ -137,8 +138,7 @@ class InspectCommand extends Command
             // Debug mode - show raw channel config
             if ($input->getOption('debug')) {
                 $io->section('Raw Channel Configuration (Debug)');
-                $rawConfig = json_encode($appConfig['channel_credentials'] ?? [], JSON_PRETTY_PRINT);
-                $io->text($rawConfig !== false ? $rawConfig : '(failed to encode)');
+                $io->text(Json::encode($appConfig['channel_credentials'] ?? [], JSON_PRETTY_PRINT));
             }
 
             if (empty($appConfig['channel_credentials'])) {

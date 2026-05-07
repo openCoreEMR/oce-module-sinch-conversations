@@ -15,6 +15,7 @@ declare(strict_types=1);
 namespace OpenCoreEMR\Modules\SinchConversations\Controller;
 
 use OpenCoreEMR\Modules\SinchConversations\Channel;
+use OpenCoreEMR\Modules\SinchConversations\Common\Json;
 use OpenCoreEMR\Modules\SinchConversations\ErrorId;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Logging\ExceptionContext;
@@ -295,10 +296,10 @@ class WebhookController
     {
         /** @var string $content */
         $content = $request->getContent();
-        $data = json_decode($content, true);
-
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            $this->logger->error('Webhook JSON parse error', ['error' => json_last_error_msg()]);
+        try {
+            $data = Json::decode($content);
+        } catch (\JsonException $e) {
+            $this->logger->error('Webhook JSON parse error', ['error' => $e->getMessage()]);
             return [];
         }
 
@@ -306,9 +307,9 @@ class WebhookController
             return [];
         }
 
-        // json_decode with assoc=true produces string keys for JSON objects.
-        // PHPStan can't infer this after the is_array + !array_is_list checks,
-        // so filter to prove string keys.
+        // Json::decode produces string keys for JSON objects. PHPStan can't
+        // infer this after the is_array + !array_is_list checks, so filter to
+        // prove string keys.
         $result = [];
         foreach ($data as $key => $value) {
             if (is_string($key)) {
