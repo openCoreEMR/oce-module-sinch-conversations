@@ -488,7 +488,46 @@ class ConversationApiClientTest extends TestCase
         $this->assertSame('new-tmpl', $result['id']);
         $body = json_decode((string) $this->requestHistory[1]['request']->getBody(), true);
         $this->assertSame('en-US', $body['default_translation']);
-        $this->assertStringContainsString('{{patient_name}}', $body['translations'][0]['message']['text_message']['text']);
+        $this->assertStringContainsString('{{patient_name}}', $body['translations'][0]['text_message']['text']);
+    }
+
+    /**
+     * Pin the Sinch Templates v2 request payload shape.
+     *
+     * v2 takes message body fields (e.g. `text_message`) as direct fields on
+     * the translation object, not wrapped in a `message` envelope. Sinch
+     * rejects the wrapped shape with HTTP 400 "Translation must specify a
+     * message." See https://developers.sinch.com/docs/conversation/templates.md
+     */
+    public function testCreateTemplateUsesV2TranslationShape(): void
+    {
+        $client = $this->createClientWithoutToken([
+            new Response(200, [], '{"access_token": "tmpl-token"}'),
+            new Response(200, [], '{"id": "tmpl-shape"}'),
+        ]);
+
+        $client->createTemplate([
+            'template_key' => 'shape_test',
+            'template_name' => 'Shape Test',
+            'description' => 'Pin v2 shape',
+            'body' => 'Hello {{ name }}',
+            'required_variables' => ['name'],
+        ]);
+
+        $body = json_decode((string) $this->requestHistory[1]['request']->getBody(), true);
+
+        $this->assertSame('Pin v2 shape', $body['description']);
+        $this->assertSame('en-US', $body['default_translation']);
+        $this->assertCount(1, $body['translations']);
+
+        $translation = $body['translations'][0];
+        $this->assertSame('en-US', $translation['language_code']);
+        $this->assertSame('1', $translation['version']);
+        $this->assertSame([['key' => 'name', 'preview_value' => 'Name']], $translation['variables']);
+
+        $this->assertArrayHasKey('text_message', $translation, 'text_message must be a direct field on the translation');
+        $this->assertSame('Hello {{name}}', $translation['text_message']['text']);
+        $this->assertArrayNotHasKey('message', $translation, 'v2 does not accept a message envelope');
     }
 
     // --- Retry logic tests ---

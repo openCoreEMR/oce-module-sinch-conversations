@@ -340,14 +340,20 @@
                     alertDiv.className = 'alert ' + (data.success ? 'alert-success' : 'alert-warning');
                     alertDiv.textContent = data.message;
 
-                    // Show details if available
+                    // Show details if available — build with DOM nodes so error
+                    // strings (which originate from upstream APIs) cannot inject HTML.
                     if (data.details && data.details.errors && data.details.errors.length > 0) {
-                        let errorHtml = '<hr><strong>Errors:</strong><ul>';
+                        alertDiv.appendChild(document.createElement('hr'));
+                        const heading = document.createElement('strong');
+                        heading.textContent = {{ 'Errors:'|xlj }};
+                        alertDiv.appendChild(heading);
+                        const list = document.createElement('ul');
                         data.details.errors.forEach(error => {
-                            errorHtml += '<li>' + error.template_key + ': ' + error.error + '</li>';
+                            const item = document.createElement('li');
+                            item.textContent = error.template_key + ': ' + error.error;
+                            list.appendChild(item);
                         });
-                        errorHtml += '</ul>';
-                        alertDiv.innerHTML = data.message + errorHtml;
+                        alertDiv.appendChild(list);
                     }
                 })
                 .catch(error => {
