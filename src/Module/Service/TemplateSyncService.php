@@ -75,11 +75,16 @@ class TemplateSyncService
 
         foreach ($templateDefinitions as $template) {
             try {
-                $description = $template['description'] ?? $template['template_name'];
+                // Match Sinch templates by a content-versioned description
+                // (`template_key@<hash>`) so a body change produces a new
+                // Sinch template instead of silently reusing the old one.
+                // Legacy bare-name descriptions from pre-versioning syncs
+                // are intentionally ignored — first sync after upgrade
+                // creates fresh versioned entries.
+                $template['description'] = $this->versionedDescription($template);
 
-                // Check if template already exists in Sinch
-                if (isset($existingByDescription[$description])) {
-                    $sinchTemplate = $existingByDescription[$description];
+                if (isset($existingByDescription[$template['description']])) {
+                    $sinchTemplate = $existingByDescription[$template['description']];
                     $sinchTemplateId = $sinchTemplate['id'] ?? null;
 
                     $this->logger->debug('Template already exists in Sinch', [
@@ -87,7 +92,6 @@ class TemplateSyncService
                         'sinchId' => $sinchTemplateId,
                     ]);
 
-                    // Save/update locally with existing Sinch ID
                     if ($sinchTemplateId) {
                         $this->saveTemplateLocally($template, $sinchTemplateId);
                         $results['skipped']++;
@@ -95,7 +99,6 @@ class TemplateSyncService
                     }
                 }
 
-                // Template doesn't exist, sync it
                 $this->syncTemplate($template);
 
                 // Check if template already existed locally
@@ -158,6 +161,36 @@ class TemplateSyncService
 
         // Then save or update it in the local database
         $this->saveTemplateLocally($template, $sinchTemplateId);
+    }
+
+    /**
+     * Build a content-versioned Sinch description for a template definition.
+     *
+     * Format: `{template_key}@{hash8}`. The hash covers the fields that
+     * affect what Sinch (and downstream carriers) actually need to re-approve:
+     * body, required variables, category, and communication type. A change
+     * to any of these produces a new Sinch template rather than silently
+     * reusing the old one.
+     *
+     * @param array<string, mixed> $template
+     */
+    private function versionedDescription(array $template): string
+    {
+        $variables = $template['required_variables'] ?? [];
+        if (is_array($variables)) {
+            sort($variables);
+        }
+
+        $canonical = json_encode([
+            'body' => $template['body'] ?? '',
+            'required_variables' => $variables,
+            'category' => $template['category'] ?? '',
+            'communication_type' => $template['communication_type'] ?? '',
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+        $hash = substr(hash('sha256', (string) $canonical), 0, 8);
+
+        return $template['template_key'] . '@' . $hash;
     }
 
     /**
