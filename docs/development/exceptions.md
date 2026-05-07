@@ -156,6 +156,8 @@ Instead, generate a traceable error ID, log the full error with context, and sho
 $this->session->setFlash('error', "Failed: " . $e->getMessage());
 
 // Good — traceable error ID, structured context in logs
+use OpenCoreEMR\Modules\SinchConversations\Logging\ExceptionContext;
+
 $errorId = uniqid('err-');
 $this->logger->error('Failed to send message', [
     'errorId' => $errorId,
