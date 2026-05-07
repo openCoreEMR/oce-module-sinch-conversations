@@ -78,8 +78,9 @@ class TemplateSyncService
                 // Match Sinch templates by a content-versioned description
                 // (`template_key@<hash>`) so a body change produces a new
                 // Sinch template instead of silently reusing the old one.
-                // Legacy bare-name descriptions from pre-versioning syncs
-                // are intentionally ignored — first sync after upgrade
+                // Any Sinch description without the `@<hash>` suffix —
+                // including pre-versioning descriptions from older syncs —
+                // is intentionally ignored, so the first sync after upgrade
                 // creates fresh versioned entries.
                 $template['description'] = $this->versionedDescription($template);
 

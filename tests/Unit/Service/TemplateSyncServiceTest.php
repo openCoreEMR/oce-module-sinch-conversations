@@ -83,12 +83,6 @@ class TemplateSyncServiceTest extends TestCase
     }
 
     /**
-     * Non-API exceptions (e.g. internal TypeError) must NOT leak their message
-     * into the UI — only `ApiException` messages, which originate from the
-     * Sinch API and are safe operator-facing validation errors, are surfaced
-     * verbatim. Everything else gets a generic message + errorId.
-     */
-    /**
      * Re-syncing the same templates after they exist in Sinch with their
      * content-versioned descriptions must skip every one — no createTemplate
      * calls. Regression guard for issue #124: the description match must
@@ -125,11 +119,12 @@ class TemplateSyncServiceTest extends TestCase
     }
 
     /**
-     * If a Sinch template exists under the legacy bare-name description
-     * (from a pre-versioning sync), the new code must NOT adopt it — first
-     * sync after upgrade creates fresh content-versioned templates.
+     * If Sinch already holds a template under the pre-versioning description
+     * (whatever was in the config's `description` field, typically human
+     * prose), the new matcher must NOT adopt it — first sync after upgrade
+     * creates fresh content-versioned templates.
      */
-    public function testLegacyBareDescriptionIsIgnored(): void
+    public function testLegacyNonVersionedDescriptionIsIgnored(): void
     {
         $configPath = dirname(__DIR__, 3) . '/config/templates.php';
         $definitions = require $configPath;
@@ -188,6 +183,12 @@ class TemplateSyncServiceTest extends TestCase
         $this->assertSame(0, $results['skipped']);
     }
 
+    /**
+     * Non-API exceptions (e.g. internal TypeError) must NOT leak their message
+     * into the UI — only `ApiException` messages, which originate from the
+     * Sinch API and are safe operator-facing validation errors, are surfaced
+     * verbatim. Everything else gets a generic message + errorId.
+     */
     public function testNonApiExceptionDoesNotLeakMessageToUi(): void
     {
         $this->apiClient->method('listTemplates')->willReturn([]);
