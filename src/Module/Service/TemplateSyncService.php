@@ -167,13 +167,15 @@ class TemplateSyncService
     /**
      * Build a content-versioned Sinch description for a template definition.
      *
-     * Format: `{template_key}@{hash8}`. The hash covers the fields that
-     * affect what Sinch (and downstream carriers) actually need to re-approve:
-     * body, required variables, category, and communication type. A change
-     * to any of these produces a new Sinch template rather than silently
-     * reusing the old one.
+     * Format: `{template_key}@{hash8}`. The hash covers only the fields that
+     * actually go into the Sinch payload (see
+     * `ConversationApiClient::formatTemplateForSinch()`): body and required
+     * variables. Local-only fields like `category` and `communication_type`
+     * are deliberately excluded so a metadata-only edit doesn't force a
+     * needless re-approval cycle on regulated channels.
      *
      * @param array<string, mixed> $template
+     * @throws \JsonException
      */
     private function versionedDescription(array $template): string
     {
@@ -185,11 +187,9 @@ class TemplateSyncService
         $canonical = json_encode([
             'body' => $template['body'] ?? '',
             'required_variables' => $variables,
-            'category' => $template['category'] ?? '',
-            'communication_type' => $template['communication_type'] ?? '',
-        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
-        $hash = substr(hash('sha256', (string) $canonical), 0, 8);
+        $hash = substr(hash('sha256', $canonical), 0, 8);
 
         return $template['template_key'] . '@' . $hash;
     }
