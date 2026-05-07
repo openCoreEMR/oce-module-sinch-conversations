@@ -596,6 +596,10 @@ class ConversationApiClient
             ];
         }
 
+        // Sinch Templates v2 takes the message body fields (e.g. `text_message`)
+        // as direct fields on the translation object, not wrapped in a `message`
+        // envelope. See https://developers.sinch.com/docs/conversation/templates.md
+        // (Version 2 example).
         return [
             'description' => $templateData['description'] ?? $templateData['template_name'],
             'default_translation' => 'en-US',
@@ -604,10 +608,8 @@ class ConversationApiClient
                     'language_code' => 'en-US',
                     'version' => '1',
                     'variables' => $variables,
-                    'message' => [
-                        'text_message' => [
-                            'text' => $this->convertTemplateVariables($templateData['body']),
-                        ],
+                    'text_message' => [
+                        'text' => $this->convertTemplateVariables($templateData['body']),
                     ],
                 ],
             ],

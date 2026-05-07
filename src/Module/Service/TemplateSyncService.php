@@ -108,19 +108,23 @@ class TemplateSyncService
             } catch (\Throwable $e) {
                 $errorId = ErrorId::generate();
                 $results['failed']++;
+                // Surface upstream API messages so operators can see the validation
+                // reason (e.g. "Translation must specify a message"), but for any
+                // other exception class show a generic message + errorId — internal
+                // exceptions can leak file paths or other internals.
+                $uiMessage = $e instanceof ApiException
+                    ? $e->getMessage()
+                    : "Internal error (ref: $errorId)";
                 $results['errors'][] = [
                     'template_key' => $template['template_key'],
                     'errorId' => $errorId,
+                    'error' => $uiMessage,
                 ];
                 $this->logger->error('Failed to sync template', [
                     'templateKey' => $template['template_key'],
                     'errorId' => $errorId,
                     'exception' => ExceptionContext::fromThrowable($e),
                 ]);
-
-                // Stop on first failure
-                $this->logger->warning('Stopping template sync due to failure');
-                break;
             }
         }
 
