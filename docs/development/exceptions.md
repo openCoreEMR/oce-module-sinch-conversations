@@ -189,6 +189,8 @@ $this->logger->error("Failed to poll conversation {$conversationId}: " . $e->get
 $this->logger->info("Sent keyword auto-response to: {$phoneNumber}");
 
 // Good — PSR-3 context
+use OpenCoreEMR\Modules\SinchConversations\Logging\ExceptionContext;
+
 $this->logger->error('Failed to poll conversation', [
     'conversationId' => $conversationId,
     'exception' => ExceptionContext::fromThrowable($e),
