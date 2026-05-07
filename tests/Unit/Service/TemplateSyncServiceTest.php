@@ -184,6 +184,26 @@ class TemplateSyncServiceTest extends TestCase
     }
 
     /**
+     * Whitespace inside `{{ var }}` is normalized away before the body is
+     * sent to Sinch (`ConversationApiClient::normalizeTemplateBody()`), so
+     * the hash must compare normalized bodies. Otherwise a cosmetic edit
+     * like `{{patient_name}}` → `{{ patient_name }}` triggers a needless
+     * re-approval.
+     */
+    public function testHashIsStableAcrossVariableWhitespace(): void
+    {
+        $reflect = new \ReflectionMethod(TemplateSyncService::class, 'versionedDescription');
+
+        $compact = ['template_key' => 'k', 'body' => 'Hi {{patient_name}}', 'required_variables' => ['patient_name']];
+        $spaced = ['template_key' => 'k', 'body' => 'Hi {{ patient_name }}', 'required_variables' => ['patient_name']];
+
+        $this->assertSame(
+            $reflect->invoke($this->service, $compact),
+            $reflect->invoke($this->service, $spaced),
+        );
+    }
+
+    /**
      * Non-API exceptions (e.g. internal TypeError) must NOT leak their message
      * into the UI — only `ApiException` messages, which originate from the
      * Sinch API and are safe operator-facing validation errors, are surfaced

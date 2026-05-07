@@ -170,10 +170,14 @@ class TemplateSyncService
      *
      * Format: `{template_key}@{hash8}`. The hash covers only the fields that
      * actually go into the Sinch payload (see
-     * `ConversationApiClient::formatTemplateForSinch()`): body and required
-     * variables. Local-only fields like `category` and `communication_type`
-     * are deliberately excluded so a metadata-only edit doesn't force a
-     * needless re-approval cycle on regulated channels.
+     * `ConversationApiClient::formatTemplateForSinch()`): the *normalized*
+     * body and the required variables. Local-only fields like `category`
+     * and `communication_type` are deliberately excluded so a metadata-only
+     * edit doesn't force a needless re-approval cycle on regulated channels.
+     *
+     * The body is normalized through `ConversationApiClient::normalizeTemplateBody()`
+     * so cosmetic edits inside `{{ var }}` (whitespace) don't bump the hash —
+     * only changes to the bytes Sinch will actually receive.
      *
      * @param array<string, mixed> $template
      * @throws \JsonException
@@ -185,8 +189,10 @@ class TemplateSyncService
             sort($variables);
         }
 
+        $body = (string) ($template['body'] ?? '');
+
         $canonical = Json::encode([
-            'body' => $template['body'] ?? '',
+            'body' => ConversationApiClient::normalizeTemplateBody($body),
             'required_variables' => $variables,
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
