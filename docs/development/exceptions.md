@@ -156,11 +156,13 @@ Instead, generate a traceable error ID, log the full error with context, and sho
 $this->session->setFlash('error', "Failed: " . $e->getMessage());
 
 // Good — traceable error ID, structured context in logs
+use OpenCoreEMR\Modules\SinchConversations\Logging\ExceptionContext;
+
 $errorId = uniqid('err-');
 $this->logger->error('Failed to send message', [
     'errorId' => $errorId,
     'phone' => $phoneNumber,
-    'exception' => $e,
+    'exception' => ExceptionContext::fromThrowable($e),
 ]);
 $this->session->setFlash('error', "An error occurred (ref: {$errorId}). Contact support if this persists.");
 ```
@@ -187,9 +189,11 @@ $this->logger->error("Failed to poll conversation {$conversationId}: " . $e->get
 $this->logger->info("Sent keyword auto-response to: {$phoneNumber}");
 
 // Good — PSR-3 context
+use OpenCoreEMR\Modules\SinchConversations\Logging\ExceptionContext;
+
 $this->logger->error('Failed to poll conversation', [
     'conversationId' => $conversationId,
-    'exception' => $e,
+    'exception' => ExceptionContext::fromThrowable($e),
 ]);
 $this->logger->info('Sent keyword auto-response', ['phone' => $phoneNumber]);
 ```
@@ -197,8 +201,24 @@ $this->logger->info('Sent keyword auto-response', ['phone' => $phoneNumber]);
 **Rules:**
 - Log message is a static string — no variables interpolated into it
 - All variable data goes in the context array
-- Pass exceptions as `'exception' => $e` — Monolog extracts the full stack trace
+- Pass exceptions as `'exception' => ExceptionContext::fromThrowable($e)` — see [Logging Throwables](#logging-throwables) below
 - Use descriptive keys (`'patientId'`, `'phone'`, `'conversationId'`), not generic ones (`'id'`, `'value'`)
+
+## Logging Throwables
+
+OpenEMR's `SystemLogger` `json_encode`s context object values. `\Throwable` exposes no public properties, so passing `'exception' => $e` directly produces `"exception":"{}"` in the log — useless for debugging.
+
+Always route exceptions through `ExceptionContext::fromThrowable()`:
+
+```php
+use OpenCoreEMR\Modules\SinchConversations\Logging\ExceptionContext;
+
+$this->logger->error('Failed to do thing', [
+    'exception' => ExceptionContext::fromThrowable($e),
+]);
+```
+
+The helper produces `class`, `message`, `file:line`, `trace`, and recurses into `getPrevious()`. The previous-exception chain matters: services often re-throw a domain exception wrapping the underlying cause (e.g. `ValidationException` wrapping a Sinch `ApiException`). Without recursing, the log loses the real reason.
 
 ## API Exception Handling
 
@@ -208,7 +228,7 @@ When calling Sinch APIs, wrap in try-catch and convert to appropriate exceptions
 try {
     $response = $this->client->sendMessage($payload);
 } catch (GuzzleException $e) {
-    $this->logger->error('Sinch API call failed', ['exception' => $e]);
+    $this->logger->error('Sinch API call failed', ['exception' => ExceptionContext::fromThrowable($e)]);
     throw new ApiException("Failed to send message: " . $e->getMessage(), 0, $e);
 }
 ```

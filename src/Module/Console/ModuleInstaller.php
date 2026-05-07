@@ -16,6 +16,7 @@ declare(strict_types=1);
 
 namespace OpenCoreEMR\Modules\SinchConversations\Console;
 
+use OpenCoreEMR\Modules\SinchConversations\Logging\ExceptionContext;
 use OpenEMR\Common\Database\QueryUtils;
 use Symfony\Component\Console\Output\OutputInterface;
 
@@ -340,7 +341,7 @@ class ModuleInstaller
             $errorId = \OpenCoreEMR\Modules\SinchConversations\ErrorId::generate();
             (new \OpenEMR\Common\Logging\SystemLogger())->error(
                 'ModuleManagerListener error',
-                ['errorId' => $errorId, 'action' => $action, 'exception' => $e]
+                ['errorId' => $errorId, 'action' => $action, 'exception' => ExceptionContext::fromThrowable($e)]
             );
             $this->output->writeln(
                 "  <comment>ModuleManagerListener ($action) failed (ref: $errorId)</comment>"

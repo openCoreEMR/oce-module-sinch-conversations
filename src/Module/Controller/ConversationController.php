@@ -16,6 +16,7 @@ namespace OpenCoreEMR\Modules\SinchConversations\Controller;
 
 use OpenCoreEMR\Modules\SinchConversations\ErrorId;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
+use OpenCoreEMR\Modules\SinchConversations\Logging\ExceptionContext;
 use OpenCoreEMR\Modules\SinchConversations\Service\MessagePollingService;
 use OpenCoreEMR\Modules\SinchConversations\Service\MessageService;
 use OpenCoreEMR\Modules\SinchConversations\Service\PhoneNormalizer;
@@ -159,7 +160,7 @@ class ConversationController
             $this->logger->error('Failed to send reply', [
                 'conversationId' => $conversationId,
                 'errorId' => $errorId,
-                'exception' => $e,
+                'exception' => ExceptionContext::fromThrowable($e),
             ]);
             $this->session->setFlash('conversation_message', "Error sending message (ref: $errorId)");
         }

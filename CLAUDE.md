@@ -83,7 +83,7 @@ This document describes the architectural patterns and conventions for OpenEMR m
 
 **Logging:**
 - Use PSR-3 context arrays — never string concatenation or interpolation in log messages
-- Pass exceptions as `'exception' => $e` in context
+- Pass exceptions as `'exception' => ExceptionContext::fromThrowable($e)` in context (import from `OpenCoreEMR\Modules\SinchConversations\Logging\ExceptionContext`). Passing `$e` directly serialises to `"{}"` because OpenEMR's `SystemLogger` `json_encode`s context objects and `\Throwable` exposes no public properties.
 - See [Exceptions](docs/development/exceptions.md) for full patterns
 
 ### Common Commands

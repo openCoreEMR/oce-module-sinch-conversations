@@ -16,6 +16,7 @@ namespace OpenCoreEMR\Modules\SinchConversations\Service;
 
 use OpenCoreEMR\Modules\SinchConversations\ErrorId;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
+use OpenCoreEMR\Modules\SinchConversations\Logging\ExceptionContext;
 use OpenCoreEMR\Sinch\Conversation\Client\ConversationApiClient;
 use OpenCoreEMR\Sinch\Conversation\Exception\ApiException;
 use OpenEMR\Common\Database\QueryUtils;
@@ -67,7 +68,7 @@ class TemplateSyncService
             ]);
         } catch (\Throwable $e) {
             $this->logger->warning('Could not list existing templates, will attempt to create all', [
-                'exception' => $e,
+                'exception' => ExceptionContext::fromThrowable($e),
             ]);
             $existingByDescription = [];
         }
@@ -114,7 +115,7 @@ class TemplateSyncService
                 $this->logger->error('Failed to sync template', [
                     'templateKey' => $template['template_key'],
                     'errorId' => $errorId,
-                    'exception' => $e,
+                    'exception' => ExceptionContext::fromThrowable($e),
                 ]);
 
                 // Stop on first failure

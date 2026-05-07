@@ -15,6 +15,7 @@ declare(strict_types=1);
 
 namespace OpenCoreEMR\Modules\SinchConversations\Listener;
 
+use OpenCoreEMR\Modules\SinchConversations\Logging\ExceptionContext;
 use OpenCoreEMR\Modules\SinchConversations\Render\EligibilityAlertRenderer;
 use OpenCoreEMR\Modules\SinchConversations\Service\MessageService;
 use OpenEMR\Common\Logging\SystemLogger;
@@ -71,7 +72,7 @@ class AppointmentSmsStatusListener
         } catch (\Throwable $e) {
             $this->logger->error('Failed to diagnose SMS eligibility for calendar render', [
                 'patientId' => $pid,
-                'exception' => $e,
+                'exception' => ExceptionContext::fromThrowable($e),
             ]);
             echo $this->renderer->renderEmpty();
             return;

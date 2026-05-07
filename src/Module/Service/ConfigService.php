@@ -16,6 +16,7 @@ namespace OpenCoreEMR\Modules\SinchConversations\Service;
 
 use OpenCoreEMR\ModuleConfig\ConfigService as LibConfigService;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
+use OpenCoreEMR\Modules\SinchConversations\Logging\ExceptionContext;
 use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
 use OpenEMR\Common\Logging\SystemLogger;
 
@@ -102,7 +103,7 @@ class ConfigService
 
             $this->logger->info('Sinch Conversations settings saved successfully');
         } catch (\Throwable $e) {
-            $this->logger->error('Failed to save settings', ['exception' => $e]);
+            $this->logger->error('Failed to save settings', ['exception' => ExceptionContext::fromThrowable($e)]);
             throw new ValidationException("Failed to save settings", 0, $e);
         }
     }

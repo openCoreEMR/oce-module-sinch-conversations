@@ -16,6 +16,7 @@ namespace OpenCoreEMR\Modules\SinchConversations\Service;
 
 use OpenCoreEMR\Modules\SinchConversations\Channel;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
+use OpenCoreEMR\Modules\SinchConversations\Logging\ExceptionContext;
 use OpenEMR\Common\Database\QueryUtils;
 use OpenEMR\Common\Logging\SystemLogger;
 
@@ -129,7 +130,7 @@ class ConsentService
             $this->logger->error('Failed to send opt-in confirmation', [
                 'patientId' => $patientId,
                 'phone' => $phoneNumber,
-                'exception' => $e,
+                'exception' => ExceptionContext::fromThrowable($e),
             ]);
             return false;
         }

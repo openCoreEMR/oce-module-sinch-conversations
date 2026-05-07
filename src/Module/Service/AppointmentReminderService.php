@@ -20,6 +20,7 @@ namespace OpenCoreEMR\Modules\SinchConversations\Service;
 
 use OpenCoreEMR\Modules\SinchConversations\ConsentBlock;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
+use OpenCoreEMR\Modules\SinchConversations\Logging\ExceptionContext;
 use OpenCoreEMR\Modules\SinchConversations\SkipReason;
 use OpenEMR\Common\Database\QueryUtils;
 use OpenEMR\Common\Logging\SystemLogger;
@@ -118,7 +119,7 @@ class AppointmentReminderService
                 $results['errors'][] = "Event {$pcEid}: template render failed: " . $e->getMessage();
                 $this->logger->error('Appointment reminder template render failed', [
                     'pc_eid' => $pcEid,
-                    'exception' => $e,
+                    'exception' => ExceptionContext::fromThrowable($e),
                 ]);
                 continue;
             }
@@ -138,7 +139,7 @@ class AppointmentReminderService
                 $this->logger->error('Appointment reminder send failed', [
                     'pc_eid' => $pcEid,
                     'patient_id' => $patientId,
-                    'exception' => $e,
+                    'exception' => ExceptionContext::fromThrowable($e),
                 ]);
             }
         }
@@ -205,7 +206,10 @@ class AppointmentReminderService
             $sql = "DELETE FROM oce_sinch_appointment_reminders WHERE sent_at < DATE_SUB(NOW(), INTERVAL 90 DAY)";
             QueryUtils::sqlStatementThrowException($sql, []);
         } catch (\Throwable $e) {
-            $this->logger->error('Failed to purge expired appointment reminders', ['exception' => $e]);
+            $this->logger->error(
+                'Failed to purge expired appointment reminders',
+                ['exception' => ExceptionContext::fromThrowable($e)]
+            );
         }
     }
 

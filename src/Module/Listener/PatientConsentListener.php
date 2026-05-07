@@ -31,6 +31,7 @@ declare(strict_types=1);
 namespace OpenCoreEMR\Modules\SinchConversations\Listener;
 
 use OpenCoreEMR\Modules\SinchConversations\ConsentBlock;
+use OpenCoreEMR\Modules\SinchConversations\Logging\ExceptionContext;
 use OpenCoreEMR\Modules\SinchConversations\Service\ConsentService;
 use OpenCoreEMR\Modules\SinchConversations\SkipReason;
 use OpenEMR\Common\Logging\SystemLogger;
@@ -129,7 +130,7 @@ class PatientConsentListener
         } catch (\Throwable $e) {
             $this->logger->error('Failed to send opt-in confirmation', [
                 'patientId' => $pid,
-                'exception' => $e,
+                'exception' => ExceptionContext::fromThrowable($e),
             ]);
         }
     }
