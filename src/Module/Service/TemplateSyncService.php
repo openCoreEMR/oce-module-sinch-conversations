@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace OpenCoreEMR\Modules\SinchConversations\Service;
 
+use OpenCoreEMR\Modules\SinchConversations\Common\Json;
 use OpenCoreEMR\Modules\SinchConversations\ErrorId;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Logging\ExceptionContext;
@@ -75,11 +76,17 @@ class TemplateSyncService
 
         foreach ($templateDefinitions as $template) {
             try {
-                $description = $template['description'] ?? $template['template_name'];
+                // Match Sinch templates by a content-versioned description
+                // (`template_key@<hash>`) so a body change produces a new
+                // Sinch template instead of silently reusing the old one.
+                // Any Sinch description without the `@<hash>` suffix —
+                // including pre-versioning descriptions from older syncs —
+                // is intentionally ignored, so the first sync after upgrade
+                // creates fresh versioned entries.
+                $template['description'] = $this->versionedDescription($template);
 
-                // Check if template already exists in Sinch
-                if (isset($existingByDescription[$description])) {
-                    $sinchTemplate = $existingByDescription[$description];
+                if (isset($existingByDescription[$template['description']])) {
+                    $sinchTemplate = $existingByDescription[$template['description']];
                     $sinchTemplateId = $sinchTemplate['id'] ?? null;
 
                     $this->logger->debug('Template already exists in Sinch', [
@@ -87,7 +94,6 @@ class TemplateSyncService
                         'sinchId' => $sinchTemplateId,
                     ]);
 
-                    // Save/update locally with existing Sinch ID
                     if ($sinchTemplateId) {
                         $this->saveTemplateLocally($template, $sinchTemplateId);
                         $results['skipped']++;
@@ -95,7 +101,6 @@ class TemplateSyncService
                     }
                 }
 
-                // Template doesn't exist, sync it
                 $this->syncTemplate($template);
 
                 // Check if template already existed locally
@@ -158,6 +163,42 @@ class TemplateSyncService
 
         // Then save or update it in the local database
         $this->saveTemplateLocally($template, $sinchTemplateId);
+    }
+
+    /**
+     * Build a content-versioned Sinch description for a template definition.
+     *
+     * Format: `{template_key}@{hash8}`. The hash covers only the fields that
+     * actually go into the Sinch payload (see
+     * `ConversationApiClient::formatTemplateForSinch()`): the *normalized*
+     * body and the required variables. Local-only fields like `category`
+     * and `communication_type` are deliberately excluded so a metadata-only
+     * edit doesn't force a needless re-approval cycle on regulated channels.
+     *
+     * The body is normalized through `ConversationApiClient::normalizeTemplateBody()`
+     * so cosmetic edits inside `{{ var }}` (whitespace) don't bump the hash —
+     * only changes to the bytes Sinch will actually receive.
+     *
+     * @param array<string, mixed> $template
+     * @throws \JsonException
+     */
+    private function versionedDescription(array $template): string
+    {
+        $variables = $template['required_variables'] ?? [];
+        if (is_array($variables)) {
+            sort($variables);
+        }
+
+        $body = (string) ($template['body'] ?? '');
+
+        $canonical = Json::encode([
+            'body' => ConversationApiClient::normalizeTemplateBody($body),
+            'required_variables' => $variables,
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+        $hash = substr(hash('sha256', $canonical), 0, 8);
+
+        return $template['template_key'] . '@' . $hash;
     }
 
     /**

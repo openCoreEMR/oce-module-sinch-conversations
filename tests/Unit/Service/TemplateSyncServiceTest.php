@@ -83,6 +83,127 @@ class TemplateSyncServiceTest extends TestCase
     }
 
     /**
+     * Re-syncing the same templates after they exist in Sinch with their
+     * content-versioned descriptions must skip every one — no createTemplate
+     * calls. Regression guard for issue #124: the description match must
+     * line up with what we previously sent.
+     */
+    public function testResyncWithUnchangedContentSkipsAll(): void
+    {
+        $createCalls = 0;
+        $sentDescriptions = [];
+        $this->apiClient->method('listTemplates')->willReturn([]);
+        $this->apiClient->method('createTemplate')
+            ->willReturnCallback(function (array $template) use (&$createCalls, &$sentDescriptions): array {
+                $sentDescriptions[] = $template['description'];
+                $createCalls++;
+                return ['id' => 'sinch-tmpl-' . $createCalls];
+            });
+
+        $first = $this->service->syncAllTemplates();
+        $this->assertSame($first['total'], $createCalls, 'first sync should create every template');
+
+        $apiClient2 = $this->createMock(ConversationApiClient::class);
+        $existing = [];
+        foreach ($sentDescriptions as $i => $desc) {
+            $existing[] = ['id' => 'sinch-tmpl-' . ($i + 1), 'description' => $desc];
+        }
+        $apiClient2->method('listTemplates')->willReturn($existing);
+        $apiClient2->expects($this->never())->method('createTemplate');
+
+        $service2 = new TemplateSyncService($this->config, $apiClient2);
+        $second = $service2->syncAllTemplates();
+
+        $this->assertSame($second['total'], $second['skipped'], 'every template should be skipped on re-sync');
+        $this->assertSame(0, $second['failed']);
+    }
+
+    /**
+     * If Sinch already holds a template under the pre-versioning description
+     * (whatever was in the config's `description` field, typically human
+     * prose), the new matcher must NOT adopt it — first sync after upgrade
+     * creates fresh content-versioned templates.
+     */
+    public function testLegacyNonVersionedDescriptionIsIgnored(): void
+    {
+        $configPath = dirname(__DIR__, 3) . '/config/templates.php';
+        $definitions = require $configPath;
+        $legacyExisting = [];
+        foreach ($definitions as $i => $def) {
+            $legacyExisting[] = [
+                'id' => 'legacy-' . ($i + 1),
+                'description' => $def['description'] ?? $def['template_name'],
+            ];
+        }
+
+        $this->apiClient->method('listTemplates')->willReturn($legacyExisting);
+        $createCalls = 0;
+        $this->apiClient->method('createTemplate')
+            ->willReturnCallback(function (array $template) use (&$createCalls): array {
+                $createCalls++;
+                $this->assertStringContainsString('@', $template['description']);
+                return ['id' => 'sinch-tmpl-' . $createCalls];
+            });
+
+        $results = $this->service->syncAllTemplates();
+
+        $this->assertSame($results['total'], $createCalls, 'legacy descriptions must not satisfy the match');
+        $this->assertSame(0, $results['skipped']);
+    }
+
+    /**
+     * A stale versioned description in Sinch (different hash) must be treated
+     * as a miss and trigger creation of a new Sinch template — this is the
+     * core multi-tenant safety property: a body change actually reaches Sinch.
+     */
+    public function testStaleVersionedDescriptionTriggersNewCreation(): void
+    {
+        $configPath = dirname(__DIR__, 3) . '/config/templates.php';
+        $definitions = require $configPath;
+        $stale = [];
+        foreach ($definitions as $i => $def) {
+            $stale[] = [
+                'id' => 'stale-' . ($i + 1),
+                'description' => $def['template_key'] . '@deadbeef',
+            ];
+        }
+
+        $this->apiClient->method('listTemplates')->willReturn($stale);
+        $createCalls = 0;
+        $this->apiClient->method('createTemplate')
+            ->willReturnCallback(function (array $template) use (&$createCalls): array {
+                $createCalls++;
+                $this->assertStringEndsNotWith('@deadbeef', $template['description']);
+                return ['id' => 'sinch-tmpl-' . $createCalls];
+            });
+
+        $results = $this->service->syncAllTemplates();
+
+        $this->assertSame($results['total'], $createCalls);
+        $this->assertSame(0, $results['skipped']);
+    }
+
+    /**
+     * Whitespace inside `{{ var }}` is normalized away before the body is
+     * sent to Sinch (`ConversationApiClient::normalizeTemplateBody()`), so
+     * the hash must compare normalized bodies. Otherwise a cosmetic edit
+     * like `{{patient_name}}` → `{{ patient_name }}` triggers a needless
+     * re-approval.
+     */
+    public function testHashIsStableAcrossVariableWhitespace(): void
+    {
+        $reflect = new \ReflectionMethod(TemplateSyncService::class, 'versionedDescription');
+
+        $compact = ['template_key' => 'k', 'body' => 'Hi {{patient_name}}', 'required_variables' => ['patient_name']];
+        $spaced = ['template_key' => 'k', 'body' => 'Hi {{ patient_name }}', 'required_variables' => ['patient_name']];
+
+        $this->assertSame(
+            $reflect->invoke($this->service, $compact),
+            $reflect->invoke($this->service, $spaced),
+        );
+    }
+
+    /**
      * Non-API exceptions (e.g. internal TypeError) must NOT leak their message
      * into the UI — only `ApiException` messages, which originate from the
      * Sinch API and are safe operator-facing validation errors, are surfaced

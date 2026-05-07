@@ -609,7 +609,7 @@ class ConversationApiClient
                     'version' => '1',
                     'variables' => $variables,
                     'text_message' => [
-                        'text' => $this->convertTemplateVariables($templateData['body']),
+                        'text' => self::normalizeTemplateBody($templateData['body']),
                     ],
                 ],
             ],
@@ -617,14 +617,15 @@ class ConversationApiClient
     }
 
     /**
-     * Convert {{ variable }} syntax to {{variable}} (Sinch format)
+     * Normalize a template body to the exact text Sinch will receive:
+     * `{{ variable_name }}` → `{{variable_name}}` (Sinch's required form).
      *
-     * @param string $body
-     * @return string
+     * Exposed publicly so that anything which needs to reason about the
+     * payload Sinch actually stores (e.g. content-versioned descriptions
+     * in TemplateSyncService) hashes the same string this client sends.
      */
-    private function convertTemplateVariables(string $body): string
+    public static function normalizeTemplateBody(string $body): string
     {
-        // Convert {{ variable_name }} to {{variable_name}}
         return preg_replace('/\{\{\s*(\w+)\s*\}\}/', '{{$1}}', $body) ?? $body;
     }
 
