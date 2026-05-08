@@ -138,7 +138,12 @@ class InspectCommand extends Command
             // Debug mode - show raw channel config
             if ($input->getOption('debug')) {
                 $io->section('Raw Channel Configuration (Debug)');
-                $io->text(Json::encode($appConfig['channel_credentials'] ?? [], JSON_PRETTY_PRINT));
+                try {
+                    $io->text(Json::encode($appConfig['channel_credentials'] ?? [], JSON_PRETTY_PRINT));
+                } catch (\JsonException $e) {
+                    // Debug-only display: a JSON failure must not abort the inspect command.
+                    $io->text('(failed to encode channel_credentials: ' . $e->getMessage() . ')');
+                }
             }
 
             if (empty($appConfig['channel_credentials'])) {
