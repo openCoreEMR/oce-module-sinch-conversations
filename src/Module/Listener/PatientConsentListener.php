@@ -9,15 +9,17 @@
  * transition, so they know they will start receiving SMS from the clinic.
  *
  * Coverage note: this listener subscribes to PatientUpdatedEvent /
- * PatientCreatedEvent. Several legacy chart save paths
- * (interface/patient_file/summary/demographics_save.php and
- * interface/new/new_patient_save.php) dispatch PatientUpdatedEventAux or
- * no event at all, so a NO->YES toggle through those UI paths will not
- * fire the welcome SMS. The patient is still eligible for reminders the
- * moment the chart shows YES — MessageService::assertPatientEligible()
- * reads hipaa_allowsms live at send time, independent of any event. The
- * welcome SMS is therefore best-effort; reliable coverage is tracked
- * separately. Eligibility coverage is not affected.
+ * PatientCreatedEvent. Both chart UI save paths reach those events:
+ * demographics_save.php updates flow through updatePatientData() →
+ * PatientService::databaseUpdate(), which dispatches PatientUpdatedEvent
+ * with a real findByPid() pre-update snapshot; and new_patient_save.php
+ * dispatches PatientCreatedEvent after newPatientData() via the
+ * notifier added in upstream openemr/openemr#12083 (backported to
+ * oce-800 in opencoreemr/openemr-internal#484). Either path will fire
+ * the welcome SMS on a NO->YES transition. Eligibility is independent
+ * regardless: MessageService::assertPatientEligible() reads
+ * hipaa_allowsms live at send time, so reminders are reachable as soon
+ * as the chart shows YES.
  *
  * @package   OpenCoreEMR
  * @link      https://opencoreemr.com
