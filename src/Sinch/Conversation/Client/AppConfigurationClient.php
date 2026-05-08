@@ -19,6 +19,7 @@ namespace OpenCoreEMR\Sinch\Conversation\Client;
 
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
+use OpenCoreEMR\Modules\SinchConversations\Common\ArrayPath;
 use OpenCoreEMR\Modules\SinchConversations\Common\Json;
 use OpenCoreEMR\Sinch\Conversation\Config\ConfigInterface;
 use OpenCoreEMR\Sinch\Conversation\Exception\ApiException;
@@ -74,30 +75,24 @@ class AppConfigurationClient
             ]);
 
             $statusCode = $response->getStatusCode();
-            $rawBody = (string)$response->getBody();
             try {
-                $body = Json::decode($rawBody);
+                $body = Json::decode((string)$response->getBody());
             } catch (\JsonException $e) {
                 throw new ApiException('Malformed OAuth2 response', $statusCode, $e);
             }
-            if (!is_array($body)) {
-                throw new ApiException('Unexpected OAuth2 response shape', $statusCode);
-            }
 
             if ($statusCode !== 200) {
-                $error = $body['error_description'] ?? $body['error'] ?? 'Unknown error';
-                if (!is_string($error) || $error === '') {
-                    $error = 'Unknown error';
-                }
+                $error = ArrayPath::firstNonEmptyString($body, 'error_description', 'error') ?? 'Unknown error';
                 throw new ApiException("OAuth2 authentication failed: {$error}", $statusCode);
             }
 
-            if (!isset($body['access_token']) || !is_string($body['access_token']) || $body['access_token'] === '') {
+            $accessToken = ArrayPath::stringAt($body, 'access_token');
+            if ($accessToken === null || $accessToken === '') {
                 throw new ApiException("OAuth2 response missing access_token", $statusCode);
             }
 
-            $this->cachedAccessToken = $body['access_token'];
-            return $body['access_token'];
+            $this->cachedAccessToken = $accessToken;
+            return $accessToken;
         } catch (GuzzleException $e) {
             throw new ApiException('OAuth2 request failed', 0, $e);
         }
@@ -594,14 +589,11 @@ class AppConfigurationClient
             return is_array($decoded) ? $decoded : [];
         }
 
-        $message = 'Unknown API error';
         try {
-            $error = Json::decode($body);
-            if (is_array($error) && isset($error['error']['message']) && is_string($error['error']['message'])) {
-                $message = $error['error']['message'];
-            }
+            $message = ArrayPath::stringAt(Json::decode($body), 'error', 'message') ?? 'Unknown API error';
         } catch (\JsonException) {
             // Non-JSON error body; keep the generic message.
+            $message = 'Unknown API error';
         }
 
         throw new ApiException("API request failed: {$message}", $statusCode);

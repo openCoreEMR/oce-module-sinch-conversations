@@ -16,6 +16,7 @@ namespace OpenCoreEMR\Sinch\Conversation\Client;
 
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
+use OpenCoreEMR\Modules\SinchConversations\Common\ArrayPath;
 use OpenCoreEMR\Modules\SinchConversations\Common\Json;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Sinch\Conversation\Exception\ApiException;
@@ -435,20 +436,12 @@ class ConversationApiClient
             }
 
             // Handle error responses
-            $errorMessage = 'Authentication failed';
             try {
-                $errorData = Json::decode($body);
-                if (
-                    is_array($errorData)
-                    && isset($errorData['error'])
-                    && is_array($errorData['error'])
-                    && isset($errorData['error']['message'])
-                    && is_string($errorData['error']['message'])
-                ) {
-                    $errorMessage = $errorData['error']['message'];
-                }
+                $errorMessage = ArrayPath::stringAt(Json::decode($body), 'error', 'message')
+                    ?? 'Authentication failed';
             } catch (\JsonException) {
                 // Body was not JSON; fall through to header-based message extraction.
+                $errorMessage = 'Authentication failed';
             }
 
             // Check WWW-Authenticate header for additional error details
@@ -503,31 +496,22 @@ class ConversationApiClient
             $body = (string)$response->getBody();
 
             if ($statusCode !== 200) {
-                $errorMessage = 'Failed to get OAuth2 token';
                 try {
-                    $error = Json::decode($body);
-                    if (is_array($error)) {
-                        $candidate = $error['error_description'] ?? $error['error'] ?? null;
-                        if (is_string($candidate) && $candidate !== '') {
-                            $errorMessage = $candidate;
-                        }
-                    }
+                    $errorMessage = ArrayPath::firstNonEmptyString(Json::decode($body), 'error_description', 'error')
+                        ?? 'Failed to get OAuth2 token';
                 } catch (\JsonException) {
-                    // Non-JSON body; keep the generic message.
+                    $errorMessage = 'Failed to get OAuth2 token';
                 }
                 throw new ApiException("OAuth2 authentication failed: {$errorMessage}", $statusCode);
             }
 
             try {
-                $data = Json::decode($body);
+                $accessToken = ArrayPath::stringAt(Json::decode($body), 'access_token');
             } catch (\JsonException $e) {
                 throw new ApiException('Malformed OAuth2 response', $statusCode, $e);
             }
-            $accessToken = is_array($data) && isset($data['access_token']) && is_string($data['access_token'])
-                ? $data['access_token']
-                : '';
 
-            if ($accessToken === '') {
+            if ($accessToken === null || $accessToken === '') {
                 throw new ApiException("No access token in OAuth2 response");
             }
 
@@ -991,14 +975,11 @@ class ConversationApiClient
             return is_array($decoded) ? $decoded : [];
         }
 
-        $message = 'Unknown API error';
         try {
-            $error = Json::decode($body);
-            if (is_array($error) && isset($error['error']['message']) && is_string($error['error']['message'])) {
-                $message = $error['error']['message'];
-            }
+            $message = ArrayPath::stringAt(Json::decode($body), 'error', 'message') ?? 'Unknown API error';
         } catch (\JsonException) {
             // Non-JSON error body; keep the generic message.
+            $message = 'Unknown API error';
         }
 
         $this->logger->error('Sinch API error response', [
