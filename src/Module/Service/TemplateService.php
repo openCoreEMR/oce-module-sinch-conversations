@@ -85,7 +85,11 @@ class TemplateService
         }
 
         $rawRequired = (string) $template['required_variables'];
-        $required = $rawRequired === '' ? [] : Json::decode($rawRequired);
+        $decoded = $rawRequired === '' ? [] : Json::decode($rawRequired);
+        if (!is_array($decoded)) {
+            throw new ValidationException("Template {$templateKey}: required_variables column is not a JSON array");
+        }
+        $required = $decoded;
 
         foreach ($required as $var) {
             if (!isset($variables[$var]) || $variables[$var] === '') {

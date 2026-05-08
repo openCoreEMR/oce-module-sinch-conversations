@@ -438,9 +438,14 @@ class ConversationApiClient
             $errorMessage = 'Authentication failed';
             try {
                 $errorData = Json::decode($body);
-                $candidate = is_array($errorData) ? ($errorData['error']['message'] ?? null) : null;
-                if (is_string($candidate)) {
-                    $errorMessage = $candidate;
+                if (
+                    is_array($errorData)
+                    && isset($errorData['error'])
+                    && is_array($errorData['error'])
+                    && isset($errorData['error']['message'])
+                    && is_string($errorData['error']['message'])
+                ) {
+                    $errorMessage = $errorData['error']['message'];
                 }
             } catch (\JsonException) {
                 // Body was not JSON; fall through to header-based message extraction.
