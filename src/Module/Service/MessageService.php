@@ -15,6 +15,7 @@ declare(strict_types=1);
 namespace OpenCoreEMR\Modules\SinchConversations\Service;
 
 use OpenCoreEMR\Modules\SinchConversations\Channel;
+use OpenCoreEMR\Modules\SinchConversations\Common\Json;
 use OpenCoreEMR\Modules\SinchConversations\ConsentBlock;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Logging\ExceptionContext;
@@ -57,6 +58,15 @@ class MessageService
         $conversationId = $this->getOrCreateConversation($patientId);
         $channel = $options->channel ?? Channel::SMS;
 
+        // Encode metadata BEFORE the API call so a JSON failure can't leave a
+        // sent message without a local row (which would risk a duplicate send
+        // on retry).
+        try {
+            $encodedMetadata = Json::encode($options->metadata ?: []);
+        } catch (\JsonException $e) {
+            throw new ValidationException('Failed to encode message metadata', 0, $e);
+        }
+
         try {
             $response = $this->apiClient->sendMessageByChannelIdentity(
                 $phoneNumber,
@@ -72,7 +82,7 @@ class MessageService
             throw new ValidationException('Failed to send message', 0, $e);
         }
 
-        $this->storeOutboundMessage($conversationId, $response, $message, $options);
+        $this->storeOutboundMessage($conversationId, $response, $message, $options, $encodedMetadata);
 
         return $response;
     }
@@ -195,7 +205,8 @@ class MessageService
         string $conversationId,
         array $response,
         string $message,
-        MessageOptions $options
+        MessageOptions $options,
+        string $encodedMetadata
     ): void {
         $sql = "INSERT INTO oce_sinch_messages (
             conversation_id, message_id, direction, channel,
@@ -208,7 +219,7 @@ class MessageService
             $response['id'] ?? uniqid('msg_'),
             $message,
             $options->templateKey,
-            json_encode($options->metadata ?: []),
+            $encodedMetadata,
         ]);
 
         $sql = "UPDATE oce_sinch_conversations

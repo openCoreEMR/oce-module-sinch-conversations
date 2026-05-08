@@ -19,6 +19,8 @@ namespace OpenCoreEMR\Sinch\Conversation\Client;
 
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
+use OpenCoreEMR\Modules\SinchConversations\Common\ArrayPath;
+use OpenCoreEMR\Modules\SinchConversations\Common\Json;
 use OpenCoreEMR\Sinch\Conversation\Config\ConfigInterface;
 use OpenCoreEMR\Sinch\Conversation\Exception\ApiException;
 
@@ -73,19 +75,24 @@ class AppConfigurationClient
             ]);
 
             $statusCode = $response->getStatusCode();
-            $body = json_decode((string)$response->getBody(), true);
+            try {
+                $body = Json::decode((string)$response->getBody());
+            } catch (\JsonException $e) {
+                throw new ApiException('Malformed OAuth2 response', $statusCode, $e);
+            }
 
             if ($statusCode !== 200) {
-                $error = $body['error_description'] ?? $body['error'] ?? 'Unknown error';
+                $error = ArrayPath::firstNonEmptyString($body, 'error_description', 'error') ?? 'Unknown error';
                 throw new ApiException("OAuth2 authentication failed: {$error}", $statusCode);
             }
 
-            if (!isset($body['access_token']) || !is_string($body['access_token']) || $body['access_token'] === '') {
+            $accessToken = ArrayPath::stringAt($body, 'access_token');
+            if ($accessToken === null || $accessToken === '') {
                 throw new ApiException("OAuth2 response missing access_token", $statusCode);
             }
 
-            $this->cachedAccessToken = $body['access_token'];
-            return $body['access_token'];
+            $this->cachedAccessToken = $accessToken;
+            return $accessToken;
         } catch (GuzzleException $e) {
             throw new ApiException('OAuth2 request failed', 0, $e);
         }
@@ -561,8 +568,13 @@ class AppConfigurationClient
     /**
      * Handle API response
      *
+     * Returns whatever the response body decodes to as an array (object → string-keyed,
+     * top-level array → list-keyed). Empty body and non-array decoded values both
+     * normalise to `[]`. Callers that need a specific shape are responsible for
+     * narrowing it.
+     *
      * @param \Psr\Http\Message\ResponseInterface $response
-     * @return array<string, mixed>
+     * @return array<array-key, mixed>
      * @throws ApiException
      */
     private function handleResponse($response): array
@@ -571,11 +583,23 @@ class AppConfigurationClient
         $body = (string)$response->getBody();
 
         if ($statusCode >= 200 && $statusCode < 300) {
-            return json_decode($body, true) ?? [];
+            if ($body === '') {
+                return [];
+            }
+            try {
+                $decoded = Json::decode($body);
+            } catch (\JsonException $e) {
+                throw new ApiException('Malformed Sinch response', $statusCode, $e);
+            }
+            return is_array($decoded) ? $decoded : [];
         }
 
-        $error = json_decode($body, true);
-        $message = $error['error']['message'] ?? 'Unknown API error';
+        try {
+            $message = ArrayPath::stringAt(Json::decode($body), 'error', 'message') ?? 'Unknown API error';
+        } catch (\JsonException) {
+            // Non-JSON error body; keep the generic message.
+            $message = 'Unknown API error';
+        }
 
         throw new ApiException("API request failed: {$message}", $statusCode);
     }

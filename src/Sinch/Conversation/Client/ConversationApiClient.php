@@ -16,6 +16,8 @@ namespace OpenCoreEMR\Sinch\Conversation\Client;
 
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
+use OpenCoreEMR\Modules\SinchConversations\Common\ArrayPath;
+use OpenCoreEMR\Modules\SinchConversations\Common\Json;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Sinch\Conversation\Exception\ApiException;
 use OpenEMR\Common\Logging\SystemLogger;
@@ -434,8 +436,13 @@ class ConversationApiClient
             }
 
             // Handle error responses
-            $errorData = json_decode($body, true);
-            $errorMessage = $errorData['error']['message'] ?? 'Authentication failed';
+            try {
+                $errorMessage = ArrayPath::stringAt(Json::decode($body), 'error', 'message')
+                    ?? 'Authentication failed';
+            } catch (\JsonException) {
+                // Body was not JSON; fall through to header-based message extraction.
+                $errorMessage = 'Authentication failed';
+            }
 
             // Check WWW-Authenticate header for additional error details
             $wwwAuth = $responseHeaders['www-authenticate'][0] ?? '';
@@ -489,15 +496,22 @@ class ConversationApiClient
             $body = (string)$response->getBody();
 
             if ($statusCode !== 200) {
-                $error = json_decode($body, true);
-                $errorMessage = $error['error_description'] ?? $error['error'] ?? 'Failed to get OAuth2 token';
+                try {
+                    $errorMessage = ArrayPath::firstNonEmptyString(Json::decode($body), 'error_description', 'error')
+                        ?? 'Failed to get OAuth2 token';
+                } catch (\JsonException) {
+                    $errorMessage = 'Failed to get OAuth2 token';
+                }
                 throw new ApiException("OAuth2 authentication failed: {$errorMessage}", $statusCode);
             }
 
-            $data = json_decode($body, true);
-            $accessToken = $data['access_token'] ?? '';
+            try {
+                $accessToken = ArrayPath::stringAt(Json::decode($body), 'access_token');
+            } catch (\JsonException $e) {
+                throw new ApiException('Malformed OAuth2 response', $statusCode, $e);
+            }
 
-            if (empty($accessToken)) {
+            if ($accessToken === null || $accessToken === '') {
                 throw new ApiException("No access token in OAuth2 response");
             }
 
@@ -940,8 +954,13 @@ class ConversationApiClient
     /**
      * Handle API response
      *
+     * Returns whatever the response body decodes to as an array (object → string-keyed,
+     * top-level array → list-keyed). Empty body and non-array decoded values both
+     * normalise to `[]`. Callers that need a specific shape are responsible for
+     * narrowing it.
+     *
      * @param \Psr\Http\Message\ResponseInterface $response
-     * @return array<string, mixed>
+     * @return array<array-key, mixed>
      * @throws ApiException
      */
     private function handleResponse($response): array
@@ -950,11 +969,23 @@ class ConversationApiClient
         $body = (string)$response->getBody();
 
         if ($statusCode >= 200 && $statusCode < 300) {
-            return json_decode($body, true) ?? [];
+            if ($body === '') {
+                return [];
+            }
+            try {
+                $decoded = Json::decode($body);
+            } catch (\JsonException $e) {
+                throw new ApiException('Malformed Sinch response', $statusCode, $e);
+            }
+            return is_array($decoded) ? $decoded : [];
         }
 
-        $error = json_decode($body, true);
-        $message = $error['error']['message'] ?? 'Unknown API error';
+        try {
+            $message = ArrayPath::stringAt(Json::decode($body), 'error', 'message') ?? 'Unknown API error';
+        } catch (\JsonException) {
+            // Non-JSON error body; keep the generic message.
+            $message = 'Unknown API error';
+        }
 
         $this->logger->error('Sinch API error response', [
             'status_code' => $statusCode,

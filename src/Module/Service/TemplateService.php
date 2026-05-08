@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace OpenCoreEMR\Modules\SinchConversations\Service;
 
+use OpenCoreEMR\Modules\SinchConversations\Common\Json;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
 use OpenEMR\Common\Database\QueryUtils;
@@ -83,9 +84,26 @@ class TemplateService
             throw new ValidationException("Template not found: {$templateKey}");
         }
 
-        $required = json_decode((string) $template['required_variables'], true) ?? [];
+        $rawRequired = (string) $template['required_variables'];
+        try {
+            $decoded = $rawRequired === '' ? [] : Json::decode($rawRequired);
+        } catch (\JsonException $e) {
+            throw new ValidationException(
+                "Template {$templateKey}: required_variables column is not valid JSON",
+                0,
+                $e
+            );
+        }
+        if (!is_array($decoded)) {
+            throw new ValidationException("Template {$templateKey}: required_variables column is not a JSON array");
+        }
 
-        foreach ($required as $var) {
+        foreach ($decoded as $var) {
+            if (!is_string($var) || $var === '') {
+                throw new ValidationException(
+                    "Template {$templateKey}: required_variables must be a list of non-empty strings"
+                );
+            }
             if (!isset($variables[$var]) || $variables[$var] === '') {
                 throw new ValidationException("Required variable missing: {$var}");
             }
@@ -167,6 +185,7 @@ class TemplateService
         }
 
         $existing = $this->getTemplate($data['template_key']);
+        $encodedRequired = $this->encodeRequiredVariables($data['required_variables'] ?? []);
 
         if ($existing) {
             $sql = "UPDATE oce_sinch_message_templates
@@ -183,7 +202,7 @@ class TemplateService
                 $data['category'] ?? 'general',
                 $data['communication_type'] ?? 'individual',
                 $data['body'],
-                json_encode($data['required_variables'] ?? []),
+                $encodedRequired,
                 $data['template_key'],
             ]);
 
@@ -202,7 +221,7 @@ class TemplateService
             $data['category'] ?? 'general',
             $data['communication_type'] ?? 'individual',
             $data['body'],
-            json_encode($data['required_variables'] ?? []),
+            $encodedRequired,
             $data['compliance_confidence'] ?? 95,
             $data['sinch_approved'] ?? true,
             $data['active'] ?? true,
@@ -211,5 +230,17 @@ class TemplateService
         $sql = "SELECT LAST_INSERT_ID() as id";
         $result = QueryUtils::querySingleRow($sql, []);
         return (int)($result['id'] ?? 0);
+    }
+
+    /**
+     * @throws ValidationException
+     */
+    private function encodeRequiredVariables(mixed $value): string
+    {
+        try {
+            return Json::encode($value);
+        } catch (\JsonException $e) {
+            throw new ValidationException('required_variables could not be encoded as JSON', 0, $e);
+        }
     }
 }
