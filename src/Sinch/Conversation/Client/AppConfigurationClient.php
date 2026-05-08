@@ -568,8 +568,13 @@ class AppConfigurationClient
     /**
      * Handle API response
      *
+     * Returns whatever the response body decodes to as an array (object → string-keyed,
+     * top-level array → list-keyed). Empty body and non-array decoded values both
+     * normalise to `[]`. Callers that need a specific shape are responsible for
+     * narrowing it.
+     *
      * @param \Psr\Http\Message\ResponseInterface $response
-     * @return array<string, mixed>
+     * @return array<array-key, mixed>
      * @throws ApiException
      */
     private function handleResponse($response): array
