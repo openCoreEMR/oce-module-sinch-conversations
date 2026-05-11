@@ -148,11 +148,26 @@ class SettingsController
                 || $settings['app_id'] !== $this->config->getSinchAppId()
                 || $settings['api_key'] !== $this->config->getSinchApiKey()
                 || $settings['region'] !== $this->config->getSinchRegion();
-            $hasFullApiConfig = $settings['project_id'] !== ''
+            $hasApiTuple = $settings['project_id'] !== ''
                 && $settings['app_id'] !== ''
-                && $settings['api_key'] !== ''
-                && $secretForValidation !== ''
-                && in_array($settings['region'], ConfigService::SUPPORTED_REGIONS, true);
+                && $settings['api_key'] !== '';
+
+            // Reject saves that would persist API fields with no usable
+            // secret (no value typed in the form and none on file). Without
+            // this gate, validation would be skipped and the partial config
+            // saved silently, defeating the point of validation.
+            if ($hasApiTuple && $secretForValidation === '') {
+                $this->session->setFlash(
+                    'settings_message',
+                    "API Secret is required to configure Sinch credentials. Settings were not saved."
+                );
+                return $this->redirect($request);
+            }
+
+            // $hasApiTuple → $secretForValidation !== '' here (the guard
+            // above returned when an API tuple lacked a secret).
+            $hasFullApiConfig = $hasApiTuple
+                && in_array($settings['region'], ConversationApiClient::SUPPORTED_REGIONS, true);
             try {
                 if ($apiFieldChanged && $hasFullApiConfig) {
                     $this->apiClient->validateCredentials(

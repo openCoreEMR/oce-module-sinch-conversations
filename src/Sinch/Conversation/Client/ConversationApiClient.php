@@ -28,6 +28,9 @@ class ConversationApiClient
 {
     private const BASE_URL = 'https://us.conversation.api.sinch.com';
     private const CONSENT_MAX_PAGES = 100;
+
+    /** @var list<string> Sinch Conversations regions this client can talk to */
+    public const SUPPORTED_REGIONS = ['us', 'eu'];
     private readonly Client $httpClient;
     private readonly SystemLogger $logger;
     private ?string $cachedAccessToken = null;
@@ -545,8 +548,12 @@ class ConversationApiClient
             throw new ApiException("API Key ID and Secret are required for OAuth2 authentication");
         }
 
-        if ($region === '') {
-            throw new ApiException("Region is required for OAuth2 authentication");
+        if (!in_array($region, self::SUPPORTED_REGIONS, true)) {
+            throw new ApiException(sprintf(
+                "Unsupported Sinch region '%s'; supported regions are: %s",
+                $region,
+                implode(', ', self::SUPPORTED_REGIONS),
+            ));
         }
 
         try {
