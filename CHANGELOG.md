@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.1.1](https://github.com/openCoreEMR/oce-module-sinch-conversations/compare/1.1.0...1.1.1) (2026-05-11)
+
+
+### Bug Fixes
+
+* stop shadowing OpenEMR core's autoloader from our vendor dir ([#119](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/119)) ([60da6f0](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/60da6f08aaf15252d82ab25047de0df2fad52bfd))
+* sync templates against Sinch v2 schema and surface real errors ([#122](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/122)) ([4d32abc](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/4d32abc07276e9ff63adb87916c8c0a5b2e4db19))
+* version Sinch template descriptions by content hash ([#125](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/125)) ([4b2d735](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/4b2d73568b98f0674f72e9bff378e222e6b692a0))
+
+
+### Documentation
+
+* **listener:** correct stale PatientConsentListener coverage note ([#131](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/131)) ([c598aaa](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/c598aaabdf477a3f3617cd90fe1516917be409f2))
+
+
+### Code Refactoring
+
+* **logging:** introduce ExceptionContext::fromThrowable() ([#123](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/123)) ([9cd3fbe](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/9cd3fbefc88347f6ff9839e99481a291aa2204f6))
+* route remaining JSON call sites through Common\Json wrapper ([#128](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/128)) ([dd3e9e4](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/dd3e9e413a69af8811d66f7722d8e7e42caaee2c))
+* treat hipaa_allowsms as consent source of truth ([#116](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/116)) ([15319fe](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/15319fed4a1ec7bede1b73ba68e46e89bf4e2bdd))
+
+
+### Dependencies
+
+* bump opencoreemr/github-workflows-public/.github/workflows/release-please-reusable.yml ([#130](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/130)) ([08a4c2b](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/08a4c2ba21d0a87d9397b9dd286c76415b96285f))
+
 ## [1.1.0](https://github.com/openCoreEMR/oce-module-sinch-conversations/compare/1.0.1...1.1.0) (2026-04-29)
 
 
