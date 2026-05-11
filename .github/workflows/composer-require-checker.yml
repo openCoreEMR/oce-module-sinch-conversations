@@ -4,9 +4,21 @@ on:
   push:
     branches:
     - main
+    paths:
+    - composer.json
+    - composer.lock
+    - '**.php'
+    - .composer-require-checker.json
+    - .github/workflows/composer-require-checker.yml
   pull_request:
     branches:
     - main
+    paths:
+    - composer.json
+    - composer.lock
+    - '**.php'
+    - .composer-require-checker.json
+    - .github/workflows/composer-require-checker.yml
 
 jobs:
   composer-require-checker:

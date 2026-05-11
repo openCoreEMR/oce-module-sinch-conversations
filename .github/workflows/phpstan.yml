@@ -4,9 +4,25 @@ on:
   push:
     branches:
     - main
+    paths:
+    - '**.php'
+    - phpstan.neon
+    - phpstan.neon.dist
+    - phpstan-baseline.neon
+    - composer.json
+    - composer.lock
+    - .github/workflows/phpstan.yml
   pull_request:
     branches:
     - main
+    paths:
+    - '**.php'
+    - phpstan.neon
+    - phpstan.neon.dist
+    - phpstan-baseline.neon
+    - composer.json
+    - composer.lock
+    - .github/workflows/phpstan.yml
 
 jobs:
   phpstan:

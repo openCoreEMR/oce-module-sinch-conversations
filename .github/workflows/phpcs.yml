@@ -4,9 +4,19 @@ on:
   push:
     branches:
     - main
+    paths:
+    - '**.php'
+    - .phpcs.xml*
+    - phpcs.xml*
+    - .github/workflows/phpcs.yml
   pull_request:
     branches:
     - main
+    paths:
+    - '**.php'
+    - .phpcs.xml*
+    - phpcs.xml*
+    - .github/workflows/phpcs.yml
 
 jobs:
   phpcs:

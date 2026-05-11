@@ -4,9 +4,15 @@ on:
   push:
     branches:
     - main
+    paths:
+    - '**.php'
+    - .github/workflows/php-syntax-check.yml
   pull_request:
     branches:
     - main
+    paths:
+    - '**.php'
+    - .github/workflows/php-syntax-check.yml
 
 jobs:
   php-syntax-check:

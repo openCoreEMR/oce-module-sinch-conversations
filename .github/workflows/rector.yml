@@ -4,9 +4,21 @@ on:
   push:
     branches:
     - main
+    paths:
+    - '**.php'
+    - rector.php
+    - composer.json
+    - composer.lock
+    - .github/workflows/rector.yml
   pull_request:
     branches:
     - main
+    paths:
+    - '**.php'
+    - rector.php
+    - composer.json
+    - composer.lock
+    - .github/workflows/rector.yml
 
 jobs:
   rector:
