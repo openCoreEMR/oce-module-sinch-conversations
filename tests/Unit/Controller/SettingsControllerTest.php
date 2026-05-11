@@ -213,15 +213,44 @@ class SettingsControllerTest extends TestCase
         $this->assertInstanceOf(RedirectResponse::class, $response);
     }
 
-    public function testSaveSkipsValidationWhenOnlyNonApiFieldsChange(): void
+    public function testSaveSkipsValidationWhenApiFieldsUnchanged(): void
     {
+        // The real settings form re-posts existing API values even on a
+        // clinic-name-only edit. Validation must skip in that case so an
+        // unrelated edit doesn't make a network call (or get blocked when
+        // Sinch is down).
         $_SERVER['REQUEST_METHOD'] = 'POST';
         $_POST['csrf_token'] = 'valid';
+        $_POST['project_id'] = 'proj-1';
+        $_POST['app_id'] = 'app-1';
+        $_POST['api_key'] = 'key-1';
+        $_POST['region'] = 'us';
+        $_POST['api_secret'] = ''; // Left blank → keep stored secret
         $_POST['clinic_name'] = 'Renamed Clinic';
-        // No project_id/app_id/api_key in POST → validation skipped
         CsrfUtils::setVerifyResult(true);
 
         $this->apiClient->expects($this->never())->method('validateCredentials');
+        $this->configService->expects($this->once())->method('saveSettings');
+
+        $this->controller->dispatch('save');
+    }
+
+    public function testSaveValidatesWhenApiKeyChanges(): void
+    {
+        $_SERVER['REQUEST_METHOD'] = 'POST';
+        $_POST['csrf_token'] = 'valid';
+        $_POST['project_id'] = 'proj-1';
+        $_POST['app_id'] = 'app-1';
+        $_POST['api_key'] = 'rotated-key';
+        $_POST['region'] = 'us';
+        $_POST['api_secret'] = ''; // Reuses stored secret
+        CsrfUtils::setVerifyResult(true);
+
+        // api_key changed → validation runs, reusing the stored secret
+        // (decoded value of base64('secret-1') from setUp).
+        $this->apiClient->expects($this->once())
+            ->method('validateCredentials')
+            ->with('proj-1', 'app-1', 'rotated-key', $this->anything(), 'us');
         $this->configService->expects($this->once())->method('saveSettings');
 
         $this->controller->dispatch('save');

@@ -137,18 +137,23 @@ class SettingsController
 
             // Verify the credentials with Sinch before persisting them, so a
             // misconfiguration is reported here rather than at message-send
-            // time. The api_secret field is left blank in the UI to keep the
-            // existing value, so fall back to the stored secret in that case.
-            // Skip validation when the user is only changing non-API fields
-            // (e.g. clinic name) — structural validation in ConfigService
-            // will catch a partially filled API section.
+            // time. The settings form re-posts the existing API field values
+            // even when the user is only editing clinic info, so detect a
+            // real API edit by comparing the posted tuple to what's stored
+            // (and treat any typed api_secret as an edit, since the UI
+            // leaves that field blank when keeping the existing value).
             $secretForValidation = $settings['api_secret'] ?? $this->config->getSinchApiSecret();
+            $apiFieldChanged = isset($settings['api_secret'])
+                || $settings['project_id'] !== $this->config->getSinchProjectId()
+                || $settings['app_id'] !== $this->config->getSinchAppId()
+                || $settings['api_key'] !== $this->config->getSinchApiKey()
+                || $settings['region'] !== $this->config->getSinchRegion();
             $hasFullApiConfig = $settings['project_id'] !== ''
                 && $settings['app_id'] !== ''
                 && $settings['api_key'] !== ''
                 && $secretForValidation !== '';
             try {
-                if ($hasFullApiConfig) {
+                if ($apiFieldChanged && $hasFullApiConfig) {
                     $this->apiClient->validateCredentials(
                         $settings['project_id'],
                         $settings['app_id'],

@@ -19,6 +19,7 @@ use GuzzleHttp\Exception\GuzzleException;
 use OpenCoreEMR\Modules\SinchConversations\Common\ArrayPath;
 use OpenCoreEMR\Modules\SinchConversations\Common\Json;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
+use OpenCoreEMR\Modules\SinchConversations\Logging\ExceptionContext;
 use OpenCoreEMR\Sinch\Conversation\Exception\ApiException;
 use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
 use OpenEMR\Common\Logging\SystemLogger;
@@ -513,9 +514,14 @@ class ConversationApiClient
 
         $accessToken = $this->requestOAuth2Token($region, $apiKey, $apiSecret);
 
+        // Build the regional URL explicitly. The shared httpClient is bound
+        // to a hardcoded US base_uri, so a relative path would always hit
+        // us.conversation.api.sinch.com regardless of $region.
+        $url = "https://{$region}.conversation.api.sinch.com/v1/projects/{$projectId}/apps/{$appId}";
+
         try {
             $response = $this->httpClient->get(
-                "/v1/projects/{$projectId}/apps/{$appId}",
+                $url,
                 [
                     'headers' => [
                         'Content-Type' => 'application/json',
@@ -524,7 +530,9 @@ class ConversationApiClient
                 ]
             );
         } catch (GuzzleException $e) {
-            $this->logger->error('Credential validation: app lookup failed', ['exception' => $e]);
+            $this->logger->error('Credential validation: app lookup failed', [
+                'exception' => ExceptionContext::fromThrowable($e),
+            ]);
             throw new ApiException('Failed to verify app access', 0, $e);
         }
 
