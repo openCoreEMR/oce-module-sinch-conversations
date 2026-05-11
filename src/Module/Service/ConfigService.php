@@ -122,7 +122,10 @@ class ConfigService
         if (isset($settings['region'])) {
             $region = (string)$settings['region'];
             if (!in_array($region, ConversationApiClient::SUPPORTED_REGIONS, true)) {
-                throw new ValidationException("Region must be 'us' or 'eu'");
+                throw new ValidationException(sprintf(
+                    "Region must be one of: %s",
+                    implode(', ', ConversationApiClient::SUPPORTED_REGIONS),
+                ));
             }
         }
 

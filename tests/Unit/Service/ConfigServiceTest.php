@@ -42,7 +42,7 @@ class ConfigServiceTest extends TestCase
     public function testSaveSettingsRejectsInvalidRegion(): void
     {
         $this->expectException(ValidationException::class);
-        $this->expectExceptionMessage("Region must be 'us' or 'eu'");
+        $this->expectExceptionMessage('Region must be one of: us, eu');
 
         $this->service->saveSettings(['region' => 'invalid']);
     }

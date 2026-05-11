@@ -595,7 +595,9 @@ class ConversationApiClient
             $this->logger->debug("OAuth2 token obtained successfully");
             return $accessToken;
         } catch (GuzzleException $e) {
-            $this->logger->error('OAuth2 request failed', ['exception' => $e]);
+            $this->logger->error('OAuth2 request failed', [
+                'exception' => ExceptionContext::fromThrowable($e),
+            ]);
             throw new ApiException('OAuth2 request failed', 0, $e);
         }
     }
