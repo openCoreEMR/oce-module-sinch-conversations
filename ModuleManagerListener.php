@@ -20,6 +20,8 @@
 
 declare(strict_types=1);
 
+use OpenCoreEMR\Modules\SinchConversations\Logging\ExceptionContext;
+use OpenCoreEMR\Modules\SinchConversations\Schema\ReminderTableMigration;
 use OpenEMR\Common\Database\QueryUtils;
 use OpenEMR\Common\Logging\SystemLogger;
 
@@ -81,7 +83,12 @@ class ModuleManagerListener
             $errorId = \OpenCoreEMR\Modules\SinchConversations\ErrorId::generate();
             (new SystemLogger())->error(
                 'Background service lifecycle action failed',
-                ['errorId' => $errorId, 'method' => $methodName, 'mod_id' => $modId, 'exception' => $e]
+                [
+                    'errorId' => $errorId,
+                    'method' => $methodName,
+                    'mod_id' => $modId,
+                    'exception' => ExceptionContext::fromThrowable($e),
+                ]
             );
             return "Background service $methodName failed (ref: $errorId). Check logs for details.";
         }
@@ -112,7 +119,7 @@ class ModuleManagerListener
     private function enable(): void
     {
         $this->registerBackgroundService();
-        $this->migrateAppointmentRemindersSchema();
+        ReminderTableMigration::ensureUpgraded();
         $this->setBackgroundServiceActive(true);
     }
 
@@ -189,77 +196,5 @@ class ModuleManagerListener
             SQL;
 
         QueryUtils::sqlStatementThrowException($sql, [self::SERVICE_NAME]);
-    }
-
-    /**
-     * In-place upgrade for the appointment reminders dedup table.
-     *
-     * Earlier versions used UNIQUE KEY (pc_eid). That blocks all but the
-     * first occurrence of a recurring appointment from ever sending an
-     * SMS reminder. The new key is (pc_eid, occurrence_date). Module
-     * installers run table.sql on install only, so existing tenants need
-     * an in-place migration on enable.
-     *
-     * Idempotent: detects the new shape via INFORMATION_SCHEMA and
-     * returns immediately if the column already exists.
-     *
-     * Pre-existing dedup rows backfill `occurrence_date` from the parent
-     * event's `pc_eventDate`. For one-shots that's the correct value.
-     * For pre-existing recurring rows (which never sent more than one
-     * reminder anyway under the old key) the backfill is a best-effort
-     * that may cause one occurrence-mismatch dedup; the 90-day TTL on
-     * these rows bounds the impact.
-     *
-     * @throws \Throwable on database failure
-     */
-    private function migrateAppointmentRemindersSchema(): void
-    {
-        $columns = QueryUtils::fetchRecords(
-            'SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
-             WHERE TABLE_SCHEMA = DATABASE()
-               AND TABLE_NAME = ?
-               AND COLUMN_NAME = ?',
-            ['oce_sinch_appointment_reminders', 'occurrence_date']
-        );
-        if (count($columns) > 0) {
-            return;
-        }
-
-        // Verify the table itself exists — if it doesn't, install hasn't
-        // happened yet and table.sql will create the new shape directly.
-        $tables = QueryUtils::fetchRecords(
-            'SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
-             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?',
-            ['oce_sinch_appointment_reminders']
-        );
-        if (count($tables) === 0) {
-            return;
-        }
-
-        QueryUtils::sqlStatementThrowException(
-            'ALTER TABLE `oce_sinch_appointment_reminders`
-                ADD COLUMN `occurrence_date` DATE NULL AFTER `pc_eid`'
-        );
-
-        QueryUtils::sqlStatementThrowException(
-            'UPDATE `oce_sinch_appointment_reminders` r
-             INNER JOIN `openemr_postcalendar_events` e ON e.pc_eid = r.pc_eid
-             SET r.occurrence_date = e.pc_eventDate
-             WHERE r.occurrence_date IS NULL'
-        );
-
-        // Drop any rows the join above could not backfill — they reference
-        // events that no longer exist, so dedup state is moot.
-        QueryUtils::sqlStatementThrowException(
-            'DELETE FROM `oce_sinch_appointment_reminders` WHERE `occurrence_date` IS NULL'
-        );
-
-        QueryUtils::sqlStatementThrowException(
-            'ALTER TABLE `oce_sinch_appointment_reminders`
-                MODIFY `occurrence_date` DATE NOT NULL,
-                DROP INDEX `unique_event_reminder`,
-                ADD UNIQUE KEY `unique_event_occurrence` (`pc_eid`, `occurrence_date`),
-                ADD INDEX `idx_occurrence_date` (`occurrence_date`)'
-        );
     }
 }

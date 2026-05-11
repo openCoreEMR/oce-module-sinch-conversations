@@ -21,6 +21,7 @@ namespace OpenCoreEMR\Modules\SinchConversations\Service;
 use OpenCoreEMR\Modules\SinchConversations\ConsentBlock;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Logging\ExceptionContext;
+use OpenCoreEMR\Modules\SinchConversations\Schema\ReminderTableMigration;
 use OpenCoreEMR\Modules\SinchConversations\SkipReason;
 use OpenEMR\Common\Database\QueryUtils;
 use OpenEMR\Common\Logging\SystemLogger;
@@ -54,6 +55,11 @@ class AppointmentReminderService
             'failed' => 0,
             'errors' => [],
         ];
+
+        // Safety net for tenants who upgrade the module code without
+        // disabling/re-enabling the module. enable() also calls this; both
+        // paths short-circuit once the table is fully migrated.
+        ReminderTableMigration::ensureUpgraded();
 
         $this->purgeExpiredReminders();
 

@@ -68,81 +68,151 @@ class ModuleManagerListenerTest extends TestCase
         $this->assertSame('Success', $result);
 
         $queries = QueryUtils::getQueries();
-        // upsert + 2 INFORMATION_SCHEMA probes (column missing AND table
-        // missing — i.e. enable runs before install has created the table;
-        // migration short-circuits as a no-op) + activate.
-        // Fresh installs that did run table.sql will short-circuit after
-        // the COLUMNS probe (covered by testEnableSkipsMigrationWhenOccurrenceDateColumnAlreadyExists).
-        $this->assertCount(4, $queries);
+        // upsert + TABLES probe (returns empty — install hasn't created
+        // the table yet, so the migration short-circuits as a no-op) +
+        // activate. Fresh installs that ran table.sql first land in
+        // testEnableShortCircuitsWhenSchemaAlreadyAtTarget.
+        $this->assertCount(3, $queries);
 
         $this->assertStringContainsString('INSERT INTO `background_services`', $queries[0]['sql']);
         $this->assertStringContainsString('ON DUPLICATE KEY UPDATE', $queries[0]['sql']);
 
-        $this->assertStringContainsString('INFORMATION_SCHEMA.COLUMNS', $queries[1]['sql']);
-        $this->assertSame(['oce_sinch_appointment_reminders', 'occurrence_date'], $queries[1]['binds']);
+        $this->assertStringContainsString('INFORMATION_SCHEMA.TABLES', $queries[1]['sql']);
+        $this->assertSame(['oce_sinch_appointment_reminders'], $queries[1]['binds']);
 
-        $this->assertStringContainsString('INFORMATION_SCHEMA.TABLES', $queries[2]['sql']);
-        $this->assertSame(['oce_sinch_appointment_reminders'], $queries[2]['binds']);
-
-        $this->assertStringContainsString('UPDATE `background_services` SET `active` = ?', $queries[3]['sql']);
-        $this->assertSame(1, $queries[3]['binds'][0]);
-        $this->assertSame('oce_sinch_reminders', $queries[3]['binds'][1]);
+        $this->assertStringContainsString('UPDATE `background_services` SET `active` = ?', $queries[2]['sql']);
+        $this->assertSame(1, $queries[2]['binds'][0]);
+        $this->assertSame('oce_sinch_reminders', $queries[2]['binds'][1]);
     }
 
-    public function testEnableSkipsMigrationWhenOccurrenceDateColumnAlreadyExists(): void
+    public function testEnableShortCircuitsWhenSchemaAlreadyAtTarget(): void
     {
-        QueryUtils::setMockResult(
-            'SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
-             WHERE TABLE_SCHEMA = DATABASE()
-               AND TABLE_NAME = ?
-               AND COLUMN_NAME = ?',
-            ['oce_sinch_appointment_reminders', 'occurrence_date'],
-            [['COLUMN_NAME' => 'occurrence_date']]
+        $this->mockMigrationShape(
+            tableExists: true,
+            columnIsNullable: false,
+            indexes: ['unique_event_occurrence', 'idx_occurrence_date', 'idx_patient_id', 'idx_sent_at']
         );
 
         $listener = \ModuleManagerListener::initListenerSelf();
         $listener->moduleManagerAction('enable', 1, 'Success');
 
         $queries = QueryUtils::getQueries();
-        // upsert + column probe (returned a row → short-circuit) + activate
-        $this->assertCount(3, $queries);
-        $this->assertStringContainsString('INFORMATION_SCHEMA.COLUMNS', $queries[1]['sql']);
-        $this->assertStringContainsString('UPDATE `background_services`', $queries[2]['sql']);
+        // upsert + 3 probes (TABLES, COLUMNS, STATISTICS) + activate. No ALTERs.
+        $this->assertCount(5, $queries);
+
+        $alterCount = count(array_filter(
+            $queries,
+            static fn(array $q): bool => str_starts_with(ltrim($q['sql']), 'ALTER TABLE')
+        ));
+        $this->assertSame(0, $alterCount, 'Already-migrated schema must not run ALTERs');
     }
 
     public function testEnableRunsMigrationWhenLegacyTableExists(): void
     {
-        // Column missing, but table exists — old shape, must migrate.
-        QueryUtils::setMockResult(
-            'SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
-             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?',
-            ['oce_sinch_appointment_reminders'],
-            [['TABLE_NAME' => 'oce_sinch_appointment_reminders']]
+        // Old shape: column missing, old unique index present, no new index.
+        $this->mockMigrationShape(
+            tableExists: true,
+            columnIsNullable: null, // column does not exist
+            indexes: ['unique_event_reminder', 'idx_patient_id', 'idx_sent_at']
         );
 
         $listener = \ModuleManagerListener::initListenerSelf();
         $listener->moduleManagerAction('enable', 1, 'Success');
 
         $queries = QueryUtils::getQueries();
-        $alterColumnAdds = array_filter(
-            $queries,
-            static fn(array $q): bool => str_contains($q['sql'], 'ADD COLUMN `occurrence_date`')
-        );
-        $this->assertCount(1, $alterColumnAdds);
 
-        $backfills = array_filter(
-            $queries,
-            static fn(array $q): bool => str_contains($q['sql'], 'UPDATE `oce_sinch_appointment_reminders` r')
-                && str_contains($q['sql'], 'SET r.occurrence_date = e.pc_eventDate')
+        $this->assertCount(
+            1,
+            array_filter($queries, static fn(array $q): bool => str_contains($q['sql'], 'ADD COLUMN `occurrence_date`'))
         );
-        $this->assertCount(1, $backfills);
+        $this->assertCount(
+            1,
+            array_filter($queries, static fn(array $q): bool => str_contains($q['sql'], 'UPDATE `oce_sinch_appointment_reminders` r')
+                && str_contains($q['sql'], 'SET r.`occurrence_date` = e.pc_eventDate'))
+        );
+        $this->assertCount(
+            1,
+            array_filter($queries, static fn(array $q): bool => str_contains($q['sql'], 'MODIFY `occurrence_date` DATE NOT NULL'))
+        );
+        $this->assertCount(
+            1,
+            array_filter($queries, static fn(array $q): bool => str_contains($q['sql'], 'DROP INDEX `unique_event_reminder`'))
+        );
+        $this->assertCount(
+            1,
+            array_filter($queries, static fn(array $q): bool => str_contains($q['sql'], 'ADD UNIQUE KEY `unique_event_occurrence`'))
+        );
+        $this->assertCount(
+            1,
+            array_filter($queries, static fn(array $q): bool => str_contains($q['sql'], 'ADD INDEX `idx_occurrence_date`'))
+        );
+    }
 
-        $finalize = array_filter(
-            $queries,
-            static fn(array $q): bool => str_contains($q['sql'], 'unique_event_occurrence')
-                && str_contains($q['sql'], 'DROP INDEX `unique_event_reminder`')
+    public function testEnableFinishesMigrationWhenPartiallyApplied(): void
+    {
+        // Partial-migration scenario: column was added (still nullable) and
+        // the old unique key is still present, but no new indexes exist
+        // (e.g., a previous enable was interrupted between ALTERs).
+        $this->mockMigrationShape(
+            tableExists: true,
+            columnIsNullable: true,
+            indexes: ['unique_event_reminder', 'idx_patient_id', 'idx_sent_at']
         );
-        $this->assertCount(1, $finalize);
+
+        $listener = \ModuleManagerListener::initListenerSelf();
+        $listener->moduleManagerAction('enable', 1, 'Success');
+
+        $queries = QueryUtils::getQueries();
+
+        // ADD COLUMN must NOT run a second time — column already exists.
+        $this->assertCount(
+            0,
+            array_filter($queries, static fn(array $q): bool => str_contains($q['sql'], 'ADD COLUMN `occurrence_date`'))
+        );
+
+        // The remaining steps must finish the migration.
+        $this->assertCount(
+            1,
+            array_filter($queries, static fn(array $q): bool => str_contains($q['sql'], 'MODIFY `occurrence_date` DATE NOT NULL'))
+        );
+        $this->assertCount(
+            1,
+            array_filter($queries, static fn(array $q): bool => str_contains($q['sql'], 'DROP INDEX `unique_event_reminder`'))
+        );
+        $this->assertCount(
+            1,
+            array_filter($queries, static fn(array $q): bool => str_contains($q['sql'], 'ADD UNIQUE KEY `unique_event_occurrence`'))
+        );
+    }
+
+    /**
+     * @param bool|null $columnIsNullable null = column does not exist
+     * @param list<string> $indexes
+     */
+    private function mockMigrationShape(bool $tableExists, ?bool $columnIsNullable, array $indexes): void
+    {
+        QueryUtils::setMockResult(
+            'SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?',
+            ['oce_sinch_appointment_reminders'],
+            $tableExists ? [['TABLE_NAME' => 'oce_sinch_appointment_reminders']] : []
+        );
+
+        QueryUtils::setMockResult(
+            'SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = ?
+               AND COLUMN_NAME = ?',
+            ['oce_sinch_appointment_reminders', 'occurrence_date'],
+            $columnIsNullable === null ? [] : [['IS_NULLABLE' => $columnIsNullable ? 'YES' : 'NO']]
+        );
+
+        QueryUtils::setMockResult(
+            'SELECT DISTINCT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?',
+            ['oce_sinch_appointment_reminders'],
+            array_map(static fn(string $name): array => ['INDEX_NAME' => $name], $indexes)
+        );
     }
 
     public function testDisableDeactivatesBackgroundService(): void
