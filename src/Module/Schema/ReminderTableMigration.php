@@ -44,12 +44,22 @@ final class ReminderTableMigration
     private const OLD_UNIQUE_INDEX = 'unique_event_reminder';
     private const NEW_UNIQUE_INDEX = 'unique_event_occurrence';
     private const DATE_INDEX = 'idx_occurrence_date';
+    private const LOCK_NAME = 'oce_sinch_reminder_migration';
+    private const LOCK_TIMEOUT_SECONDS = 30;
 
     /**
      * Bring the dedup table to the target shape.
      *
      * Idempotent and partial-migration safe. No-op once the table is fully
      * migrated, or when the table doesn't exist yet (install hasn't run).
+     *
+     * Concurrency: this method runs from both `ModuleManagerListener::enable()`
+     * and the reminder cron, which can race (admin clicks Enable while a cron
+     * tick is mid-run). A MySQL session-level advisory lock (`GET_LOCK`)
+     * serialises the migration so two callers don't both attempt
+     * `ADD COLUMN` / `DROP INDEX` and one fail with a duplicate-DDL error.
+     * The fast-path probe at the top avoids taking the lock entirely once
+     * the table is fully migrated.
      *
      * @throws \Throwable on database failure
      */
@@ -65,6 +75,49 @@ final class ReminderTableMigration
             return;
         }
 
+        if (!self::acquireLock()) {
+            // Another process is already migrating. Wait was up to
+            // LOCK_TIMEOUT_SECONDS; if they finished in that window the
+            // table is now migrated and we can return cleanly. Otherwise
+            // surface the timeout — the caller (cron / enable) will log
+            // and we'll retry next tick.
+            $shape = self::probeShape();
+            if ($shape !== null && $shape['fully_migrated']) {
+                return;
+            }
+            throw new \RuntimeException(sprintf(
+                'Could not acquire migration advisory lock "%s" within %ds',
+                self::LOCK_NAME,
+                self::LOCK_TIMEOUT_SECONDS
+            ));
+        }
+
+        try {
+            // Re-probe under the lock — the previous holder may have
+            // completed the migration while we waited.
+            $shape = self::probeShape();
+            if ($shape === null || $shape['fully_migrated']) {
+                return;
+            }
+
+            self::runMigrationSteps($shape);
+        } finally {
+            self::releaseLock();
+        }
+    }
+
+    /**
+     * @param array{
+     *     column_exists: bool,
+     *     column_nullable: bool,
+     *     old_unique_index_exists: bool,
+     *     new_unique_index_exists: bool,
+     *     date_index_exists: bool,
+     *     fully_migrated: bool
+     * } $shape
+     */
+    private static function runMigrationSteps(array $shape): void
+    {
         if (!$shape['column_exists']) {
             QueryUtils::sqlStatementThrowException(
                 'ALTER TABLE `' . self::TABLE . '`
@@ -181,5 +234,32 @@ final class ReminderTableMigration
             'date_index_exists' => $dateIndex,
             'fully_migrated' => $fullyMigrated,
         ];
+    }
+
+    /**
+     * Acquire a MySQL session-level advisory lock.
+     *
+     * `GET_LOCK` returns 1 on success, 0 on timeout, NULL on error or
+     * when the connection's wait was killed. Treat anything other than
+     * 1 as "not acquired".
+     */
+    private static function acquireLock(): bool
+    {
+        $row = QueryUtils::fetchRecords(
+            'SELECT GET_LOCK(?, ?) AS got',
+            [self::LOCK_NAME, self::LOCK_TIMEOUT_SECONDS]
+        );
+        return (int) ($row[0]['got'] ?? 0) === 1;
+    }
+
+    /**
+     * Release the advisory lock acquired by acquireLock().
+     */
+    private static function releaseLock(): void
+    {
+        QueryUtils::sqlStatementThrowException(
+            'DO RELEASE_LOCK(?)',
+            [self::LOCK_NAME]
+        );
     }
 }

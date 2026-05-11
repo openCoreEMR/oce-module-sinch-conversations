@@ -176,8 +176,12 @@ class AppointmentReminderService
      * Bulk-load already-sent reminder keys for the active window.
      *
      * Returned map keys are `"{pc_eid}|{occurrence_date}"`; values are
-     * irrelevant (presence is the signal). One round trip replaces a
-     * per-occurrence SELECT in the eligibility loop.
+     * irrelevant (presence is the signal). One round trip up front
+     * supplies the dedup state for every appointment in the window —
+     * cheaper than a per-occurrence SELECT and necessary because the
+     * old `LEFT JOIN ... r.id IS NULL` filter no longer fits now that
+     * the dedup key is `(pc_eid, occurrence_date)` and the appointment
+     * source has moved out of SQL into the finder.
      *
      * @return array<string, true>
      */
@@ -197,13 +201,22 @@ class AppointmentReminderService
     }
 
     /**
-     * Record that a reminder was sent for a specific occurrence
+     * Record that a reminder was sent for a specific occurrence.
      *
-     * Use INSERT IGNORE to handle race conditions where concurrent cron runs
-     * both pass the dedup check and attempt to insert. The UNIQUE KEY on
-     * (pc_eid, occurrence_date) ensures only one succeeds; the other is
-     * silently ignored. Recurring appointments share `pc_eid` across their
-     * occurrences, so `occurrence_date` is what distinguishes them.
+     * The UNIQUE KEY on `(pc_eid, occurrence_date)` exists so re-runs of
+     * the cron — same process, next tick — never insert a second log row
+     * for an occurrence already sent. It does NOT make the
+     * send-then-record sequence atomic: if two processes ever raced past
+     * the bulk dedup check at the top of run(), both would send before
+     * either reached this insert. The actual concurrency guard for that
+     * scenario lives in OpenEMR's `background_services.running` flag,
+     * which serializes cron invocations of this service.
+     *
+     * INSERT IGNORE keeps the call idempotent under that re-run pattern
+     * (and tolerates a pessimistic re-record from any future retry path)
+     * by silently dropping a duplicate-key collision instead of throwing.
+     * Recurring appointments share `pc_eid` across their occurrences, so
+     * `occurrence_date` is what distinguishes them.
      */
     private function recordReminderSent(
         int $pcEid,

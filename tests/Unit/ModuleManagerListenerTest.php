@@ -148,6 +148,75 @@ class ModuleManagerListenerTest extends TestCase
         );
     }
 
+    public function testEnableConvergesWhenAnotherProcessFinishedMigrationFirst(): void
+    {
+        // Simulate: lock contention — we couldn't acquire the lock — but
+        // by the time we re-probe the holder has already finished. The
+        // migration should return cleanly (not throw) since the schema
+        // is now at the target shape.
+        QueryUtils::setMockResult(
+            'SELECT GET_LOCK(?, ?) AS got',
+            ['oce_sinch_reminder_migration', 30],
+            [['got' => 0]]
+        );
+        // First probe: legacy shape (forces the lock acquisition attempt).
+        // Second probe (after lock fails): fully migrated.
+        QueryUtils::setMockResult(
+            'SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?',
+            ['oce_sinch_appointment_reminders'],
+            [['TABLE_NAME' => 'oce_sinch_appointment_reminders']]
+        );
+        QueryUtils::queueMockResult(
+            'SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = ?
+               AND COLUMN_NAME = ?',
+            ['oce_sinch_appointment_reminders', 'occurrence_date'],
+            [] // first probe: column missing
+        );
+        QueryUtils::queueMockResult(
+            'SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = ?
+               AND COLUMN_NAME = ?',
+            ['oce_sinch_appointment_reminders', 'occurrence_date'],
+            [['IS_NULLABLE' => 'NO']] // second probe: column NOT NULL
+        );
+        QueryUtils::queueMockResult(
+            'SELECT DISTINCT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?',
+            ['oce_sinch_appointment_reminders'],
+            [['INDEX_NAME' => 'unique_event_reminder']] // first probe: legacy
+        );
+        QueryUtils::queueMockResult(
+            'SELECT DISTINCT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?',
+            ['oce_sinch_appointment_reminders'],
+            [
+                ['INDEX_NAME' => 'unique_event_occurrence'],
+                ['INDEX_NAME' => 'idx_occurrence_date'],
+            ] // second probe: fully migrated
+        );
+
+        $listener = \ModuleManagerListener::initListenerSelf();
+        $result = $listener->moduleManagerAction('enable', 1, 'Success');
+
+        $this->assertSame('Success', $result);
+
+        $queries = QueryUtils::getQueries();
+        $this->assertCount(
+            0,
+            array_filter($queries, static fn(array $q): bool => str_starts_with(ltrim($q['sql']), 'ALTER TABLE')),
+            'No ALTERs should run when another process finished the migration'
+        );
+        $this->assertCount(
+            0,
+            array_filter($queries, static fn(array $q): bool => str_contains($q['sql'], 'RELEASE_LOCK')),
+            'RELEASE_LOCK only runs when GET_LOCK succeeded'
+        );
+    }
+
     public function testEnableFinishesMigrationWhenPartiallyApplied(): void
     {
         // Partial-migration scenario: column was added (still nullable) and
@@ -189,8 +258,18 @@ class ModuleManagerListenerTest extends TestCase
      * @param bool|null $columnIsNullable null = column does not exist
      * @param list<string> $indexes
      */
-    private function mockMigrationShape(bool $tableExists, ?bool $columnIsNullable, array $indexes): void
-    {
+    private function mockMigrationShape(
+        bool $tableExists,
+        ?bool $columnIsNullable,
+        array $indexes,
+        bool $lockAcquired = true
+    ): void {
+        QueryUtils::setMockResult(
+            'SELECT GET_LOCK(?, ?) AS got',
+            ['oce_sinch_reminder_migration', 30],
+            [['got' => $lockAcquired ? 1 : 0]]
+        );
+
         QueryUtils::setMockResult(
             'SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
              WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?',
