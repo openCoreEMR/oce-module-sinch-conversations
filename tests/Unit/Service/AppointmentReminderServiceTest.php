@@ -581,12 +581,19 @@ class AppointmentReminderServiceTest extends TestCase
 
     public function testRunSendsOneReminderPerOccurrenceForRecurringAppointment(): void
     {
-        // Same pc_eid, three different occurrence dates — what fetchAllEvents
-        // produces for a daily-recurring appointment.
+        // Use dates relative to "now" so the occurrences mirror what a real
+        // CoreAppointmentFinder would return for a daily-recurring appointment
+        // within the active reminder window. The stub doesn't enforce the
+        // window contract — this is for readability and contract-fidelity.
+        $now = new \DateTimeImmutable();
+        $day1 = $now->modify('+1 day')->format('Y-m-d');
+        $day2 = $now->modify('+2 days')->format('Y-m-d');
+        $day3 = $now->modify('+3 days')->format('Y-m-d');
+
         $this->mockUpcomingAppointments([
-            $this->makeAppointment(900, 70, '2026-04-01', '09:00:00', '+15557770001', 'YES'),
-            $this->makeAppointment(900, 70, '2026-04-02', '09:00:00', '+15557770001', 'YES'),
-            $this->makeAppointment(900, 70, '2026-04-03', '09:00:00', '+15557770001', 'YES'),
+            $this->makeAppointment(900, 70, $day1, '09:00:00', '+15557770001', 'YES'),
+            $this->makeAppointment(900, 70, $day2, '09:00:00', '+15557770001', 'YES'),
+            $this->makeAppointment(900, 70, $day3, '09:00:00', '+15557770001', 'YES'),
         ]);
         $this->mockActiveConsent(70, '+15557770001');
 
@@ -617,25 +624,30 @@ class AppointmentReminderServiceTest extends TestCase
             $inserts
         );
         sort($occurrenceDates);
-        $this->assertSame(['2026-04-01', '2026-04-02', '2026-04-03'], $occurrenceDates);
+        $this->assertSame([$day1, $day2, $day3], $occurrenceDates);
     }
 
     public function testRunSkipsRecurringOccurrenceAlreadySent(): void
     {
+        $now = new \DateTimeImmutable();
+        $day1 = $now->modify('+1 day')->format('Y-m-d');
+        $day2 = $now->modify('+2 days')->format('Y-m-d');
+        $day3 = $now->modify('+3 days')->format('Y-m-d');
+
         $this->mockUpcomingAppointments([
-            $this->makeAppointment(901, 71, '2026-04-01', '10:00:00', '+15557770002', 'YES'),
-            $this->makeAppointment(901, 71, '2026-04-02', '10:00:00', '+15557770002', 'YES'),
-            $this->makeAppointment(901, 71, '2026-04-03', '10:00:00', '+15557770002', 'YES'),
+            $this->makeAppointment(901, 71, $day1, '10:00:00', '+15557770002', 'YES'),
+            $this->makeAppointment(901, 71, $day2, '10:00:00', '+15557770002', 'YES'),
+            $this->makeAppointment(901, 71, $day3, '10:00:00', '+15557770002', 'YES'),
         ]);
         $this->mockActiveConsent(71, '+15557770002');
 
-        // Pre-seed the dedup table: April 2 has already been sent.
+        // Pre-seed the dedup table: middle day has already been sent.
         QueryUtils::setMockResult(
             "SELECT pc_eid, occurrence_date
                 FROM oce_sinch_appointment_reminders
                 WHERE occurrence_date BETWEEN ? AND ?",
-            [(new \DateTimeImmutable())->format('Y-m-d'), (new \DateTimeImmutable())->modify('+24 hours')->format('Y-m-d')],
-            [['pc_eid' => 901, 'occurrence_date' => '2026-04-02']]
+            [$now->format('Y-m-d'), $now->modify('+24 hours')->format('Y-m-d')],
+            [['pc_eid' => 901, 'occurrence_date' => $day2]]
         );
 
         $this->templateService->method('getAppointmentReminderTemplateKey')
@@ -663,13 +675,14 @@ class AppointmentReminderServiceTest extends TestCase
             $inserts
         );
         sort($occurrenceDates);
-        $this->assertSame(['2026-04-01', '2026-04-03'], $occurrenceDates);
+        $this->assertSame([$day1, $day3], $occurrenceDates);
     }
 
     public function testRecordedReminderBindsIncludeOccurrenceDate(): void
     {
+        $occurrenceDate = (new \DateTimeImmutable())->modify('+1 day')->format('Y-m-d');
         $this->mockUpcomingAppointments([
-            $this->makeAppointment(902, 72, '2026-04-15', '09:00:00', '+15557770003', 'YES'),
+            $this->makeAppointment(902, 72, $occurrenceDate, '09:00:00', '+15557770003', 'YES'),
         ]);
         $this->mockActiveConsent(72, '+15557770003');
 
@@ -689,7 +702,7 @@ class AppointmentReminderServiceTest extends TestCase
         ));
         $this->assertCount(1, $inserts);
         $this->assertSame(902, $inserts[0]['binds'][0]);
-        $this->assertSame('2026-04-15', $inserts[0]['binds'][1]);
+        $this->assertSame($occurrenceDate, $inserts[0]['binds'][1]);
         $this->assertSame(72, $inserts[0]['binds'][2]);
         $this->assertSame('appointment_reminder_no_portal', $inserts[0]['binds'][3]);
     }

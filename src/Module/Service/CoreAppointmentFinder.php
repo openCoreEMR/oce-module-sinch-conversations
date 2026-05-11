@@ -36,8 +36,9 @@ class CoreAppointmentFinder implements UpcomingAppointmentFinder
         require_once $fileroot . '/library/appointments.inc.php';
 
         $windowEnd = $now->modify(sprintf('+%d hours', $windowHours));
-        // fetchAllEvents filters by date (Y-m-d), so widen one extra day
-        // to be safe — we re-check the precise time bound in PHP below.
+        // fetchAllEvents filters by date (Y-m-d) inclusive on both ends,
+        // so a window that crosses midnight already pulls in the trailing
+        // calendar day. We re-check the precise time bound in PHP below.
         $fromDate = $now->format('Y-m-d');
         $toDate = $windowEnd->format('Y-m-d');
 

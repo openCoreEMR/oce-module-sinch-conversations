@@ -68,8 +68,11 @@ class ModuleManagerListenerTest extends TestCase
         $this->assertSame('Success', $result);
 
         $queries = QueryUtils::getQueries();
-        // upsert + 2 INFORMATION_SCHEMA probes (column + table; both empty
-        // so migration short-circuits as a no-op for fresh installs) + activate
+        // upsert + 2 INFORMATION_SCHEMA probes (column missing AND table
+        // missing — i.e. enable runs before install has created the table;
+        // migration short-circuits as a no-op) + activate.
+        // Fresh installs that did run table.sql will short-circuit after
+        // the COLUMNS probe (covered by testEnableSkipsMigrationWhenOccurrenceDateColumnAlreadyExists).
         $this->assertCount(4, $queries);
 
         $this->assertStringContainsString('INSERT INTO `background_services`', $queries[0]['sql']);
