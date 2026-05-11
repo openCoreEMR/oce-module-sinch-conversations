@@ -25,5 +25,5 @@ jobs:
     uses: openCoreEMR/github-workflows-public/.github/workflows/php-composer-script.yml@0.0.2
     with:
       name: Run Composer Require Checker
-      run: composer-require-checker check --config-file=.composer-require-checker.json
+      run: composer require-checker
       php-tools: composer:v2, composer-require-checker
