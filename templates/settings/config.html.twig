@@ -148,21 +148,7 @@
                 <h3>{{ 'Messaging Configuration'|xlt }}</h3>
             </div>
 
-            <div class="mb-3">
-                <label for="default_channel" class="form-label">{{ 'Default Channel'|xlt }}{% if not is_external_config %} <span class="text-danger">*</span>{% endif %}</label>
-                <select class="form-select" id="default_channel" name="default_channel" {% if is_external_config %}disabled{% else %}required{% endif %}>
-                    <option value="SMS" {% if settings.default_channel == 'SMS' %}selected{% endif %}>
-                        {{ 'SMS'|xlt }}
-                    </option>
-                    <option value="WHATSAPP" {% if settings.default_channel == 'WHATSAPP' %}selected{% endif %}>
-                        {{ 'WhatsApp'|xlt }}
-                    </option>
-                    <option value="RCS" {% if settings.default_channel == 'RCS' %}selected{% endif %}>
-                        {{ 'RCS'|xlt }}
-                    </option>
-                </select>
-                <div class="help-text">{{ 'Default messaging channel for new conversations'|xlt }}</div>
-            </div>
+            {# Default Channel is hidden until WhatsApp/RCS are supported. SMS is the only option. #}
 
             <div class="mb-3">
                 <label for="clinic_name" class="form-label">{{ 'Clinic Name'|xlt }}</label>
