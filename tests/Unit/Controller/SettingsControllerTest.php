@@ -235,6 +235,47 @@ class SettingsControllerTest extends TestCase
         $this->controller->dispatch('save');
     }
 
+    public function testSaveRejectsApiTupleWithoutSecret(): void
+    {
+        // First-time API config: no secret stored, none typed. The save
+        // must be refused with a clear local message rather than silently
+        // persisting a project/app/key tuple that can never authenticate.
+        $config = new GlobalConfig(new MockGlobalsAccessor([
+            GlobalConfig::CONFIG_OPTION_REGION => 'us',
+        ]), new MockConfigFactory());
+        $controller = new SettingsController(
+            $config,
+            $this->configService,
+            $this->apiClient,
+            $this->syncService,
+            $this->session,
+            $this->twig,
+            new SystemLogger()
+        );
+
+        $_SERVER['REQUEST_METHOD'] = 'POST';
+        $_POST['csrf_token'] = 'valid';
+        $_POST['project_id'] = 'new-proj';
+        $_POST['app_id'] = 'new-app';
+        $_POST['api_key'] = 'new-key';
+        $_POST['region'] = 'us';
+        $_POST['api_secret'] = '';
+        CsrfUtils::setVerifyResult(true);
+
+        $this->apiClient->expects($this->never())->method('validateCredentials');
+        $this->configService->expects($this->never())->method('saveSettings');
+        $this->session->expects($this->once())
+            ->method('setFlash')
+            ->with(
+                'settings_message',
+                $this->stringContains('API Secret is required')
+            );
+
+        $response = $controller->dispatch('save');
+
+        $this->assertInstanceOf(RedirectResponse::class, $response);
+    }
+
     public function testSaveValidatesWhenApiKeyChanges(): void
     {
         $_SERVER['REQUEST_METHOD'] = 'POST';
