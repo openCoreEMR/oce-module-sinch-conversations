@@ -9,17 +9,29 @@
  * transition, so they know they will start receiving SMS from the clinic.
  *
  * Coverage note: this listener subscribes to PatientUpdatedEvent /
- * PatientCreatedEvent. Both chart UI save paths reach those events:
- * demographics_save.php updates flow through updatePatientData() →
- * PatientService::databaseUpdate(), which dispatches PatientUpdatedEvent
- * with a real findByPid() pre-update snapshot; and new_patient_save.php
- * dispatches PatientCreatedEvent after newPatientData() via the
- * notifier added in upstream openemr/openemr#12083 (backported to
- * oce-800 in opencoreemr/openemr-internal#484). Either path will fire
- * the welcome SMS on a NO->YES transition. Eligibility is independent
- * regardless: MessageService::assertPatientEligible() reads
- * hipaa_allowsms live at send time, so reminders are reachable as soon
- * as the chart shows YES.
+ * PatientCreatedEvent.
+ *
+ * Update path (demographics_save.php): updates flow through
+ * updatePatientData() → PatientService::databaseUpdate(), which
+ * dispatches PatientUpdatedEvent with a findByPid() pre-update
+ * snapshot. The welcome SMS fires on a NO->YES hipaa_allowsms
+ * transition. This has been the behavior since updatePatientData()
+ * was rerouted through PatientService.
+ *
+ * Create path (new_patient_save.php): newPatientData() does raw
+ * REPLACE INTO patient_data and historically did not fire
+ * PatientCreatedEvent. Upstream openemr/openemr#12083 added a
+ * dispatch after the insert returns; the welcome SMS fires when
+ * hipaa_allowsms is YES at creation (no prior state to compare
+ * against). The fix is on upstream master but is not yet in a
+ * tagged release as of v8_0_0_3, so vanilla OpenEMR builds at or
+ * below v8_0_0_3 still miss the welcome SMS for chart-UI creates.
+ *
+ * Eligibility is independent of either event:
+ * MessageService::assertPatientEligible() reads hipaa_allowsms live
+ * at send time, so appointment reminders are reachable as soon as
+ * the chart shows YES regardless of which save path was used or
+ * which OpenEMR build is running.
  *
  * @package   OpenCoreEMR
  * @link      https://opencoreemr.com
