@@ -19,13 +19,18 @@ use GuzzleHttp\Exception\GuzzleException;
 use OpenCoreEMR\Modules\SinchConversations\Common\ArrayPath;
 use OpenCoreEMR\Modules\SinchConversations\Common\Json;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
+use OpenCoreEMR\Modules\SinchConversations\Logging\ExceptionContext;
 use OpenCoreEMR\Sinch\Conversation\Exception\ApiException;
+use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
 use OpenEMR\Common\Logging\SystemLogger;
 
 class ConversationApiClient
 {
     private const BASE_URL = 'https://us.conversation.api.sinch.com';
     private const CONSENT_MAX_PAGES = 100;
+
+    /** @var list<string> Sinch Conversations regions this client can talk to */
+    public const SUPPORTED_REGIONS = ['us', 'eu'];
     private readonly Client $httpClient;
     private readonly SystemLogger $logger;
     private ?string $cachedAccessToken = null;
@@ -471,12 +476,84 @@ class ConversationApiClient
      */
     public function getOAuth2Token(): string
     {
-        $region = $this->config->getSinchRegion();
-        $keyId = $this->config->getSinchApiKey();
-        $keySecret = $this->config->getSinchApiSecret();
+        return $this->requestOAuth2Token(
+            $this->config->getSinchRegion(),
+            $this->config->getSinchApiKey(),
+            $this->config->getSinchApiSecret(),
+        );
+    }
 
+    /**
+     * Validate Sinch credentials by exchanging them for an OAuth2 token and
+     * confirming the project/app are accessible. Used by the settings save
+     * flow to verify credentials before persisting them, so callers must
+     * pass the candidate values explicitly rather than read $this->config.
+     *
+     * @throws ValidationException When required fields are empty
+     * @throws ApiException When OAuth or app lookup fails
+     */
+    public function validateCredentials(
+        string $projectId,
+        string $appId,
+        string $apiKey,
+        string $apiSecret,
+        string $region,
+    ): void {
+        if ($projectId === '') {
+            throw new ValidationException('Project ID is required');
+        }
+        if ($appId === '') {
+            throw new ValidationException('App ID is required');
+        }
+        if ($apiKey === '') {
+            throw new ValidationException('API Key is required');
+        }
+        if ($apiSecret === '') {
+            throw new ValidationException('API Secret is required');
+        }
+        if ($region === '') {
+            throw new ValidationException('Region is required');
+        }
+
+        $accessToken = $this->requestOAuth2Token($region, $apiKey, $apiSecret);
+
+        // Build the regional URL explicitly. The shared httpClient is bound
+        // to a hardcoded US base_uri, so a relative path would always hit
+        // us.conversation.api.sinch.com regardless of $region.
+        $url = "https://{$region}.conversation.api.sinch.com/v1/projects/{$projectId}/apps/{$appId}";
+
+        try {
+            $response = $this->httpClient->get(
+                $url,
+                [
+                    'headers' => [
+                        'Content-Type' => 'application/json',
+                        'Authorization' => "Bearer {$accessToken}",
+                    ],
+                ]
+            );
+        } catch (GuzzleException $e) {
+            $this->logger->error('Credential validation: app lookup failed', [
+                'exception' => ExceptionContext::fromThrowable($e),
+            ]);
+            throw new ApiException('Failed to verify app access', 0, $e);
+        }
+
+        $this->handleResponse($response);
+    }
+
+    private function requestOAuth2Token(string $region, string $keyId, string $keySecret): string
+    {
         if (empty($keyId) || empty($keySecret)) {
             throw new ApiException("API Key ID and Secret are required for OAuth2 authentication");
+        }
+
+        if (!in_array($region, self::SUPPORTED_REGIONS, true)) {
+            throw new ApiException(sprintf(
+                "Unsupported Sinch region '%s'; supported regions are: %s",
+                $region,
+                implode(', ', self::SUPPORTED_REGIONS),
+            ));
         }
 
         try {
@@ -518,7 +595,9 @@ class ConversationApiClient
             $this->logger->debug("OAuth2 token obtained successfully");
             return $accessToken;
         } catch (GuzzleException $e) {
-            $this->logger->error('OAuth2 request failed', ['exception' => $e]);
+            $this->logger->error('OAuth2 request failed', [
+                'exception' => ExceptionContext::fromThrowable($e),
+            ]);
             throw new ApiException('OAuth2 request failed', 0, $e);
         }
     }

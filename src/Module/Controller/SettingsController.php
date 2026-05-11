@@ -22,6 +22,8 @@ use OpenCoreEMR\Modules\SinchConversations\Service\TemplateSyncService;
 use OpenCoreEMR\Modules\SinchConversations\SessionAccessor;
 use OpenCoreEMR\Sinch\Conversation\Client\ConversationApiClient;
 use OpenCoreEMR\Sinch\Conversation\Exception\AccessDeniedException;
+use OpenCoreEMR\Sinch\Conversation\Exception\ApiException;
+use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
 use OpenEMR\Common\Csrf\CsrfUtils;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -131,6 +133,63 @@ class SettingsController
             $apiSecret = $request->request->get('api_secret', '');
             if ($apiSecret !== null && $apiSecret !== '') {
                 $settings['api_secret'] = (string)$apiSecret;
+            }
+
+            // Verify the credentials with Sinch before persisting them, so a
+            // misconfiguration is reported here rather than at message-send
+            // time. The settings form re-posts the existing API field values
+            // even when the user is only editing clinic info, so detect a
+            // real API edit by comparing the posted tuple to what's stored
+            // (and treat any typed api_secret as an edit, since the UI
+            // leaves that field blank when keeping the existing value).
+            $secretForValidation = $settings['api_secret'] ?? $this->config->getSinchApiSecret();
+            $apiFieldChanged = isset($settings['api_secret'])
+                || $settings['project_id'] !== $this->config->getSinchProjectId()
+                || $settings['app_id'] !== $this->config->getSinchAppId()
+                || $settings['api_key'] !== $this->config->getSinchApiKey()
+                || $settings['region'] !== $this->config->getSinchRegion();
+            $hasApiTuple = $settings['project_id'] !== ''
+                && $settings['app_id'] !== ''
+                && $settings['api_key'] !== '';
+
+            // Reject saves that would persist API fields with no usable
+            // secret (no value typed in the form and none on file). Without
+            // this gate, validation would be skipped and the partial config
+            // saved silently, defeating the point of validation.
+            if ($hasApiTuple && $secretForValidation === '') {
+                $this->session->setFlash(
+                    'settings_message',
+                    "API Secret is required to configure Sinch credentials. Settings were not saved."
+                );
+                return $this->redirect($request);
+            }
+
+            // $hasApiTuple → $secretForValidation !== '' here (the guard
+            // above returned when an API tuple lacked a secret).
+            $hasFullApiConfig = $hasApiTuple
+                && in_array($settings['region'], ConversationApiClient::SUPPORTED_REGIONS, true);
+            try {
+                if ($apiFieldChanged && $hasFullApiConfig) {
+                    $this->apiClient->validateCredentials(
+                        $settings['project_id'],
+                        $settings['app_id'],
+                        $settings['api_key'],
+                        $secretForValidation,
+                        $settings['region'],
+                    );
+                }
+            } catch (ValidationException | ApiException $e) {
+                $errorId = ErrorId::generate();
+                $this->logger->warning('Settings credential validation failed', [
+                    'errorId' => $errorId,
+                    'exception' => ExceptionContext::fromThrowable($e),
+                ]);
+                $this->session->setFlash(
+                    'settings_message',
+                    "Credentials could not be verified with Sinch (ref: $errorId). " .
+                        "Settings were not saved. Check logs for details."
+                );
+                return $this->redirect($request);
             }
 
             // Save settings

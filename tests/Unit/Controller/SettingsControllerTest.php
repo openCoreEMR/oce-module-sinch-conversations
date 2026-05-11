@@ -23,6 +23,7 @@ use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockConfigFactory;
 use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockGlobalsAccessor;
 use OpenCoreEMR\Sinch\Conversation\Client\ConversationApiClient;
 use OpenCoreEMR\Sinch\Conversation\Exception\AccessDeniedException;
+use OpenCoreEMR\Sinch\Conversation\Exception\ApiException;
 use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
 use OpenEMR\Common\Csrf\CsrfUtils;
 use OpenEMR\Common\Database\QueryUtils;
@@ -162,12 +163,16 @@ class SettingsControllerTest extends TestCase
         $_POST['project_id'] = 'new-proj';
         $_POST['app_id'] = 'new-app';
         $_POST['api_key'] = 'new-key';
+        $_POST['api_secret'] = 'new-secret';
         $_POST['region'] = 'eu';
         $_POST['default_channel'] = 'SMS';
         $_POST['clinic_name'] = 'New Clinic';
         $_POST['clinic_phone'] = '+15550000000';
         CsrfUtils::setVerifyResult(true);
 
+        $this->apiClient->expects($this->once())
+            ->method('validateCredentials')
+            ->with('new-proj', 'new-app', 'new-key', 'new-secret', 'eu');
         $this->configService->expects($this->once())->method('saveSettings');
         $this->session->expects($this->once())
             ->method('setFlash')
@@ -176,6 +181,120 @@ class SettingsControllerTest extends TestCase
         $response = $this->controller->dispatch('save');
 
         $this->assertInstanceOf(RedirectResponse::class, $response);
+    }
+
+    public function testSaveAbortsWhenCredentialValidationFails(): void
+    {
+        $_SERVER['REQUEST_METHOD'] = 'POST';
+        $_POST['csrf_token'] = 'valid';
+        $_POST['project_id'] = 'new-proj';
+        $_POST['app_id'] = 'new-app';
+        $_POST['api_key'] = 'new-key';
+        $_POST['api_secret'] = 'new-secret';
+        $_POST['region'] = 'us';
+        CsrfUtils::setVerifyResult(true);
+
+        $this->apiClient->method('validateCredentials')
+            ->willThrowException(new ApiException('OAuth2 authentication failed: Bad credentials', 401));
+        $this->configService->expects($this->never())->method('saveSettings');
+        $this->session->expects($this->once())
+            ->method('setFlash')
+            ->with(
+                'settings_message',
+                $this->callback(function (string $message): bool {
+                    return str_contains($message, 'could not be verified')
+                        && str_contains($message, '(ref:')
+                        && !str_contains($message, 'Bad credentials');
+                })
+            );
+
+        $response = $this->controller->dispatch('save');
+
+        $this->assertInstanceOf(RedirectResponse::class, $response);
+    }
+
+    public function testSaveSkipsValidationWhenApiFieldsUnchanged(): void
+    {
+        // The real settings form re-posts existing API values even on a
+        // clinic-name-only edit. Validation must skip in that case so an
+        // unrelated edit doesn't make a network call (or get blocked when
+        // Sinch is down).
+        $_SERVER['REQUEST_METHOD'] = 'POST';
+        $_POST['csrf_token'] = 'valid';
+        $_POST['project_id'] = 'proj-1';
+        $_POST['app_id'] = 'app-1';
+        $_POST['api_key'] = 'key-1';
+        $_POST['region'] = 'us';
+        $_POST['api_secret'] = ''; // Left blank → keep stored secret
+        $_POST['clinic_name'] = 'Renamed Clinic';
+        CsrfUtils::setVerifyResult(true);
+
+        $this->apiClient->expects($this->never())->method('validateCredentials');
+        $this->configService->expects($this->once())->method('saveSettings');
+
+        $this->controller->dispatch('save');
+    }
+
+    public function testSaveRejectsApiTupleWithoutSecret(): void
+    {
+        // First-time API config: no secret stored, none typed. The save
+        // must be refused with a clear local message rather than silently
+        // persisting a project/app/key tuple that can never authenticate.
+        $config = new GlobalConfig(new MockGlobalsAccessor([
+            GlobalConfig::CONFIG_OPTION_REGION => 'us',
+        ]), new MockConfigFactory());
+        $controller = new SettingsController(
+            $config,
+            $this->configService,
+            $this->apiClient,
+            $this->syncService,
+            $this->session,
+            $this->twig,
+            new SystemLogger()
+        );
+
+        $_SERVER['REQUEST_METHOD'] = 'POST';
+        $_POST['csrf_token'] = 'valid';
+        $_POST['project_id'] = 'new-proj';
+        $_POST['app_id'] = 'new-app';
+        $_POST['api_key'] = 'new-key';
+        $_POST['region'] = 'us';
+        $_POST['api_secret'] = '';
+        CsrfUtils::setVerifyResult(true);
+
+        $this->apiClient->expects($this->never())->method('validateCredentials');
+        $this->configService->expects($this->never())->method('saveSettings');
+        $this->session->expects($this->once())
+            ->method('setFlash')
+            ->with(
+                'settings_message',
+                $this->stringContains('API Secret is required')
+            );
+
+        $response = $controller->dispatch('save');
+
+        $this->assertInstanceOf(RedirectResponse::class, $response);
+    }
+
+    public function testSaveValidatesWhenApiKeyChanges(): void
+    {
+        $_SERVER['REQUEST_METHOD'] = 'POST';
+        $_POST['csrf_token'] = 'valid';
+        $_POST['project_id'] = 'proj-1';
+        $_POST['app_id'] = 'app-1';
+        $_POST['api_key'] = 'rotated-key';
+        $_POST['region'] = 'us';
+        $_POST['api_secret'] = ''; // Reuses stored secret
+        CsrfUtils::setVerifyResult(true);
+
+        // api_key changed → validation runs, reusing the stored secret
+        // (decoded value of base64('secret-1') from setUp).
+        $this->apiClient->expects($this->once())
+            ->method('validateCredentials')
+            ->with('proj-1', 'app-1', 'rotated-key', $this->anything(), 'us');
+        $this->configService->expects($this->once())->method('saveSettings');
+
+        $this->controller->dispatch('save');
     }
 
     public function testSaveExcludesAllFieldsWhenExternalConfig(): void

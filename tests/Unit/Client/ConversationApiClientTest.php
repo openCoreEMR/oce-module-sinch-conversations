@@ -22,6 +22,7 @@ use GuzzleHttp\Psr7\Response;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Sinch\Conversation\Client\ConversationApiClient;
 use OpenCoreEMR\Sinch\Conversation\Exception\ApiException;
+use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
@@ -246,6 +247,87 @@ class ConversationApiClientTest extends TestCase
         $this->expectException(ApiException::class);
         $this->expectExceptionMessage('Project ID is not configured');
         $client->testConnection();
+    }
+
+    // --- validateCredentials tests ---
+
+    public function testValidateCredentialsSuccess(): void
+    {
+        $client = $this->createClientWithoutToken([
+            new Response(200, [], '{"access_token": "validate-token"}'),
+            new Response(200, [], '{"id": "test-app", "display_name": "Test App"}'),
+        ]);
+
+        $client->validateCredentials('proj-x', 'app-x', 'key-x', 'secret-x', 'us');
+
+        $this->assertCount(2, $this->requestHistory);
+        $this->assertStringContainsString(
+            'auth.sinch.com/oauth2/token',
+            (string) $this->requestHistory[0]['request']->getUri()
+        );
+        $this->assertStringContainsString(
+            '/v1/projects/proj-x/apps/app-x',
+            (string) $this->requestHistory[1]['request']->getUri()
+        );
+        $this->assertSame(
+            'Bearer validate-token',
+            $this->requestHistory[1]['request']->getHeaderLine('Authorization')
+        );
+    }
+
+    public function testValidateCredentialsThrowsOnOAuthFailure(): void
+    {
+        $client = $this->createClientWithoutToken([
+            new Response(401, [], json_encode([
+                'error' => 'invalid_client',
+                'error_description' => 'Bad credentials',
+            ]) ?: '{}'),
+        ]);
+
+        $this->expectException(ApiException::class);
+        $this->expectExceptionMessage('Bad credentials');
+        $client->validateCredentials('proj-x', 'app-x', 'bad-key', 'bad-secret', 'us');
+    }
+
+    public function testValidateCredentialsThrowsOnAppLookupFailure(): void
+    {
+        $client = $this->createClientWithoutToken([
+            new Response(200, [], '{"access_token": "validate-token"}'),
+            new Response(404, [], json_encode([
+                'error' => ['message' => 'App not found'],
+            ]) ?: '{}'),
+        ]);
+
+        $this->expectException(ApiException::class);
+        $this->expectExceptionMessage('App not found');
+        $client->validateCredentials('proj-x', 'missing-app', 'key-x', 'secret-x', 'us');
+    }
+
+    public function testValidateCredentialsThrowsOnEmptyProjectId(): void
+    {
+        $client = $this->createClientWithoutToken([]);
+
+        $this->expectException(ValidationException::class);
+        $this->expectExceptionMessage('Project ID is required');
+        $client->validateCredentials('', 'app-x', 'key-x', 'secret-x', 'us');
+    }
+
+    public function testValidateCredentialsThrowsOnEmptyAppId(): void
+    {
+        $client = $this->createClientWithoutToken([]);
+
+        $this->expectException(ValidationException::class);
+        $this->expectExceptionMessage('App ID is required');
+        $client->validateCredentials('proj-x', '', 'key-x', 'secret-x', 'us');
+    }
+
+    public function testValidateCredentialsThrowsOnEmptySecret(): void
+    {
+        $client = $this->createClientWithoutToken([]);
+
+        $this->expectException(ValidationException::class);
+        $this->expectExceptionMessage('API Secret is required');
+        $client->validateCredentials('proj-x', 'app-x', 'key-x', '', 'us');
     }
 
     // --- handleResponse error tests ---

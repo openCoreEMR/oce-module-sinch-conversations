@@ -17,6 +17,7 @@ namespace OpenCoreEMR\Modules\SinchConversations\Service;
 use OpenCoreEMR\ModuleConfig\ConfigService as LibConfigService;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Logging\ExceptionContext;
+use OpenCoreEMR\Sinch\Conversation\Client\ConversationApiClient;
 use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
 use OpenEMR\Common\Logging\SystemLogger;
 
@@ -120,8 +121,11 @@ class ConfigService
         // Validate region
         if (isset($settings['region'])) {
             $region = (string)$settings['region'];
-            if (!in_array($region, ['us', 'eu'], true)) {
-                throw new ValidationException("Region must be 'us' or 'eu'");
+            if (!in_array($region, ConversationApiClient::SUPPORTED_REGIONS, true)) {
+                throw new ValidationException(sprintf(
+                    "Region must be one of: %s",
+                    implode(', ', ConversationApiClient::SUPPORTED_REGIONS),
+                ));
             }
         }
 
