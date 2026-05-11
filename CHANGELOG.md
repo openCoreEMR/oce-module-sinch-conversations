@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.2](https://github.com/openCoreEMR/oce-module-sinch-conversations/compare/1.1.1...1.1.2) (2026-05-11)
+
+
+### Bug Fixes
+
+* **settings:** hide Default Channel field until WhatsApp/RCS are supported ([#133](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/133)) ([eb12960](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/eb1296015a6a660a1c8365584791b10a3192c598))
+
 ## [1.1.1](https://github.com/openCoreEMR/oce-module-sinch-conversations/compare/1.1.0...1.1.1) (2026-05-11)
 
 
