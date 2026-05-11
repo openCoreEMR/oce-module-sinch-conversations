@@ -23,6 +23,7 @@ use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockConfigFactory;
 use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockGlobalsAccessor;
 use OpenCoreEMR\Sinch\Conversation\Client\ConversationApiClient;
 use OpenCoreEMR\Sinch\Conversation\Exception\AccessDeniedException;
+use OpenCoreEMR\Sinch\Conversation\Exception\ApiException;
 use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
 use OpenEMR\Common\Csrf\CsrfUtils;
 use OpenEMR\Common\Database\QueryUtils;
@@ -162,12 +163,16 @@ class SettingsControllerTest extends TestCase
         $_POST['project_id'] = 'new-proj';
         $_POST['app_id'] = 'new-app';
         $_POST['api_key'] = 'new-key';
+        $_POST['api_secret'] = 'new-secret';
         $_POST['region'] = 'eu';
         $_POST['default_channel'] = 'SMS';
         $_POST['clinic_name'] = 'New Clinic';
         $_POST['clinic_phone'] = '+15550000000';
         CsrfUtils::setVerifyResult(true);
 
+        $this->apiClient->expects($this->once())
+            ->method('validateCredentials')
+            ->with('new-proj', 'new-app', 'new-key', 'new-secret', 'eu');
         $this->configService->expects($this->once())->method('saveSettings');
         $this->session->expects($this->once())
             ->method('setFlash')
@@ -176,6 +181,50 @@ class SettingsControllerTest extends TestCase
         $response = $this->controller->dispatch('save');
 
         $this->assertInstanceOf(RedirectResponse::class, $response);
+    }
+
+    public function testSaveAbortsWhenCredentialValidationFails(): void
+    {
+        $_SERVER['REQUEST_METHOD'] = 'POST';
+        $_POST['csrf_token'] = 'valid';
+        $_POST['project_id'] = 'new-proj';
+        $_POST['app_id'] = 'new-app';
+        $_POST['api_key'] = 'new-key';
+        $_POST['api_secret'] = 'new-secret';
+        $_POST['region'] = 'us';
+        CsrfUtils::setVerifyResult(true);
+
+        $this->apiClient->method('validateCredentials')
+            ->willThrowException(new ApiException('OAuth2 authentication failed: Bad credentials', 401));
+        $this->configService->expects($this->never())->method('saveSettings');
+        $this->session->expects($this->once())
+            ->method('setFlash')
+            ->with(
+                'settings_message',
+                $this->callback(function (string $message): bool {
+                    return str_contains($message, 'could not be verified')
+                        && str_contains($message, '(ref:')
+                        && !str_contains($message, 'Bad credentials');
+                })
+            );
+
+        $response = $this->controller->dispatch('save');
+
+        $this->assertInstanceOf(RedirectResponse::class, $response);
+    }
+
+    public function testSaveSkipsValidationWhenOnlyNonApiFieldsChange(): void
+    {
+        $_SERVER['REQUEST_METHOD'] = 'POST';
+        $_POST['csrf_token'] = 'valid';
+        $_POST['clinic_name'] = 'Renamed Clinic';
+        // No project_id/app_id/api_key in POST → validation skipped
+        CsrfUtils::setVerifyResult(true);
+
+        $this->apiClient->expects($this->never())->method('validateCredentials');
+        $this->configService->expects($this->once())->method('saveSettings');
+
+        $this->controller->dispatch('save');
     }
 
     public function testSaveExcludesAllFieldsWhenExternalConfig(): void

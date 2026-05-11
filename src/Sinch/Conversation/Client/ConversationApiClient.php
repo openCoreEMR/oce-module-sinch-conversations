@@ -20,6 +20,7 @@ use OpenCoreEMR\Modules\SinchConversations\Common\ArrayPath;
 use OpenCoreEMR\Modules\SinchConversations\Common\Json;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Sinch\Conversation\Exception\ApiException;
+use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
 use OpenEMR\Common\Logging\SystemLogger;
 
 class ConversationApiClient
@@ -471,12 +472,73 @@ class ConversationApiClient
      */
     public function getOAuth2Token(): string
     {
-        $region = $this->config->getSinchRegion();
-        $keyId = $this->config->getSinchApiKey();
-        $keySecret = $this->config->getSinchApiSecret();
+        return $this->requestOAuth2Token(
+            $this->config->getSinchRegion(),
+            $this->config->getSinchApiKey(),
+            $this->config->getSinchApiSecret(),
+        );
+    }
 
+    /**
+     * Validate Sinch credentials by exchanging them for an OAuth2 token and
+     * confirming the project/app are accessible. Used by the settings save
+     * flow to verify credentials before persisting them, so callers must
+     * pass the candidate values explicitly rather than read $this->config.
+     *
+     * @throws ValidationException When required fields are empty
+     * @throws ApiException When OAuth or app lookup fails
+     */
+    public function validateCredentials(
+        string $projectId,
+        string $appId,
+        string $apiKey,
+        string $apiSecret,
+        string $region,
+    ): void {
+        if ($projectId === '') {
+            throw new ValidationException('Project ID is required');
+        }
+        if ($appId === '') {
+            throw new ValidationException('App ID is required');
+        }
+        if ($apiKey === '') {
+            throw new ValidationException('API Key is required');
+        }
+        if ($apiSecret === '') {
+            throw new ValidationException('API Secret is required');
+        }
+        if ($region === '') {
+            throw new ValidationException('Region is required');
+        }
+
+        $accessToken = $this->requestOAuth2Token($region, $apiKey, $apiSecret);
+
+        try {
+            $response = $this->httpClient->get(
+                "/v1/projects/{$projectId}/apps/{$appId}",
+                [
+                    'headers' => [
+                        'Content-Type' => 'application/json',
+                        'Authorization' => "Bearer {$accessToken}",
+                    ],
+                ]
+            );
+        } catch (GuzzleException $e) {
+            $this->logger->error('Credential validation: app lookup failed', ['exception' => $e]);
+            throw new ApiException('Failed to verify app access', 0, $e);
+        }
+
+        $this->handleResponse($response);
+    }
+
+    private function requestOAuth2Token(string $region, string $keyId, string $keySecret): string
+    {
         if (empty($keyId) || empty($keySecret)) {
             throw new ApiException("API Key ID and Secret are required for OAuth2 authentication");
+        }
+
+        if ($region === '') {
+            throw new ApiException("Region is required for OAuth2 authentication");
         }
 
         try {

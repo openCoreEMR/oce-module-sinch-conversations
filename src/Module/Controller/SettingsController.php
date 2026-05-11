@@ -22,6 +22,8 @@ use OpenCoreEMR\Modules\SinchConversations\Service\TemplateSyncService;
 use OpenCoreEMR\Modules\SinchConversations\SessionAccessor;
 use OpenCoreEMR\Sinch\Conversation\Client\ConversationApiClient;
 use OpenCoreEMR\Sinch\Conversation\Exception\AccessDeniedException;
+use OpenCoreEMR\Sinch\Conversation\Exception\ApiException;
+use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
 use OpenEMR\Common\Csrf\CsrfUtils;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -131,6 +133,42 @@ class SettingsController
             $apiSecret = $request->request->get('api_secret', '');
             if ($apiSecret !== null && $apiSecret !== '') {
                 $settings['api_secret'] = (string)$apiSecret;
+            }
+
+            // Verify the credentials with Sinch before persisting them, so a
+            // misconfiguration is reported here rather than at message-send
+            // time. The api_secret field is left blank in the UI to keep the
+            // existing value, so fall back to the stored secret in that case.
+            // Skip validation when the user is only changing non-API fields
+            // (e.g. clinic name) — structural validation in ConfigService
+            // will catch a partially filled API section.
+            $secretForValidation = $settings['api_secret'] ?? $this->config->getSinchApiSecret();
+            $hasFullApiConfig = $settings['project_id'] !== ''
+                && $settings['app_id'] !== ''
+                && $settings['api_key'] !== ''
+                && $secretForValidation !== '';
+            try {
+                if ($hasFullApiConfig) {
+                    $this->apiClient->validateCredentials(
+                        $settings['project_id'],
+                        $settings['app_id'],
+                        $settings['api_key'],
+                        $secretForValidation,
+                        $settings['region'],
+                    );
+                }
+            } catch (ValidationException | ApiException $e) {
+                $errorId = ErrorId::generate();
+                $this->logger->warning('Settings credential validation failed', [
+                    'errorId' => $errorId,
+                    'exception' => ExceptionContext::fromThrowable($e),
+                ]);
+                $this->session->setFlash(
+                    'settings_message',
+                    "Credentials could not be verified with Sinch (ref: $errorId). " .
+                        "Settings were not saved. Check logs for details."
+                );
+                return $this->redirect($request);
             }
 
             // Save settings
