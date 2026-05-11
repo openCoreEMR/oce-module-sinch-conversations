@@ -151,7 +151,8 @@ class SettingsController
             $hasFullApiConfig = $settings['project_id'] !== ''
                 && $settings['app_id'] !== ''
                 && $settings['api_key'] !== ''
-                && $secretForValidation !== '';
+                && $secretForValidation !== ''
+                && in_array($settings['region'], ConfigService::SUPPORTED_REGIONS, true);
             try {
                 if ($apiFieldChanged && $hasFullApiConfig) {
                     $this->apiClient->validateCredentials(

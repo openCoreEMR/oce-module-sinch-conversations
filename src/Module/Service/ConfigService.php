@@ -22,6 +22,9 @@ use OpenEMR\Common\Logging\SystemLogger;
 
 class ConfigService
 {
+    /** @var list<string> */
+    public const SUPPORTED_REGIONS = ['us', 'eu'];
+
     private readonly LibConfigService $libConfigService;
     private readonly SystemLogger $logger;
 
@@ -120,7 +123,7 @@ class ConfigService
         // Validate region
         if (isset($settings['region'])) {
             $region = (string)$settings['region'];
-            if (!in_array($region, ['us', 'eu'], true)) {
+            if (!in_array($region, self::SUPPORTED_REGIONS, true)) {
                 throw new ValidationException("Region must be 'us' or 'eu'");
             }
         }
