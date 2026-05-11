@@ -68,16 +68,78 @@ class ModuleManagerListenerTest extends TestCase
         $this->assertSame('Success', $result);
 
         $queries = QueryUtils::getQueries();
-        $this->assertCount(2, $queries);
+        // upsert + 2 INFORMATION_SCHEMA probes (column + table; both empty
+        // so migration short-circuits as a no-op for fresh installs) + activate
+        $this->assertCount(4, $queries);
 
-        // First: upsert to ensure the row exists
         $this->assertStringContainsString('INSERT INTO `background_services`', $queries[0]['sql']);
         $this->assertStringContainsString('ON DUPLICATE KEY UPDATE', $queries[0]['sql']);
 
-        // Second: activate
-        $this->assertStringContainsString('UPDATE `background_services` SET `active` = ?', $queries[1]['sql']);
-        $this->assertSame(1, $queries[1]['binds'][0]);
-        $this->assertSame('oce_sinch_reminders', $queries[1]['binds'][1]);
+        $this->assertStringContainsString('INFORMATION_SCHEMA.COLUMNS', $queries[1]['sql']);
+        $this->assertSame(['oce_sinch_appointment_reminders', 'occurrence_date'], $queries[1]['binds']);
+
+        $this->assertStringContainsString('INFORMATION_SCHEMA.TABLES', $queries[2]['sql']);
+        $this->assertSame(['oce_sinch_appointment_reminders'], $queries[2]['binds']);
+
+        $this->assertStringContainsString('UPDATE `background_services` SET `active` = ?', $queries[3]['sql']);
+        $this->assertSame(1, $queries[3]['binds'][0]);
+        $this->assertSame('oce_sinch_reminders', $queries[3]['binds'][1]);
+    }
+
+    public function testEnableSkipsMigrationWhenOccurrenceDateColumnAlreadyExists(): void
+    {
+        QueryUtils::setMockResult(
+            'SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = ?
+               AND COLUMN_NAME = ?',
+            ['oce_sinch_appointment_reminders', 'occurrence_date'],
+            [['COLUMN_NAME' => 'occurrence_date']]
+        );
+
+        $listener = \ModuleManagerListener::initListenerSelf();
+        $listener->moduleManagerAction('enable', 1, 'Success');
+
+        $queries = QueryUtils::getQueries();
+        // upsert + column probe (returned a row → short-circuit) + activate
+        $this->assertCount(3, $queries);
+        $this->assertStringContainsString('INFORMATION_SCHEMA.COLUMNS', $queries[1]['sql']);
+        $this->assertStringContainsString('UPDATE `background_services`', $queries[2]['sql']);
+    }
+
+    public function testEnableRunsMigrationWhenLegacyTableExists(): void
+    {
+        // Column missing, but table exists — old shape, must migrate.
+        QueryUtils::setMockResult(
+            'SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?',
+            ['oce_sinch_appointment_reminders'],
+            [['TABLE_NAME' => 'oce_sinch_appointment_reminders']]
+        );
+
+        $listener = \ModuleManagerListener::initListenerSelf();
+        $listener->moduleManagerAction('enable', 1, 'Success');
+
+        $queries = QueryUtils::getQueries();
+        $alterColumnAdds = array_filter(
+            $queries,
+            static fn(array $q): bool => str_contains($q['sql'], 'ADD COLUMN `occurrence_date`')
+        );
+        $this->assertCount(1, $alterColumnAdds);
+
+        $backfills = array_filter(
+            $queries,
+            static fn(array $q): bool => str_contains($q['sql'], 'UPDATE `oce_sinch_appointment_reminders` r')
+                && str_contains($q['sql'], 'SET r.occurrence_date = e.pc_eventDate')
+        );
+        $this->assertCount(1, $backfills);
+
+        $finalize = array_filter(
+            $queries,
+            static fn(array $q): bool => str_contains($q['sql'], 'unique_event_occurrence')
+                && str_contains($q['sql'], 'DROP INDEX `unique_event_reminder`')
+        );
+        $this->assertCount(1, $finalize);
     }
 
     public function testDisableDeactivatesBackgroundService(): void

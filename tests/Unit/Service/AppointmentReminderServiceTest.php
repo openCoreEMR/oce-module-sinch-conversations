@@ -20,6 +20,7 @@ use OpenCoreEMR\Modules\SinchConversations\Service\MessageService;
 use OpenCoreEMR\Modules\SinchConversations\Service\TemplateService;
 use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockConfigFactory;
 use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockGlobalsAccessor;
+use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\StubAppointmentFinder;
 use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
 use OpenEMR\Common\Database\QueryUtils;
 use OpenEMR\Common\Logging\SystemLogger;
@@ -31,6 +32,7 @@ class AppointmentReminderServiceTest extends TestCase
     private GlobalConfig $config;
     private TemplateService&MockObject $templateService;
     private MessageService&MockObject $messageService;
+    private StubAppointmentFinder $finder;
     private AppointmentReminderService $service;
 
     protected function setUp(): void
@@ -47,11 +49,13 @@ class AppointmentReminderServiceTest extends TestCase
 
         $this->templateService = $this->createMock(TemplateService::class);
         $this->messageService = $this->createMock(MessageService::class);
+        $this->finder = new StubAppointmentFinder();
 
         $this->service = new AppointmentReminderService(
             $this->config,
             $this->templateService,
-            $this->messageService
+            $this->messageService,
+            $this->finder
         );
     }
 
@@ -65,7 +69,8 @@ class AppointmentReminderServiceTest extends TestCase
         $service = new AppointmentReminderService(
             $config,
             $this->templateService,
-            $this->messageService
+            $this->messageService,
+            new StubAppointmentFinder()
         );
 
         $results = $service->run();
@@ -481,7 +486,8 @@ class AppointmentReminderServiceTest extends TestCase
         $service = new AppointmentReminderService(
             $config,
             $this->templateService,
-            $this->messageService
+            $this->messageService,
+            $this->finder
         );
 
         $this->mockUpcomingAppointments([
@@ -571,6 +577,123 @@ class AppointmentReminderServiceTest extends TestCase
         $this->assertSame(0, $results['skipped']);
     }
 
+    // --- recurring appointments ---
+
+    public function testRunSendsOneReminderPerOccurrenceForRecurringAppointment(): void
+    {
+        // Same pc_eid, three different occurrence dates — what fetchAllEvents
+        // produces for a daily-recurring appointment.
+        $this->mockUpcomingAppointments([
+            $this->makeAppointment(900, 70, '2026-04-01', '09:00:00', '+15557770001', 'YES'),
+            $this->makeAppointment(900, 70, '2026-04-02', '09:00:00', '+15557770001', 'YES'),
+            $this->makeAppointment(900, 70, '2026-04-03', '09:00:00', '+15557770001', 'YES'),
+        ]);
+        $this->mockActiveConsent(70, '+15557770001');
+
+        $this->templateService->method('getAppointmentReminderTemplateKey')
+            ->willReturn('appointment_reminder_no_portal');
+        $this->templateService->method('render')
+            ->willReturn('Reminder.');
+        $this->messageService->expects($this->exactly(3))
+            ->method('sendToPatient')
+            ->willReturn(['id' => 'msg-recur']);
+
+        $results = $this->service->run();
+
+        $this->assertSame(3, $results['sent']);
+        $this->assertSame(0, $results['skipped']);
+
+        $inserts = array_values(array_filter(
+            QueryUtils::getQueries(),
+            static fn(array $q): bool => str_contains(
+                $q['sql'],
+                'INSERT IGNORE INTO oce_sinch_appointment_reminders'
+            )
+        ));
+        $this->assertCount(3, $inserts, 'Expected one INSERT per occurrence');
+
+        $occurrenceDates = array_map(
+            static fn(array $q): string => (string) $q['binds'][1],
+            $inserts
+        );
+        sort($occurrenceDates);
+        $this->assertSame(['2026-04-01', '2026-04-02', '2026-04-03'], $occurrenceDates);
+    }
+
+    public function testRunSkipsRecurringOccurrenceAlreadySent(): void
+    {
+        $this->mockUpcomingAppointments([
+            $this->makeAppointment(901, 71, '2026-04-01', '10:00:00', '+15557770002', 'YES'),
+            $this->makeAppointment(901, 71, '2026-04-02', '10:00:00', '+15557770002', 'YES'),
+            $this->makeAppointment(901, 71, '2026-04-03', '10:00:00', '+15557770002', 'YES'),
+        ]);
+        $this->mockActiveConsent(71, '+15557770002');
+
+        // Pre-seed the dedup table: April 2 has already been sent.
+        QueryUtils::setMockResult(
+            "SELECT pc_eid, occurrence_date
+                FROM oce_sinch_appointment_reminders
+                WHERE occurrence_date BETWEEN ? AND ?",
+            [(new \DateTimeImmutable())->format('Y-m-d'), (new \DateTimeImmutable())->modify('+24 hours')->format('Y-m-d')],
+            [['pc_eid' => 901, 'occurrence_date' => '2026-04-02']]
+        );
+
+        $this->templateService->method('getAppointmentReminderTemplateKey')
+            ->willReturn('appointment_reminder_no_portal');
+        $this->templateService->method('render')
+            ->willReturn('Reminder.');
+        $this->messageService->expects($this->exactly(2))
+            ->method('sendToPatient')
+            ->willReturn(['id' => 'msg-dedup']);
+
+        $results = $this->service->run();
+
+        $this->assertSame(2, $results['sent']);
+        $this->assertSame(0, $results['skipped'], 'Already-sent occurrences are quiet skips, not eligibility skips');
+
+        $inserts = array_values(array_filter(
+            QueryUtils::getQueries(),
+            static fn(array $q): bool => str_contains(
+                $q['sql'],
+                'INSERT IGNORE INTO oce_sinch_appointment_reminders'
+            )
+        ));
+        $occurrenceDates = array_map(
+            static fn(array $q): string => (string) $q['binds'][1],
+            $inserts
+        );
+        sort($occurrenceDates);
+        $this->assertSame(['2026-04-01', '2026-04-03'], $occurrenceDates);
+    }
+
+    public function testRecordedReminderBindsIncludeOccurrenceDate(): void
+    {
+        $this->mockUpcomingAppointments([
+            $this->makeAppointment(902, 72, '2026-04-15', '09:00:00', '+15557770003', 'YES'),
+        ]);
+        $this->mockActiveConsent(72, '+15557770003');
+
+        $this->templateService->method('getAppointmentReminderTemplateKey')
+            ->willReturn('appointment_reminder_no_portal');
+        $this->templateService->method('render')->willReturn('Reminder.');
+        $this->messageService->method('sendToPatient')->willReturn(['id' => 'msg-bind']);
+
+        $this->service->run();
+
+        $inserts = array_values(array_filter(
+            QueryUtils::getQueries(),
+            static fn(array $q): bool => str_contains(
+                $q['sql'],
+                'INSERT IGNORE INTO oce_sinch_appointment_reminders'
+            )
+        ));
+        $this->assertCount(1, $inserts);
+        $this->assertSame(902, $inserts[0]['binds'][0]);
+        $this->assertSame('2026-04-15', $inserts[0]['binds'][1]);
+        $this->assertSame(72, $inserts[0]['binds'][2]);
+        $this->assertSame('appointment_reminder_no_portal', $inserts[0]['binds'][3]);
+    }
+
     // --- cleanup ---
 
     public function testRunPurgesExpiredReminders(): void
@@ -591,25 +714,21 @@ class AppointmentReminderServiceTest extends TestCase
     // --- Helpers ---
 
     /**
-     * @param array<int, array<string, mixed>> $appointments
+     * @param list<array{
+     *     pc_eid: int,
+     *     pc_pid: int,
+     *     pc_eventDate: string,
+     *     pc_startTime: string,
+     *     phone_cell: ?string,
+     *     hipaa_allowsms: ?string
+     * }> $appointments
      */
     private function mockUpcomingAppointments(array $appointments): void
     {
-        QueryUtils::setMockResult(
-            "SELECT e.pc_eid, e.pc_pid, e.pc_eventDate, e.pc_startTime,
-                       p.phone_cell, p.hipaa_allowsms
-                FROM openemr_postcalendar_events e
-                JOIN patient_data p ON e.pc_pid = p.pid
-                LEFT JOIN oce_sinch_appointment_reminders r ON e.pc_eid = r.pc_eid
-                WHERE CONCAT(e.pc_eventDate, ' ', e.pc_startTime) > NOW()
-                  AND CONCAT(e.pc_eventDate, ' ', e.pc_startTime) <= DATE_ADD(NOW(), INTERVAL ? HOUR)
-                  AND e.pc_apptstatus != 'x'
-                  AND e.pc_pid > 0
-                  AND r.id IS NULL
-                ORDER BY e.pc_eventDate, e.pc_startTime",
-            [24],
-            $appointments
-        );
+        // Mutate the existing finder in place so any AppointmentReminderService
+        // already constructed with a reference to it (e.g. tests that build a
+        // local service with a custom config) sees the new occurrences.
+        $this->finder->setOccurrences($appointments);
     }
 
     /**

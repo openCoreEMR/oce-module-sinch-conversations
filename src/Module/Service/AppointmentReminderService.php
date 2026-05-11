@@ -32,7 +32,8 @@ class AppointmentReminderService
     public function __construct(
         private readonly GlobalConfig $config,
         private readonly TemplateService $templateService,
-        private readonly MessageService $messageService
+        private readonly MessageService $messageService,
+        private readonly UpcomingAppointmentFinder $finder
     ) {
         $this->logger = new SystemLogger();
     }
@@ -62,17 +63,29 @@ class AppointmentReminderService
             return $results;
         }
 
-        $appointments = $this->getUpcomingAppointments($hours);
+        $now = new \DateTimeImmutable();
+        $appointments = $this->finder->findUpcoming($hours, $now);
         if ($appointments === []) {
             $this->logger->debug('No upcoming appointments found within notification window');
             return $results;
         }
+
+        $sentKeys = $this->loadSentOccurrences(
+            $now->format('Y-m-d'),
+            $now->modify(sprintf('+%d hours', $hours))->format('Y-m-d')
+        );
 
         $templateKey = $this->templateService->getAppointmentReminderTemplateKey();
 
         foreach ($appointments as $appointment) {
             $pcEid = (int) $appointment['pc_eid'];
             $patientId = (int) $appointment['pc_pid'];
+            $occurrenceDate = (string) $appointment['pc_eventDate'];
+
+            if (isset($sentKeys[$pcEid . '|' . $occurrenceDate])) {
+                // Already reminded for this specific occurrence — quiet skip.
+                continue;
+            }
 
             $rawPhone = $appointment['phone_cell'] ?? '';
             if ($rawPhone === '') {
@@ -131,7 +144,7 @@ class AppointmentReminderService
                     $message,
                     new MessageOptions(templateKey: $templateKey, skipConsentCheck: true)
                 );
-                $this->recordReminderSent($pcEid, $patientId, $templateKey);
+                $this->recordReminderSent($pcEid, $patientId, $occurrenceDate, $templateKey);
                 $results['sent']++;
             } catch (\Throwable $e) {
                 $results['failed']++;
@@ -154,44 +167,51 @@ class AppointmentReminderService
     }
 
     /**
-     * Query upcoming appointments within the notification window
+     * Bulk-load already-sent reminder keys for the active window.
      *
-     * Find events from openemr_postcalendar_events where the appointment
-     * datetime is between now and now + $hours hours, and the event is
-     * not cancelled (pc_apptstatus != 'x').
+     * Returned map keys are `"{pc_eid}|{occurrence_date}"`; values are
+     * irrelevant (presence is the signal). One round trip replaces a
+     * per-occurrence SELECT in the eligibility loop.
      *
-     * @return array<int, array<string, mixed>>
+     * @return array<string, true>
      */
-    private function getUpcomingAppointments(int $hours): array
+    private function loadSentOccurrences(string $fromDate, string $toDate): array
     {
-        $sql = "SELECT e.pc_eid, e.pc_pid, e.pc_eventDate, e.pc_startTime,
-                       p.phone_cell, p.hipaa_allowsms
-                FROM openemr_postcalendar_events e
-                JOIN patient_data p ON e.pc_pid = p.pid
-                LEFT JOIN oce_sinch_appointment_reminders r ON e.pc_eid = r.pc_eid
-                WHERE CONCAT(e.pc_eventDate, ' ', e.pc_startTime) > NOW()
-                  AND CONCAT(e.pc_eventDate, ' ', e.pc_startTime) <= DATE_ADD(NOW(), INTERVAL ? HOUR)
-                  AND e.pc_apptstatus != 'x'
-                  AND e.pc_pid > 0
-                  AND r.id IS NULL
-                ORDER BY e.pc_eventDate, e.pc_startTime";
+        $sql = "SELECT pc_eid, occurrence_date
+                FROM oce_sinch_appointment_reminders
+                WHERE occurrence_date BETWEEN ? AND ?";
+        $rows = QueryUtils::fetchRecords($sql, [$fromDate, $toDate]);
 
-        return QueryUtils::fetchRecords($sql, [$hours]);
+        $map = [];
+        foreach ($rows as $row) {
+            $key = (string) ($row['pc_eid'] ?? '') . '|' . (string) ($row['occurrence_date'] ?? '');
+            $map[$key] = true;
+        }
+        return $map;
     }
 
     /**
-     * Record that a reminder was sent for this event
+     * Record that a reminder was sent for a specific occurrence
      *
      * Use INSERT IGNORE to handle race conditions where concurrent cron runs
-     * pass the LEFT JOIN check and both attempt to insert. The UNIQUE KEY on
-     * pc_eid ensures only one succeeds; the other is silently ignored.
+     * both pass the dedup check and attempt to insert. The UNIQUE KEY on
+     * (pc_eid, occurrence_date) ensures only one succeeds; the other is
+     * silently ignored. Recurring appointments share `pc_eid` across their
+     * occurrences, so `occurrence_date` is what distinguishes them.
      */
-    private function recordReminderSent(int $pcEid, int $patientId, string $templateKey): void
-    {
+    private function recordReminderSent(
+        int $pcEid,
+        int $patientId,
+        string $occurrenceDate,
+        string $templateKey
+    ): void {
         $sql = "INSERT IGNORE INTO oce_sinch_appointment_reminders
-                    (pc_eid, patient_id, sent_at, template_key)
-                VALUES (?, ?, NOW(), ?)";
-        QueryUtils::sqlStatementThrowException($sql, [$pcEid, $patientId, $templateKey]);
+                    (pc_eid, occurrence_date, patient_id, sent_at, template_key)
+                VALUES (?, ?, ?, NOW(), ?)";
+        QueryUtils::sqlStatementThrowException(
+            $sql,
+            [$pcEid, $occurrenceDate, $patientId, $templateKey]
+        );
     }
 
     /**
