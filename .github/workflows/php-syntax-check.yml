@@ -10,20 +10,8 @@ on:
 
 jobs:
   php-syntax-check:
-    name: PHP Syntax Check
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v6
-
-    - name: Setup PHP
-      uses: shivammathur/setup-php@v2
-      with:
-        php-version: '8.2'
-        extensions: json, curl
-        coverage: none
-        tools: composer:v2
-
-    - name: PHP Syntax Check
+    uses: openCoreEMR/github-workflows-public/.github/workflows/php-composer-script.yml@0.0.2
+    with:
+      name: PHP Syntax Check
       run: composer php-lint
+      install-deps: false
