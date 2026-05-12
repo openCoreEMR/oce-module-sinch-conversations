@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.0](https://github.com/openCoreEMR/oce-module-sinch-conversations/compare/1.1.2...1.2.0) (2026-05-12)
+
+
+### Features
+
+* **settings:** validate Sinch credentials before saving ([#135](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/135)) ([f8d3571](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/f8d3571b51b1e8422daddcb625fc6fa7aa5f865f))
+
+
+### Bug Fixes
+
+* **reminders:** expand recurring appointments into per-occurrence SMS reminders ([#137](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/137)) ([ea63da6](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/ea63da6365f4db39b8256fa2c1d1e318aec8cb02))
+
 ## [1.1.2](https://github.com/openCoreEMR/oce-module-sinch-conversations/compare/1.1.1...1.1.2) (2026-05-11)
 
 
