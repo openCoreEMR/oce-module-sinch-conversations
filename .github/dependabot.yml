@@ -13,6 +13,11 @@ updates:
   - composer
   commit-message:
     prefix: deps
+  ignore:
+  # OpenEMR pins symfony/* at ^7.3; ignore Symfony 8 until upstream moves.
+  - dependency-name: symfony/*
+    versions:
+    - '>=8.0'
 
 # Monitor GitHub Actions
 - package-ecosystem: github-actions
