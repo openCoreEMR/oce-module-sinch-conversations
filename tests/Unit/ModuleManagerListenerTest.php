@@ -155,8 +155,13 @@ class ModuleManagerListenerTest extends TestCase
         // migration should return cleanly (not throw) since the schema
         // is now at the target shape.
         QueryUtils::setMockResult(
+            'SELECT DATABASE() AS db',
+            [],
+            [['db' => 'test_tenant_db']]
+        );
+        QueryUtils::setMockResult(
             'SELECT GET_LOCK(?, ?) AS got',
-            ['oce_sinch_reminder_migration', 30],
+            ['oce_sinch_reminder_migration:test_tenant_db', 30],
             [['got' => 0]]
         );
         // First probe: legacy shape (forces the lock acquisition attempt).
@@ -264,9 +269,17 @@ class ModuleManagerListenerTest extends TestCase
         array $indexes,
         bool $lockAcquired = true
     ): void {
+        // The lock name is per-tenant: '<prefix>:<DATABASE()>'.
+        // Mock the DATABASE() probe and key the GET_LOCK mock to the
+        // resulting concatenated name.
+        QueryUtils::setMockResult(
+            'SELECT DATABASE() AS db',
+            [],
+            [['db' => 'test_tenant_db']]
+        );
         QueryUtils::setMockResult(
             'SELECT GET_LOCK(?, ?) AS got',
-            ['oce_sinch_reminder_migration', 30],
+            ['oce_sinch_reminder_migration:test_tenant_db', 30],
             [['got' => $lockAcquired ? 1 : 0]]
         );
 

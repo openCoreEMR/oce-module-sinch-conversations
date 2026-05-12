@@ -35,7 +35,9 @@ declare(strict_types=1);
 
 namespace OpenCoreEMR\Modules\SinchConversations\Schema;
 
+use OpenCoreEMR\Modules\SinchConversations\Logging\ExceptionContext;
 use OpenEMR\Common\Database\QueryUtils;
+use OpenEMR\Common\Logging\SystemLogger;
 
 final class ReminderTableMigration
 {
@@ -44,7 +46,7 @@ final class ReminderTableMigration
     private const OLD_UNIQUE_INDEX = 'unique_event_reminder';
     private const NEW_UNIQUE_INDEX = 'unique_event_occurrence';
     private const DATE_INDEX = 'idx_occurrence_date';
-    private const LOCK_NAME = 'oce_sinch_reminder_migration';
+    private const LOCK_NAME_PREFIX = 'oce_sinch_reminder_migration';
     private const LOCK_TIMEOUT_SECONDS = 30;
 
     /**
@@ -55,9 +57,16 @@ final class ReminderTableMigration
      *
      * Concurrency: this method runs from both `ModuleManagerListener::enable()`
      * and the reminder cron, which can race (admin clicks Enable while a cron
-     * tick is mid-run). A MySQL session-level advisory lock (`GET_LOCK`)
-     * serialises the migration so two callers don't both attempt
-     * `ADD COLUMN` / `DROP INDEX` and one fail with a duplicate-DDL error.
+     * tick is mid-run). A MySQL advisory lock (`GET_LOCK`) serialises the
+     * migration so two callers don't both attempt `ADD COLUMN` / `DROP INDEX`
+     * and one fail with a duplicate-DDL error.
+     *
+     * `GET_LOCK` is server-wide, not database-scoped. On a shared MySQL
+     * instance hosting multiple tenant databases, a bare lock name would
+     * collide across tenants. The lock name therefore includes the current
+     * `DATABASE()` so each tenant's migration serialises against itself
+     * only.
+     *
      * The fast-path probe at the top avoids taking the lock entirely once
      * the table is fully migrated.
      *
@@ -75,7 +84,9 @@ final class ReminderTableMigration
             return;
         }
 
-        if (!self::acquireLock()) {
+        $lockName = self::buildLockName();
+
+        if (!self::acquireLock($lockName)) {
             // Another process is already migrating. Wait was up to
             // LOCK_TIMEOUT_SECONDS; if they finished in that window the
             // table is now migrated and we can return cleanly. Otherwise
@@ -87,7 +98,7 @@ final class ReminderTableMigration
             }
             throw new \RuntimeException(sprintf(
                 'Could not acquire migration advisory lock "%s" within %ds',
-                self::LOCK_NAME,
+                $lockName,
                 self::LOCK_TIMEOUT_SECONDS
             ));
         }
@@ -102,7 +113,7 @@ final class ReminderTableMigration
 
             self::runMigrationSteps($shape);
         } finally {
-            self::releaseLock();
+            self::releaseLock($lockName);
         }
     }
 
@@ -119,57 +130,58 @@ final class ReminderTableMigration
     private static function runMigrationSteps(array $shape): void
     {
         if (!$shape['column_exists']) {
-            QueryUtils::sqlStatementThrowException(
-                'ALTER TABLE `' . self::TABLE . '`
-                    ADD COLUMN `' . self::COLUMN . '` DATE NULL AFTER `pc_eid`'
-            );
+            QueryUtils::sqlStatementThrowException(<<<'SQL'
+                ALTER TABLE `oce_sinch_appointment_reminders`
+                    ADD COLUMN `occurrence_date` DATE NULL AFTER `pc_eid`
+                SQL);
         }
 
         // Backfill from the parent event date for any rows still missing
         // the column value. Safe to run unconditionally — if everything is
         // already populated the UPDATE matches zero rows.
-        QueryUtils::sqlStatementThrowException(
-            'UPDATE `' . self::TABLE . '` r
-             INNER JOIN `openemr_postcalendar_events` e ON e.pc_eid = r.pc_eid
-             SET r.`' . self::COLUMN . '` = e.pc_eventDate
-             WHERE r.`' . self::COLUMN . '` IS NULL'
-        );
+        QueryUtils::sqlStatementThrowException(<<<'SQL'
+            UPDATE `oce_sinch_appointment_reminders` r
+            INNER JOIN `openemr_postcalendar_events` e ON e.pc_eid = r.pc_eid
+            SET r.`occurrence_date` = e.pc_eventDate
+            WHERE r.`occurrence_date` IS NULL
+            SQL);
 
         // Drop any rows the join above could not backfill — they reference
         // events that no longer exist, so dedup state is moot.
-        QueryUtils::sqlStatementThrowException(
-            'DELETE FROM `' . self::TABLE . '` WHERE `' . self::COLUMN . '` IS NULL'
-        );
+        QueryUtils::sqlStatementThrowException(<<<'SQL'
+            DELETE FROM `oce_sinch_appointment_reminders` WHERE `occurrence_date` IS NULL
+            SQL);
 
         // MODIFY runs when the column was already nullable, OR when this
         // call just added it (ADD COLUMN above creates it as NULL so the
         // backfill UPDATE can populate existing rows before the NOT NULL
         // constraint locks in).
         if ($shape['column_nullable'] || !$shape['column_exists']) {
-            QueryUtils::sqlStatementThrowException(
-                'ALTER TABLE `' . self::TABLE . '`
-                    MODIFY `' . self::COLUMN . '` DATE NOT NULL'
-            );
+            QueryUtils::sqlStatementThrowException(<<<'SQL'
+                ALTER TABLE `oce_sinch_appointment_reminders`
+                    MODIFY `occurrence_date` DATE NOT NULL
+                SQL);
         }
 
         if ($shape['old_unique_index_exists']) {
-            QueryUtils::sqlStatementThrowException(
-                'ALTER TABLE `' . self::TABLE . '` DROP INDEX `' . self::OLD_UNIQUE_INDEX . '`'
-            );
+            QueryUtils::sqlStatementThrowException(<<<'SQL'
+                ALTER TABLE `oce_sinch_appointment_reminders`
+                    DROP INDEX `unique_event_reminder`
+                SQL);
         }
 
         if (!$shape['new_unique_index_exists']) {
-            QueryUtils::sqlStatementThrowException(
-                'ALTER TABLE `' . self::TABLE . '`
-                    ADD UNIQUE KEY `' . self::NEW_UNIQUE_INDEX . '` (`pc_eid`, `' . self::COLUMN . '`)'
-            );
+            QueryUtils::sqlStatementThrowException(<<<'SQL'
+                ALTER TABLE `oce_sinch_appointment_reminders`
+                    ADD UNIQUE KEY `unique_event_occurrence` (`pc_eid`, `occurrence_date`)
+                SQL);
         }
 
         if (!$shape['date_index_exists']) {
-            QueryUtils::sqlStatementThrowException(
-                'ALTER TABLE `' . self::TABLE . '`
-                    ADD INDEX `' . self::DATE_INDEX . '` (`' . self::COLUMN . '`)'
-            );
+            QueryUtils::sqlStatementThrowException(<<<'SQL'
+                ALTER TABLE `oce_sinch_appointment_reminders`
+                    ADD INDEX `idx_occurrence_date` (`occurrence_date`)
+                SQL);
         }
     }
 
@@ -204,18 +216,38 @@ final class ReminderTableMigration
             [self::TABLE, self::COLUMN]
         );
         $columnExists = count($columns) > 0;
-        $columnNullable = $columnExists
-            && (string) ($columns[0]['IS_NULLABLE'] ?? '') === 'YES';
+        // INFORMATION_SCHEMA contracts IS_NULLABLE as 'YES' or 'NO'.
+        // Narrow rather than cast so a non-string value surfaces as a
+        // hard failure instead of silently flipping to "non-nullable".
+        $columnNullable = false;
+        if ($columnExists) {
+            $isNullable = $columns[0]['IS_NULLABLE'] ?? null;
+            if (!is_string($isNullable)) {
+                throw new \RuntimeException(sprintf(
+                    'INFORMATION_SCHEMA.COLUMNS.IS_NULLABLE was not a string for %s.%s',
+                    self::TABLE,
+                    self::COLUMN
+                ));
+            }
+            $columnNullable = strtoupper($isNullable) === 'YES';
+        }
 
         $indexRows = QueryUtils::fetchRecords(
             'SELECT DISTINCT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS
              WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?',
             [self::TABLE]
         );
-        $indexNames = array_map(
-            static fn(array $row): string => (string) ($row['INDEX_NAME'] ?? ''),
-            $indexRows
-        );
+        $indexNames = [];
+        foreach ($indexRows as $row) {
+            $name = $row['INDEX_NAME'] ?? null;
+            if (!is_string($name)) {
+                throw new \RuntimeException(sprintf(
+                    'INFORMATION_SCHEMA.STATISTICS.INDEX_NAME was not a string for %s',
+                    self::TABLE
+                ));
+            }
+            $indexNames[] = $name;
+        }
         $oldUnique = in_array(self::OLD_UNIQUE_INDEX, $indexNames, true);
         $newUnique = in_array(self::NEW_UNIQUE_INDEX, $indexNames, true);
         $dateIndex = in_array(self::DATE_INDEX, $indexNames, true);
@@ -237,29 +269,68 @@ final class ReminderTableMigration
     }
 
     /**
-     * Acquire a MySQL session-level advisory lock.
+     * Build the per-tenant advisory lock name.
+     *
+     * `GET_LOCK` is server-wide (not database-scoped). On a shared MySQL
+     * instance hosting multiple tenants, a bare lock name would let one
+     * tenant's migration block another's. Suffix with `DATABASE()` so
+     * each tenant serialises against itself only.
+     */
+    private static function buildLockName(): string
+    {
+        $row = QueryUtils::fetchRecords('SELECT DATABASE() AS db');
+        $db = $row[0]['db'] ?? null;
+        if (!is_string($db) || $db === '') {
+            // No current database — without a tenant suffix the lock would
+            // collide across tenants on a shared MySQL instance, which is
+            // exactly what the per-tenant scheme exists to prevent. Refuse.
+            throw new \RuntimeException(
+                'SELECT DATABASE() returned no value; cannot build per-tenant migration lock name'
+            );
+        }
+        return self::LOCK_NAME_PREFIX . ':' . $db;
+    }
+
+    /**
+     * Acquire a MySQL advisory lock.
      *
      * `GET_LOCK` returns 1 on success, 0 on timeout, NULL on error or
      * when the connection's wait was killed. Treat anything other than
      * 1 as "not acquired".
      */
-    private static function acquireLock(): bool
+    private static function acquireLock(string $lockName): bool
     {
         $row = QueryUtils::fetchRecords(
             'SELECT GET_LOCK(?, ?) AS got',
-            [self::LOCK_NAME, self::LOCK_TIMEOUT_SECONDS]
+            [$lockName, self::LOCK_TIMEOUT_SECONDS]
         );
-        return (int) ($row[0]['got'] ?? 0) === 1;
+        $got = $row[0]['got'] ?? null;
+        // GET_LOCK returns 1, 0, or NULL. Mock layers may surface a string;
+        // coerce only after narrowing to a scalar so non-scalar surprises
+        // (driver bugs, mocks gone wrong) bubble up as a hard failure.
+        return is_int($got) ? $got === 1 : (is_string($got) && $got === '1');
     }
 
     /**
      * Release the advisory lock acquired by acquireLock().
+     *
+     * Errors here are logged but never re-thrown: this runs from
+     * `finally`, and re-throwing would mask whatever exception caused
+     * `runMigrationSteps()` to fail. The lock will free when the
+     * session terminates regardless.
      */
-    private static function releaseLock(): void
+    private static function releaseLock(string $lockName): void
     {
-        QueryUtils::sqlStatementThrowException(
-            'DO RELEASE_LOCK(?)',
-            [self::LOCK_NAME]
-        );
+        try {
+            QueryUtils::sqlStatementThrowException('DO RELEASE_LOCK(?)', [$lockName]);
+        } catch (\Throwable $e) {
+            (new SystemLogger())->warning(
+                'Failed to release reminder migration advisory lock; will free at session end',
+                [
+                    'lock_name' => $lockName,
+                    'exception' => ExceptionContext::fromThrowable($e),
+                ]
+            );
+        }
     }
 }

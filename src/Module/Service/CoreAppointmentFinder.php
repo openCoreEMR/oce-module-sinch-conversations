@@ -19,6 +19,7 @@ declare(strict_types=1);
 
 namespace OpenCoreEMR\Modules\SinchConversations\Service;
 
+use OpenEMR\Common\Logging\SystemLogger;
 use OpenEMR\Core\OEGlobalsBag;
 
 class CoreAppointmentFinder implements UpcomingAppointmentFinder
@@ -28,8 +29,14 @@ class CoreAppointmentFinder implements UpcomingAppointmentFinder
      */
     public function findUpcoming(int $windowHours, \DateTimeImmutable $now): array
     {
-        $fileroot = (string) (OEGlobalsBag::getInstance()->get('fileroot') ?? '');
+        $fileroot = OEGlobalsBag::getInstance()->getString('fileroot');
         if ($fileroot === '') {
+            // No way to require library/appointments.inc.php — surface
+            // the misconfiguration loudly so a clinic seeing zero
+            // reminders can find the cause instead of silently shipping.
+            (new SystemLogger())->error(
+                'CoreAppointmentFinder: $GLOBALS[fileroot] is empty; cannot load core appointment helpers'
+            );
             return [];
         }
 
@@ -42,33 +49,53 @@ class CoreAppointmentFinder implements UpcomingAppointmentFinder
         $fromDate = $now->format('Y-m-d');
         $toDate = $windowEnd->format('Y-m-d');
 
-        /** @var array<int, array<string, mixed>>|false $events */
         $events = \fetchAllEvents($fromDate, $toDate);
         if (!is_array($events)) {
             return [];
         }
 
+        $logger = new SystemLogger();
         $occurrences = [];
         foreach ($events as $event) {
-            $pcPid = (int) ($event['pc_pid'] ?? 0);
-            if ($pcPid <= 0) {
+            if (!is_array($event)) {
                 continue;
             }
 
-            $apptStatus = (string) ($event['pc_apptstatus'] ?? '');
-            if ($apptStatus === 'x') {
+            // Required fields. The OpenEMR mysqli driver returns numeric
+            // columns as native ints when configured, but historically as
+            // numeric strings — accept both for the integer columns,
+            // reject anything else.
+            $pcPid = self::asPositiveInt($event['pc_pid'] ?? null);
+            if ($pcPid === null) {
+                continue;
+            }
+            $pcEid = self::asPositiveInt($event['pc_eid'] ?? null);
+            if ($pcEid === null) {
                 continue;
             }
 
-            $eventDate = (string) ($event['pc_eventDate'] ?? '');
-            $startTime = (string) ($event['pc_startTime'] ?? '');
-            if ($eventDate === '' || $startTime === '') {
+            $apptStatus = $event['pc_apptstatus'] ?? null;
+            if (is_string($apptStatus) && $apptStatus === 'x') {
+                continue;
+            }
+
+            $eventDate = $event['pc_eventDate'] ?? null;
+            $startTime = $event['pc_startTime'] ?? null;
+            if (
+                !is_string($eventDate) || !is_string($startTime)
+                || $eventDate === '' || $startTime === ''
+            ) {
                 continue;
             }
 
             try {
                 $apptDt = new \DateTimeImmutable($eventDate . ' ' . $startTime);
             } catch (\Throwable) {
+                $logger->warning('Skipping event with unparseable datetime', [
+                    'pc_eid' => $pcEid,
+                    'pc_eventDate' => $eventDate,
+                    'pc_startTime' => $startTime,
+                ]);
                 continue;
             }
 
@@ -76,16 +103,41 @@ class CoreAppointmentFinder implements UpcomingAppointmentFinder
                 continue;
             }
 
+            // Optional fields — surface as null when absent or non-string;
+            // downstream eligibility checks handle that explicitly.
+            $phoneCell = $event['phone_cell'] ?? null;
+            $hipaaAllowSms = $event['hipaa_allowsms'] ?? null;
+
             $occurrences[] = [
-                'pc_eid' => (int) ($event['pc_eid'] ?? 0),
+                'pc_eid' => $pcEid,
                 'pc_pid' => $pcPid,
                 'pc_eventDate' => $eventDate,
                 'pc_startTime' => $startTime,
-                'phone_cell' => isset($event['phone_cell']) ? (string) $event['phone_cell'] : null,
-                'hipaa_allowsms' => isset($event['hipaa_allowsms']) ? (string) $event['hipaa_allowsms'] : null,
+                'phone_cell' => is_string($phoneCell) ? $phoneCell : null,
+                'hipaa_allowsms' => is_string($hipaaAllowSms) ? $hipaaAllowSms : null,
             ];
         }
 
         return $occurrences;
+    }
+
+    /**
+     * Narrow a value into a positive int, accepting both native ints and
+     * numeric strings (the historical mysqli return shape). Returns null
+     * for anything else, including zero/negative values that wouldn't be
+     * a valid event/patient id.
+     */
+    private static function asPositiveInt(mixed $value): ?int
+    {
+        if (is_int($value)) {
+            return $value > 0 ? $value : null;
+        }
+        if (is_string($value)) {
+            $parsed = filter_var($value, FILTER_VALIDATE_INT, [
+                'options' => ['min_range' => 1],
+            ]);
+            return is_int($parsed) ? $parsed : null;
+        }
+        return null;
     }
 }

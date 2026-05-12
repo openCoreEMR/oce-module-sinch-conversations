@@ -34,6 +34,12 @@ class AppointmentReminderServiceTest extends TestCase
     private MessageService&MockObject $messageService;
     private StubAppointmentFinder $finder;
     private AppointmentReminderService $service;
+    /**
+     * Fixed test clock — pinned just before the dates the eligibility
+     * test fixtures use, so a 24-hour window covers them all and the
+     * stub finder's window-contract enforcement doesn't filter them out.
+     */
+    private \DateTimeImmutable $now;
 
     protected function setUp(): void
     {
@@ -41,8 +47,11 @@ class AppointmentReminderServiceTest extends TestCase
         QueryUtils::clearMockResults();
         SystemLogger::clearLogs();
 
+        // 96h window covers the 4-day span of the recurring-appointment
+        // fixtures (now + 3 days) so the stub finder's window enforcement
+        // doesn't filter them out.
         $this->config = new GlobalConfig(new MockGlobalsAccessor([
-            'SMS_NOTIFICATION_HOUR' => 24,
+            'SMS_NOTIFICATION_HOUR' => 96,
             GlobalConfig::CONFIG_OPTION_CLINIC_NAME => 'Test Clinic',
             GlobalConfig::CONFIG_OPTION_CLINIC_PHONE => '+15551234567',
         ]), new MockConfigFactory());
@@ -50,6 +59,7 @@ class AppointmentReminderServiceTest extends TestCase
         $this->templateService = $this->createMock(TemplateService::class);
         $this->messageService = $this->createMock(MessageService::class);
         $this->finder = new StubAppointmentFinder();
+        $this->now = new \DateTimeImmutable('2026-03-31 12:00:00');
 
         $this->service = new AppointmentReminderService(
             $this->config,
@@ -73,7 +83,7 @@ class AppointmentReminderServiceTest extends TestCase
             new StubAppointmentFinder()
         );
 
-        $results = $service->run();
+        $results = $service->run($this->now);
 
         $this->assertSame(0, $results['sent']);
         $this->assertSame(0, $results['skipped']);
@@ -99,7 +109,7 @@ class AppointmentReminderServiceTest extends TestCase
     {
         $this->mockUpcomingAppointments([]);
 
-        $results = $this->service->run();
+        $results = $this->service->run($this->now);
 
         $this->assertSame(0, $results['sent']);
         $this->assertSame(0, $results['skipped']);
@@ -124,7 +134,7 @@ class AppointmentReminderServiceTest extends TestCase
             ->with(42, '+15559999999', 'Your appointment is coming up.', $this->anything())
             ->willReturn(['id' => 'msg-reminder-1']);
 
-        $results = $this->service->run();
+        $results = $this->service->run($this->now);
 
         $this->assertSame(1, $results['sent']);
         $this->assertSame(0, $results['skipped']);
@@ -162,7 +172,7 @@ class AppointmentReminderServiceTest extends TestCase
 
         $this->messageService->expects($this->never())->method('sendToPatient');
 
-        $results = $this->service->run();
+        $results = $this->service->run($this->now);
 
         $this->assertSame(0, $results['sent']);
         $this->assertSame(1, $results['skipped']);
@@ -197,7 +207,7 @@ class AppointmentReminderServiceTest extends TestCase
 
         $this->messageService->expects($this->never())->method('sendToPatient');
 
-        $results = $this->service->run();
+        $results = $this->service->run($this->now);
 
         $this->assertSame(0, $results['sent']);
         $this->assertSame(1, $results['skipped']);
@@ -232,7 +242,7 @@ class AppointmentReminderServiceTest extends TestCase
 
         $this->messageService->expects($this->never())->method('sendToPatient');
 
-        $results = $this->service->run();
+        $results = $this->service->run($this->now);
 
         $this->assertSame(0, $results['sent']);
         $this->assertSame(1, $results['skipped']);
@@ -263,7 +273,7 @@ class AppointmentReminderServiceTest extends TestCase
 
         $this->messageService->expects($this->once())->method('sendToPatient');
 
-        $results = $this->service->run();
+        $results = $this->service->run($this->now);
 
         $this->assertSame(1, $results['sent']);
         $this->assertSame(0, $results['skipped']);
@@ -283,7 +293,7 @@ class AppointmentReminderServiceTest extends TestCase
 
         $this->messageService->expects($this->never())->method('sendToPatient');
 
-        $results = $this->service->run();
+        $results = $this->service->run($this->now);
 
         $this->assertSame(0, $results['sent']);
         $this->assertSame(1, $results['skipped']);
@@ -302,7 +312,7 @@ class AppointmentReminderServiceTest extends TestCase
 
         $this->messageService->expects($this->never())->method('sendToPatient');
 
-        $results = $this->service->run();
+        $results = $this->service->run($this->now);
 
         $this->assertSame(1, $results['skipped']);
         $this->assertSkipLogged(103, 45, 'hipaa_disallows_sms', ['hipaa_allowsms' => 'unset']);
@@ -322,7 +332,7 @@ class AppointmentReminderServiceTest extends TestCase
 
         $this->messageService->expects($this->never())->method('sendToPatient');
 
-        $results = $this->service->run();
+        $results = $this->service->run($this->now);
 
         $this->assertSame(0, $results['sent']);
         $this->assertSame(0, $results['skipped']);
@@ -342,7 +352,7 @@ class AppointmentReminderServiceTest extends TestCase
 
         $this->messageService->expects($this->never())->method('sendToPatient');
 
-        $results = $this->service->run();
+        $results = $this->service->run($this->now);
 
         $this->assertSame(0, $results['sent']);
         $this->assertSame(1, $results['skipped']);
@@ -362,7 +372,7 @@ class AppointmentReminderServiceTest extends TestCase
 
         $this->messageService->expects($this->never())->method('sendToPatient');
 
-        $results = $this->service->run();
+        $results = $this->service->run($this->now);
 
         $this->assertSame(1, $results['skipped']);
         $this->assertSkipLogged(120, 55, 'unparseable_phone', ['phone_last4' => '']);
@@ -379,7 +389,7 @@ class AppointmentReminderServiceTest extends TestCase
         $this->templateService->method('getAppointmentReminderTemplateKey')
             ->willReturn('appointment_reminder_no_portal');
 
-        $results = $this->service->run();
+        $results = $this->service->run($this->now);
 
         $this->assertSame(1, $results['skipped']);
         $this->assertSkipLogged(121, 56, 'unparseable_phone', ['phone_last4' => '1234']);
@@ -402,7 +412,7 @@ class AppointmentReminderServiceTest extends TestCase
         $this->messageService->method('sendToPatient')
             ->willThrowException(new ValidationException('API error'));
 
-        $results = $this->service->run();
+        $results = $this->service->run($this->now);
 
         $this->assertSame(0, $results['sent']);
         $this->assertSame(1, $results['failed']);
@@ -426,7 +436,7 @@ class AppointmentReminderServiceTest extends TestCase
 
         $this->messageService->expects($this->never())->method('sendToPatient');
 
-        $results = $this->service->run();
+        $results = $this->service->run($this->now);
 
         $this->assertSame(0, $results['sent']);
         $this->assertSame(1, $results['failed']);
@@ -466,7 +476,7 @@ class AppointmentReminderServiceTest extends TestCase
         $this->messageService->method('sendToPatient')
             ->willReturn(['id' => 'msg-ok']);
 
-        $results = $this->service->run();
+        $results = $this->service->run($this->now);
 
         $this->assertSame(2, $results['sent']);
         $this->assertSame(1, $results['skipped']);
@@ -514,7 +524,7 @@ class AppointmentReminderServiceTest extends TestCase
         $this->messageService->method('sendToPatient')
             ->willReturn(['id' => 'msg-portal']);
 
-        $results = $service->run();
+        $results = $service->run($this->now);
 
         $this->assertSame(1, $results['sent']);
     }
@@ -545,7 +555,7 @@ class AppointmentReminderServiceTest extends TestCase
         $this->messageService->method('sendToPatient')
             ->willReturn(['id' => 'msg-fmt']);
 
-        $results = $this->service->run();
+        $results = $this->service->run($this->now);
 
         $this->assertSame(1, $results['sent']);
     }
@@ -571,7 +581,7 @@ class AppointmentReminderServiceTest extends TestCase
             ->with(80, '+15102551233', 'Reminder for raw phone.', $this->anything())
             ->willReturn(['id' => 'msg-raw-phone']);
 
-        $results = $this->service->run();
+        $results = $this->service->run($this->now);
 
         $this->assertSame(1, $results['sent']);
         $this->assertSame(0, $results['skipped']);
@@ -581,14 +591,12 @@ class AppointmentReminderServiceTest extends TestCase
 
     public function testRunSendsOneReminderPerOccurrenceForRecurringAppointment(): void
     {
-        // Use dates relative to "now" so the occurrences mirror what a real
-        // CoreAppointmentFinder would return for a daily-recurring appointment
-        // within the active reminder window. The stub doesn't enforce the
-        // window contract — this is for readability and contract-fidelity.
-        $now = new \DateTimeImmutable();
-        $day1 = $now->modify('+1 day')->format('Y-m-d');
-        $day2 = $now->modify('+2 days')->format('Y-m-d');
-        $day3 = $now->modify('+3 days')->format('Y-m-d');
+        // Use dates relative to the fixture clock so the occurrences look
+        // like what a real CoreAppointmentFinder would return for a
+        // daily-recurring appointment within the active reminder window.
+        $day1 = $this->now->modify('+1 day')->format('Y-m-d');
+        $day2 = $this->now->modify('+2 days')->format('Y-m-d');
+        $day3 = $this->now->modify('+3 days')->format('Y-m-d');
 
         $this->mockUpcomingAppointments([
             $this->makeAppointment(900, 70, $day1, '09:00:00', '+15557770001', 'YES'),
@@ -605,7 +613,7 @@ class AppointmentReminderServiceTest extends TestCase
             ->method('sendToPatient')
             ->willReturn(['id' => 'msg-recur']);
 
-        $results = $this->service->run();
+        $results = $this->service->run($this->now);
 
         $this->assertSame(3, $results['sent']);
         $this->assertSame(0, $results['skipped']);
@@ -629,15 +637,9 @@ class AppointmentReminderServiceTest extends TestCase
 
     public function testRunSkipsRecurringOccurrenceAlreadySent(): void
     {
-        // Pin $now so the dedup-load bind values match between test setup
-        // and service execution. Without this, run()'s internal `new
-        // DateTimeImmutable()` could land on the next calendar day if
-        // the test crosses midnight, leaving the mocked SELECT unmatched
-        // and causing the dedup skip to silently no-op.
-        $now = new \DateTimeImmutable('2026-05-15 12:00:00');
-        $day1 = $now->modify('+1 day')->format('Y-m-d');
-        $day2 = $now->modify('+2 days')->format('Y-m-d');
-        $day3 = $now->modify('+3 days')->format('Y-m-d');
+        $day1 = $this->now->modify('+1 day')->format('Y-m-d');
+        $day2 = $this->now->modify('+2 days')->format('Y-m-d');
+        $day3 = $this->now->modify('+3 days')->format('Y-m-d');
 
         $this->mockUpcomingAppointments([
             $this->makeAppointment(901, 71, $day1, '10:00:00', '+15557770002', 'YES'),
@@ -647,11 +649,16 @@ class AppointmentReminderServiceTest extends TestCase
         $this->mockActiveConsent(71, '+15557770002');
 
         // Pre-seed the dedup table: middle day has already been sent.
+        // Bind range mirrors the service's internal computation:
+        // [now Y-m-d, (now + SMS_NOTIFICATION_HOUR) Y-m-d].
         QueryUtils::setMockResult(
             "SELECT pc_eid, occurrence_date
                 FROM oce_sinch_appointment_reminders
                 WHERE occurrence_date BETWEEN ? AND ?",
-            [$now->format('Y-m-d'), $now->modify('+24 hours')->format('Y-m-d')],
+            [
+                $this->now->format('Y-m-d'),
+                $this->now->modify('+96 hours')->format('Y-m-d'),
+            ],
             [['pc_eid' => 901, 'occurrence_date' => $day2]]
         );
 
@@ -663,7 +670,7 @@ class AppointmentReminderServiceTest extends TestCase
             ->method('sendToPatient')
             ->willReturn(['id' => 'msg-dedup']);
 
-        $results = $this->service->run($now);
+        $results = $this->service->run($this->now);
 
         $this->assertSame(2, $results['sent']);
         $this->assertSame(0, $results['skipped'], 'Already-sent occurrences are quiet skips, not eligibility skips');
@@ -685,7 +692,7 @@ class AppointmentReminderServiceTest extends TestCase
 
     public function testRecordedReminderBindsIncludeOccurrenceDate(): void
     {
-        $occurrenceDate = (new \DateTimeImmutable())->modify('+1 day')->format('Y-m-d');
+        $occurrenceDate = $this->now->modify('+1 day')->format('Y-m-d');
         $this->mockUpcomingAppointments([
             $this->makeAppointment(902, 72, $occurrenceDate, '09:00:00', '+15557770003', 'YES'),
         ]);
@@ -696,7 +703,7 @@ class AppointmentReminderServiceTest extends TestCase
         $this->templateService->method('render')->willReturn('Reminder.');
         $this->messageService->method('sendToPatient')->willReturn(['id' => 'msg-bind']);
 
-        $this->service->run();
+        $this->service->run($this->now);
 
         $inserts = array_values(array_filter(
             QueryUtils::getQueries(),
@@ -718,8 +725,7 @@ class AppointmentReminderServiceTest extends TestCase
         // Without in-loop dedup, both would send because the bulk-loaded
         // sentKeys map is empty and the DB INSERT IGNORE only dedups the
         // log row after both sends complete.
-        $now = new \DateTimeImmutable('2026-05-15 12:00:00');
-        $day = $now->modify('+1 day')->format('Y-m-d');
+        $day = $this->now->modify('+1 day')->format('Y-m-d');
         $this->mockUpcomingAppointments([
             $this->makeAppointment(950, 80, $day, '09:00:00', '+15557770100', 'YES'),
             $this->makeAppointment(950, 80, $day, '09:00:00', '+15557770100', 'YES'),
@@ -733,10 +739,28 @@ class AppointmentReminderServiceTest extends TestCase
             ->method('sendToPatient')
             ->willReturn(['id' => 'msg-dup']);
 
-        $results = $this->service->run($now);
+        $results = $this->service->run($this->now);
 
         $this->assertSame(1, $results['sent']);
         $this->assertSame(0, $results['skipped'], 'In-loop dedup is a quiet skip, not an eligibility skip');
+    }
+
+    // --- stub honours the finder contract ---
+
+    public function testStubAppointmentFinderFiltersOccurrencesOutsideWindow(): void
+    {
+        // Three occurrences: one before now (out), one inside window, one
+        // after windowEnd (out). The stub should return only the middle.
+        $now = new \DateTimeImmutable('2026-03-31 12:00:00');
+        $beforeNow = $this->makeAppointment(801, 81, '2026-03-30', '12:00:00');
+        $inWindow = $this->makeAppointment(802, 82, '2026-04-01', '06:00:00');
+        $afterEnd = $this->makeAppointment(803, 83, '2026-04-05', '12:00:00');
+        $stub = new StubAppointmentFinder([$beforeNow, $inWindow, $afterEnd]);
+
+        $occurrences = $stub->findUpcoming(96, $now);
+
+        $this->assertCount(1, $occurrences);
+        $this->assertSame(802, $occurrences[0]['pc_eid']);
     }
 
     // --- migration failure ---
@@ -754,23 +778,25 @@ class AppointmentReminderServiceTest extends TestCase
         );
 
         // Service should not crash the cron runner — caller has no catch.
-        $results = $this->service->run();
+        $results = $this->service->run($this->now);
 
         $this->assertSame(1, $results['failed']);
         $this->assertSame(0, $results['sent']);
         $this->assertCount(1, $results['errors']);
         $this->assertStringContainsString('schema migration failed', $results['errors'][0]);
 
-        // Migration is the failure boundary — purge / appointment-finder
-        // / sender must not have run.
+        // Purge runs before migration (it only references sent_at, which
+        // exists in both schemas, so it's not gated by migration success).
+        // The finder and sender, on the other hand, must not have run —
+        // migration failure is the boundary that cuts the eligibility loop.
         $queries = QueryUtils::getQueries();
         $this->assertCount(
             0,
             array_filter(
                 $queries,
-                static fn(array $q): bool => str_contains($q['sql'], 'DELETE FROM oce_sinch_appointment_reminders')
+                static fn(array $q): bool => str_contains($q['sql'], 'INSERT IGNORE INTO oce_sinch_appointment_reminders')
             ),
-            'Purge must not run when the migration fails'
+            'No reminder INSERTs after migration failure'
         );
     }
 
@@ -780,7 +806,7 @@ class AppointmentReminderServiceTest extends TestCase
     {
         $this->mockUpcomingAppointments([]);
 
-        $this->service->run();
+        $this->service->run($this->now);
 
         $queries = QueryUtils::getQueries();
         $deleteQueries = array_filter(

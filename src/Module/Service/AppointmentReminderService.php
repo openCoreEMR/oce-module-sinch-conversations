@@ -60,6 +60,12 @@ class AppointmentReminderService
             'errors' => [],
         ];
 
+        // Purge first: it only references `sent_at`, which exists in
+        // both the old and new schemas, so it doesn't depend on the
+        // migration succeeding. Running it first means a tenant blocked
+        // on a failing migration still gets stale-row cleanup.
+        $this->purgeExpiredReminders();
+
         // Safety net for tenants who upgrade the module code without
         // disabling/re-enabling the module. enable() also calls this; both
         // paths short-circuit once the table is fully migrated. We catch
@@ -76,8 +82,6 @@ class AppointmentReminderService
             ]);
             return $results;
         }
-
-        $this->purgeExpiredReminders();
 
         $hours = $this->config->getSmsNotificationHours();
         if ($hours <= 0) {
@@ -99,17 +103,20 @@ class AppointmentReminderService
         $templateKey = $this->templateService->getAppointmentReminderTemplateKey();
 
         foreach ($appointments as $appointment) {
-            $pcEid = (int) $appointment['pc_eid'];
-            $patientId = (int) $appointment['pc_pid'];
-            $occurrenceDate = (string) $appointment['pc_eventDate'];
+            // UpcomingAppointmentFinder declares the row shape with typed
+            // fields; PHPStan enforces it on every implementation, so no
+            // narrowing is needed here.
+            $pcEid = $appointment['pc_eid'];
+            $patientId = $appointment['pc_pid'];
+            $occurrenceDate = $appointment['pc_eventDate'];
 
-            if (isset($sentKeys[$pcEid . '|' . $occurrenceDate])) {
+            if (isset($sentKeys[self::dedupKey($pcEid, $occurrenceDate)])) {
                 // Already reminded for this specific occurrence — quiet skip.
                 continue;
             }
 
-            $rawPhone = $appointment['phone_cell'] ?? '';
-            if ($rawPhone === '') {
+            $rawPhone = $appointment['phone_cell'];
+            if ($rawPhone === null || $rawPhone === '') {
                 $this->logSkip($pcEid, $patientId, SkipReason::MissingPhone);
                 $results['skipped']++;
                 continue;
@@ -124,7 +131,7 @@ class AppointmentReminderService
                 continue;
             }
 
-            $hipaaAllowSms = (string) ($appointment['hipaa_allowsms'] ?? '');
+            $hipaaAllowSms = $appointment['hipaa_allowsms'] ?? '';
             if ($hipaaAllowSms !== 'YES') {
                 $this->logSkip($pcEid, $patientId, SkipReason::HipaaDisallowsSms, [
                     'hipaa_allowsms' => $hipaaAllowSms === '' ? 'unset' : $hipaaAllowSms,
@@ -171,7 +178,7 @@ class AppointmentReminderService
                 // a finder that returns the same occurrence twice) is
                 // skipped instead of double-sent. The DB INSERT IGNORE
                 // dedups the log row, not the SMS delivery.
-                $sentKeys[$pcEid . '|' . $occurrenceDate] = true;
+                $sentKeys[self::dedupKey($pcEid, $occurrenceDate)] = true;
                 $results['sent']++;
             } catch (\Throwable $e) {
                 $results['failed']++;
@@ -215,10 +222,45 @@ class AppointmentReminderService
 
         $map = [];
         foreach ($rows as $row) {
-            $key = (string) ($row['pc_eid'] ?? '') . '|' . (string) ($row['occurrence_date'] ?? '');
-            $map[$key] = true;
+            // Schema guarantees both columns are non-null; a row that
+            // disagrees is a real bug — drop it and log instead of
+            // silently coercing it into a misshapen dedup key.
+            $pcEidRaw = $row['pc_eid'] ?? null;
+            $pcEid = is_int($pcEidRaw)
+                ? $pcEidRaw
+                : (is_string($pcEidRaw)
+                    ? filter_var($pcEidRaw, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]])
+                    : false);
+            if (!is_int($pcEid)) {
+                $this->logger->warning(
+                    'Skipping dedup row: pc_eid is not a positive integer',
+                    ['raw_pc_eid_type' => get_debug_type($pcEidRaw)]
+                );
+                continue;
+            }
+            $occurrenceDate = $row['occurrence_date'] ?? null;
+            if (!is_string($occurrenceDate) || $occurrenceDate === '') {
+                $this->logger->warning(
+                    'Skipping dedup row: occurrence_date is not a non-empty string',
+                    ['raw_occurrence_date_type' => get_debug_type($occurrenceDate)]
+                );
+                continue;
+            }
+            $map[self::dedupKey($pcEid, $occurrenceDate)] = true;
         }
         return $map;
+    }
+
+    /**
+     * Build the in-memory dedup map key for a single occurrence.
+     *
+     * Centralised so the format can change without touching three call
+     * sites (loadSentOccurrences, the eligibility check, the in-loop
+     * mark after a successful send).
+     */
+    private static function dedupKey(int $pcEid, string $occurrenceDate): string
+    {
+        return $pcEid . '|' . $occurrenceDate;
     }
 
     /**
@@ -313,16 +355,21 @@ class AppointmentReminderService
     }
 
     /**
-     * Build template variables for an appointment
+     * Build template variables for an appointment.
      *
-     * @param array<string, mixed> $appointment
+     * @param array{
+     *     pc_eid: int,
+     *     pc_pid: int,
+     *     pc_eventDate: string,
+     *     pc_startTime: string,
+     *     phone_cell: ?string,
+     *     hipaa_allowsms: ?string
+     * } $appointment
      * @return array<string, string>
      */
     private function buildTemplateVariables(array $appointment): array
     {
-        $date = (string) ($appointment['pc_eventDate'] ?? '');
-        $time = (string) ($appointment['pc_startTime'] ?? '');
-        $rawDatetime = $date . ' ' . $time;
+        $rawDatetime = $appointment['pc_eventDate'] . ' ' . $appointment['pc_startTime'];
 
         try {
             $dt = new \DateTimeImmutable($rawDatetime);

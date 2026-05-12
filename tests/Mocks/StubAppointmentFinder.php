@@ -37,7 +37,26 @@ class StubAppointmentFinder implements UpcomingAppointmentFinder
 
     public function findUpcoming(int $windowHours, \DateTimeImmutable $now): array
     {
-        return $this->occurrences;
+        // Honour the interface contract — only return occurrences whose
+        // start datetime falls in `($now, $now + $windowHours]`. A real
+        // implementation must filter; the stub does too so tests can't
+        // accidentally pass occurrences that the production code would
+        // never see.
+        $end = $now->modify(sprintf('+%d hours', $windowHours));
+        $filtered = [];
+        foreach ($this->occurrences as $occ) {
+            try {
+                $apptDt = new \DateTimeImmutable(
+                    $occ['pc_eventDate'] . ' ' . $occ['pc_startTime']
+                );
+            } catch (\Throwable) {
+                continue;
+            }
+            if ($apptDt > $now && $apptDt <= $end) {
+                $filtered[] = $occ;
+            }
+        }
+        return $filtered;
     }
 
     /**
