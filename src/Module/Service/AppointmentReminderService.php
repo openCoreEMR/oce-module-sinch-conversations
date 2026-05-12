@@ -166,6 +166,12 @@ class AppointmentReminderService
                     new MessageOptions(templateKey: $templateKey, skipConsentCheck: true)
                 );
                 $this->recordReminderSent($pcEid, $patientId, $occurrenceDate, $templateKey);
+                // Mark the in-memory dedup map too, so a duplicate
+                // (pc_eid, occurrence_date) later in this same run (e.g.
+                // a finder that returns the same occurrence twice) is
+                // skipped instead of double-sent. The DB INSERT IGNORE
+                // dedups the log row, not the SMS delivery.
+                $sentKeys[$pcEid . '|' . $occurrenceDate] = true;
                 $results['sent']++;
             } catch (\Throwable $e) {
                 $results['failed']++;

@@ -712,6 +712,33 @@ class AppointmentReminderServiceTest extends TestCase
         $this->assertSame('appointment_reminder_no_portal', $inserts[0]['binds'][3]);
     }
 
+    public function testRunDedupesDuplicateOccurrencesWithinSingleRun(): void
+    {
+        // Finder returns the same (pc_eid, pc_eventDate) twice in one run.
+        // Without in-loop dedup, both would send because the bulk-loaded
+        // sentKeys map is empty and the DB INSERT IGNORE only dedups the
+        // log row after both sends complete.
+        $now = new \DateTimeImmutable('2026-05-15 12:00:00');
+        $day = $now->modify('+1 day')->format('Y-m-d');
+        $this->mockUpcomingAppointments([
+            $this->makeAppointment(950, 80, $day, '09:00:00', '+15557770100', 'YES'),
+            $this->makeAppointment(950, 80, $day, '09:00:00', '+15557770100', 'YES'),
+        ]);
+        $this->mockActiveConsent(80, '+15557770100');
+
+        $this->templateService->method('getAppointmentReminderTemplateKey')
+            ->willReturn('appointment_reminder_no_portal');
+        $this->templateService->method('render')->willReturn('Reminder.');
+        $this->messageService->expects($this->once())
+            ->method('sendToPatient')
+            ->willReturn(['id' => 'msg-dup']);
+
+        $results = $this->service->run($now);
+
+        $this->assertSame(1, $results['sent']);
+        $this->assertSame(0, $results['skipped'], 'In-loop dedup is a quiet skip, not an eligibility skip');
+    }
+
     // --- migration failure ---
 
     public function testRunReturnsFailedResultWhenMigrationThrows(): void
