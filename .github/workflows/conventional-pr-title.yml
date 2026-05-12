@@ -6,4 +6,4 @@ on:
 
 jobs:
   conventional-pr-title:
-    uses: openCoreEMR/github-workflows-public/.github/workflows/conventional-pr-title.yml@0.0.2
+    uses: openCoreEMR/github-workflows-public/.github/workflows/conventional-pr-title.yml@0.0.4

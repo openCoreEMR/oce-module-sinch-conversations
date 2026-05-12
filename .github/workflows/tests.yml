@@ -10,4 +10,4 @@ on:
 
 jobs:
   test:
-    uses: openCoreEMR/github-workflows-public/.github/workflows/php-tests.yml@0.0.2
+    uses: openCoreEMR/github-workflows-public/.github/workflows/php-tests.yml@0.0.4
