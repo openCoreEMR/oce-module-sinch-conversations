@@ -45,10 +45,14 @@ class AppointmentReminderService
      * Find upcoming appointments within the notification window, skip patients
      * who are ineligible or already reminded, and send reminders for the rest.
      *
+     * @param \DateTimeImmutable|null $now Wall-clock for the run. Tests pass
+     *     a fixed instant; production callers (background_service_entry)
+     *     leave null and get the current time.
      * @return array{sent: int, skipped: int, failed: int, errors: list<string>}
      */
-    public function run(): array
+    public function run(?\DateTimeImmutable $now = null): array
     {
+        $now ??= new \DateTimeImmutable();
         $results = [
             'sent' => 0,
             'skipped' => 0,
@@ -58,8 +62,20 @@ class AppointmentReminderService
 
         // Safety net for tenants who upgrade the module code without
         // disabling/re-enabling the module. enable() also calls this; both
-        // paths short-circuit once the table is fully migrated.
-        ReminderTableMigration::ensureUpgraded();
+        // paths short-circuit once the table is fully migrated. We catch
+        // here so a lock-timeout or DDL error doesn't crash the cron
+        // runner — the next tick will retry. background_service_entry has
+        // no try/catch around run(), so this is the failure boundary.
+        try {
+            ReminderTableMigration::ensureUpgraded();
+        } catch (\Throwable $e) {
+            $results['failed']++;
+            $results['errors'][] = 'schema migration failed: ' . $e->getMessage();
+            $this->logger->error('Appointment reminder schema migration failed', [
+                'exception' => ExceptionContext::fromThrowable($e),
+            ]);
+            return $results;
+        }
 
         $this->purgeExpiredReminders();
 
@@ -69,7 +85,6 @@ class AppointmentReminderService
             return $results;
         }
 
-        $now = new \DateTimeImmutable();
         $appointments = $this->finder->findUpcoming($hours, $now);
         if ($appointments === []) {
             $this->logger->debug('No upcoming appointments found within notification window');

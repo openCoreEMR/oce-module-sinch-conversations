@@ -629,7 +629,12 @@ class AppointmentReminderServiceTest extends TestCase
 
     public function testRunSkipsRecurringOccurrenceAlreadySent(): void
     {
-        $now = new \DateTimeImmutable();
+        // Pin $now so the dedup-load bind values match between test setup
+        // and service execution. Without this, run()'s internal `new
+        // DateTimeImmutable()` could land on the next calendar day if
+        // the test crosses midnight, leaving the mocked SELECT unmatched
+        // and causing the dedup skip to silently no-op.
+        $now = new \DateTimeImmutable('2026-05-15 12:00:00');
         $day1 = $now->modify('+1 day')->format('Y-m-d');
         $day2 = $now->modify('+2 days')->format('Y-m-d');
         $day3 = $now->modify('+3 days')->format('Y-m-d');
@@ -658,7 +663,7 @@ class AppointmentReminderServiceTest extends TestCase
             ->method('sendToPatient')
             ->willReturn(['id' => 'msg-dedup']);
 
-        $results = $this->service->run();
+        $results = $this->service->run($now);
 
         $this->assertSame(2, $results['sent']);
         $this->assertSame(0, $results['skipped'], 'Already-sent occurrences are quiet skips, not eligibility skips');
@@ -705,6 +710,41 @@ class AppointmentReminderServiceTest extends TestCase
         $this->assertSame($occurrenceDate, $inserts[0]['binds'][1]);
         $this->assertSame(72, $inserts[0]['binds'][2]);
         $this->assertSame('appointment_reminder_no_portal', $inserts[0]['binds'][3]);
+    }
+
+    // --- migration failure ---
+
+    public function testRunReturnsFailedResultWhenMigrationThrows(): void
+    {
+        // Force ensureUpgraded() to throw: legacy table exists (forces
+        // lock acquisition), no GET_LOCK mock → lock attempt returns
+        // [] → got=0 → false → re-probe still legacy → RuntimeException.
+        QueryUtils::setMockResult(
+            'SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?',
+            ['oce_sinch_appointment_reminders'],
+            [['TABLE_NAME' => 'oce_sinch_appointment_reminders']]
+        );
+
+        // Service should not crash the cron runner — caller has no catch.
+        $results = $this->service->run();
+
+        $this->assertSame(1, $results['failed']);
+        $this->assertSame(0, $results['sent']);
+        $this->assertCount(1, $results['errors']);
+        $this->assertStringContainsString('schema migration failed', $results['errors'][0]);
+
+        // Migration is the failure boundary — purge / appointment-finder
+        // / sender must not have run.
+        $queries = QueryUtils::getQueries();
+        $this->assertCount(
+            0,
+            array_filter(
+                $queries,
+                static fn(array $q): bool => str_contains($q['sql'], 'DELETE FROM oce_sinch_appointment_reminders')
+            ),
+            'Purge must not run when the migration fails'
+        );
     }
 
     // --- cleanup ---
