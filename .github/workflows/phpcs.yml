@@ -8,6 +8,8 @@ on:
     - '**.php'
     - .phpcs.xml*
     - phpcs.xml*
+    - composer.json
+    - composer.lock
     - .github/workflows/phpcs.yml
   pull_request:
     branches:
@@ -16,6 +18,8 @@ on:
     - '**.php'
     - .phpcs.xml*
     - phpcs.xml*
+    - composer.json
+    - composer.lock
     - .github/workflows/phpcs.yml
 
 jobs:

@@ -11,6 +11,8 @@ on:
     - phpstan-baseline.neon
     - composer.json
     - composer.lock
+    - tools/openemr/composer.json
+    - tools/openemr/composer.lock
     - .github/workflows/phpstan.yml
   pull_request:
     branches:
@@ -22,6 +24,8 @@ on:
     - phpstan-baseline.neon
     - composer.json
     - composer.lock
+    - tools/openemr/composer.json
+    - tools/openemr/composer.lock
     - .github/workflows/phpstan.yml
 
 jobs:

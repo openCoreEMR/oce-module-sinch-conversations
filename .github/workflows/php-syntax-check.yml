@@ -6,12 +6,14 @@ on:
     - main
     paths:
     - '**.php'
+    - composer.json
     - .github/workflows/php-syntax-check.yml
   pull_request:
     branches:
     - main
     paths:
     - '**.php'
+    - composer.json
     - .github/workflows/php-syntax-check.yml
 
 jobs:
