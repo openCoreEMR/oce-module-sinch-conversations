@@ -20,6 +20,8 @@
 
 declare(strict_types=1);
 
+use OpenCoreEMR\Modules\SinchConversations\Logging\ExceptionContext;
+use OpenCoreEMR\Modules\SinchConversations\Schema\ReminderTableMigration;
 use OpenEMR\Common\Database\QueryUtils;
 use OpenEMR\Common\Logging\SystemLogger;
 
@@ -81,7 +83,12 @@ class ModuleManagerListener
             $errorId = \OpenCoreEMR\Modules\SinchConversations\ErrorId::generate();
             (new SystemLogger())->error(
                 'Background service lifecycle action failed',
-                ['errorId' => $errorId, 'method' => $methodName, 'mod_id' => $modId, 'exception' => $e]
+                [
+                    'errorId' => $errorId,
+                    'method' => $methodName,
+                    'mod_id' => $modId,
+                    'exception' => ExceptionContext::fromThrowable($e),
+                ]
             );
             return "Background service $methodName failed (ref: $errorId). Check logs for details.";
         }
@@ -112,6 +119,7 @@ class ModuleManagerListener
     private function enable(): void
     {
         $this->registerBackgroundService();
+        ReminderTableMigration::ensureUpgraded();
         $this->setBackgroundServiceActive(true);
     }
 

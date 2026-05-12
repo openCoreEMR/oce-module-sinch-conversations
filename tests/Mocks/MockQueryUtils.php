@@ -49,8 +49,14 @@ class QueryUtils
     {
         self::$queries[] = ['sql' => $sql, 'binds' => $binds];
 
-        // Return mock results if set
         $key = self::generateKey($sql, $binds);
+
+        // Drain queued sequential results first (parity with querySingleRow),
+        // so tests can simulate state changes between successive calls.
+        if (!empty(self::$mockResultQueue[$key])) {
+            return array_shift(self::$mockResultQueue[$key]);
+        }
+
         return self::$mockResults[$key] ?? [];
     }
 

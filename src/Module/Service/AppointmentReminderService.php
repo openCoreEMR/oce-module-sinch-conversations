@@ -21,6 +21,7 @@ namespace OpenCoreEMR\Modules\SinchConversations\Service;
 use OpenCoreEMR\Modules\SinchConversations\ConsentBlock;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Logging\ExceptionContext;
+use OpenCoreEMR\Modules\SinchConversations\Schema\ReminderTableMigration;
 use OpenCoreEMR\Modules\SinchConversations\SkipReason;
 use OpenEMR\Common\Database\QueryUtils;
 use OpenEMR\Common\Logging\SystemLogger;
@@ -32,7 +33,8 @@ class AppointmentReminderService
     public function __construct(
         private readonly GlobalConfig $config,
         private readonly TemplateService $templateService,
-        private readonly MessageService $messageService
+        private readonly MessageService $messageService,
+        private readonly UpcomingAppointmentFinder $finder
     ) {
         $this->logger = new SystemLogger();
     }
@@ -43,10 +45,14 @@ class AppointmentReminderService
      * Find upcoming appointments within the notification window, skip patients
      * who are ineligible or already reminded, and send reminders for the rest.
      *
+     * @param \DateTimeImmutable|null $now Wall-clock for the run. Tests pass
+     *     a fixed instant; production callers (background_service_entry)
+     *     leave null and get the current time.
      * @return array{sent: int, skipped: int, failed: int, errors: list<string>}
      */
-    public function run(): array
+    public function run(?\DateTimeImmutable $now = null): array
     {
+        $now ??= new \DateTimeImmutable();
         $results = [
             'sent' => 0,
             'skipped' => 0,
@@ -54,7 +60,28 @@ class AppointmentReminderService
             'errors' => [],
         ];
 
+        // Purge first: it only references `sent_at`, which exists in
+        // both the old and new schemas, so it doesn't depend on the
+        // migration succeeding. Running it first means a tenant blocked
+        // on a failing migration still gets stale-row cleanup.
         $this->purgeExpiredReminders();
+
+        // Safety net for tenants who upgrade the module code without
+        // disabling/re-enabling the module. enable() also calls this; both
+        // paths short-circuit once the table is fully migrated. We catch
+        // here so a lock-timeout or DDL error doesn't crash the cron
+        // runner — the next tick will retry. background_service_entry has
+        // no try/catch around run(), so this is the failure boundary.
+        try {
+            ReminderTableMigration::ensureUpgraded();
+        } catch (\Throwable $e) {
+            $results['failed']++;
+            $results['errors'][] = 'schema migration failed: ' . $e->getMessage();
+            $this->logger->error('Appointment reminder schema migration failed', [
+                'exception' => ExceptionContext::fromThrowable($e),
+            ]);
+            return $results;
+        }
 
         $hours = $this->config->getSmsNotificationHours();
         if ($hours <= 0) {
@@ -62,20 +89,34 @@ class AppointmentReminderService
             return $results;
         }
 
-        $appointments = $this->getUpcomingAppointments($hours);
+        $appointments = $this->finder->findUpcoming($hours, $now);
         if ($appointments === []) {
             $this->logger->debug('No upcoming appointments found within notification window');
             return $results;
         }
 
+        $sentKeys = $this->loadSentOccurrences(
+            $now->format('Y-m-d'),
+            $now->modify(sprintf('+%d hours', $hours))->format('Y-m-d')
+        );
+
         $templateKey = $this->templateService->getAppointmentReminderTemplateKey();
 
         foreach ($appointments as $appointment) {
-            $pcEid = (int) $appointment['pc_eid'];
-            $patientId = (int) $appointment['pc_pid'];
+            // UpcomingAppointmentFinder declares the row shape with typed
+            // fields; PHPStan enforces it on every implementation, so no
+            // narrowing is needed here.
+            $pcEid = $appointment['pc_eid'];
+            $patientId = $appointment['pc_pid'];
+            $occurrenceDate = $appointment['pc_eventDate'];
 
-            $rawPhone = $appointment['phone_cell'] ?? '';
-            if ($rawPhone === '') {
+            if (isset($sentKeys[self::dedupKey($pcEid, $occurrenceDate)])) {
+                // Already reminded for this specific occurrence — quiet skip.
+                continue;
+            }
+
+            $rawPhone = $appointment['phone_cell'];
+            if ($rawPhone === null || $rawPhone === '') {
                 $this->logSkip($pcEid, $patientId, SkipReason::MissingPhone);
                 $results['skipped']++;
                 continue;
@@ -90,7 +131,7 @@ class AppointmentReminderService
                 continue;
             }
 
-            $hipaaAllowSms = (string) ($appointment['hipaa_allowsms'] ?? '');
+            $hipaaAllowSms = $appointment['hipaa_allowsms'] ?? '';
             if ($hipaaAllowSms !== 'YES') {
                 $this->logSkip($pcEid, $patientId, SkipReason::HipaaDisallowsSms, [
                     'hipaa_allowsms' => $hipaaAllowSms === '' ? 'unset' : $hipaaAllowSms,
@@ -131,7 +172,13 @@ class AppointmentReminderService
                     $message,
                     new MessageOptions(templateKey: $templateKey, skipConsentCheck: true)
                 );
-                $this->recordReminderSent($pcEid, $patientId, $templateKey);
+                $this->recordReminderSent($pcEid, $patientId, $occurrenceDate, $templateKey);
+                // Mark the in-memory dedup map too, so a duplicate
+                // (pc_eid, occurrence_date) later in this same run (e.g.
+                // a finder that returns the same occurrence twice) is
+                // skipped instead of double-sent. The DB INSERT IGNORE
+                // dedups the log row, not the SMS delivery.
+                $sentKeys[self::dedupKey($pcEid, $occurrenceDate)] = true;
                 $results['sent']++;
             } catch (\Throwable $e) {
                 $results['failed']++;
@@ -154,44 +201,99 @@ class AppointmentReminderService
     }
 
     /**
-     * Query upcoming appointments within the notification window
+     * Bulk-load already-sent reminder keys for the active window.
      *
-     * Find events from openemr_postcalendar_events where the appointment
-     * datetime is between now and now + $hours hours, and the event is
-     * not cancelled (pc_apptstatus != 'x').
+     * Returned map keys are `"{pc_eid}|{occurrence_date}"`; values are
+     * irrelevant (presence is the signal). One round trip up front
+     * supplies the dedup state for every appointment in the window —
+     * cheaper than a per-occurrence SELECT and necessary because the
+     * old `LEFT JOIN ... r.id IS NULL` filter no longer fits now that
+     * the dedup key is `(pc_eid, occurrence_date)` and the appointment
+     * source has moved out of SQL into the finder.
      *
-     * @return array<int, array<string, mixed>>
+     * @return array<string, true>
      */
-    private function getUpcomingAppointments(int $hours): array
+    private function loadSentOccurrences(string $fromDate, string $toDate): array
     {
-        $sql = "SELECT e.pc_eid, e.pc_pid, e.pc_eventDate, e.pc_startTime,
-                       p.phone_cell, p.hipaa_allowsms
-                FROM openemr_postcalendar_events e
-                JOIN patient_data p ON e.pc_pid = p.pid
-                LEFT JOIN oce_sinch_appointment_reminders r ON e.pc_eid = r.pc_eid
-                WHERE CONCAT(e.pc_eventDate, ' ', e.pc_startTime) > NOW()
-                  AND CONCAT(e.pc_eventDate, ' ', e.pc_startTime) <= DATE_ADD(NOW(), INTERVAL ? HOUR)
-                  AND e.pc_apptstatus != 'x'
-                  AND e.pc_pid > 0
-                  AND r.id IS NULL
-                ORDER BY e.pc_eventDate, e.pc_startTime";
+        $sql = "SELECT pc_eid, occurrence_date
+                FROM oce_sinch_appointment_reminders
+                WHERE occurrence_date BETWEEN ? AND ?";
+        $rows = QueryUtils::fetchRecords($sql, [$fromDate, $toDate]);
 
-        return QueryUtils::fetchRecords($sql, [$hours]);
+        $map = [];
+        foreach ($rows as $row) {
+            // Schema guarantees both columns are non-null; a row that
+            // disagrees is a real bug — drop it and log instead of
+            // silently coercing it into a misshapen dedup key.
+            $pcEidRaw = $row['pc_eid'] ?? null;
+            $pcEid = is_int($pcEidRaw)
+                ? $pcEidRaw
+                : (is_string($pcEidRaw)
+                    ? filter_var($pcEidRaw, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]])
+                    : false);
+            if (!is_int($pcEid)) {
+                $this->logger->warning(
+                    'Skipping dedup row: pc_eid is not a positive integer',
+                    ['raw_pc_eid_type' => get_debug_type($pcEidRaw)]
+                );
+                continue;
+            }
+            $occurrenceDate = $row['occurrence_date'] ?? null;
+            if (!is_string($occurrenceDate) || $occurrenceDate === '') {
+                $this->logger->warning(
+                    'Skipping dedup row: occurrence_date is not a non-empty string',
+                    ['raw_occurrence_date_type' => get_debug_type($occurrenceDate)]
+                );
+                continue;
+            }
+            $map[self::dedupKey($pcEid, $occurrenceDate)] = true;
+        }
+        return $map;
     }
 
     /**
-     * Record that a reminder was sent for this event
+     * Build the in-memory dedup map key for a single occurrence.
      *
-     * Use INSERT IGNORE to handle race conditions where concurrent cron runs
-     * pass the LEFT JOIN check and both attempt to insert. The UNIQUE KEY on
-     * pc_eid ensures only one succeeds; the other is silently ignored.
+     * Centralised so the format can change without touching three call
+     * sites (loadSentOccurrences, the eligibility check, the in-loop
+     * mark after a successful send).
      */
-    private function recordReminderSent(int $pcEid, int $patientId, string $templateKey): void
+    private static function dedupKey(int $pcEid, string $occurrenceDate): string
     {
+        return $pcEid . '|' . $occurrenceDate;
+    }
+
+    /**
+     * Record that a reminder was sent for a specific occurrence.
+     *
+     * The UNIQUE KEY on `(pc_eid, occurrence_date)` exists so re-runs of
+     * the cron — same process, next tick — never insert a second log row
+     * for an occurrence already sent. It does NOT make the
+     * send-then-record sequence atomic: if two processes ever raced past
+     * the bulk dedup check at the top of run(), both would send before
+     * either reached this insert. The actual concurrency guard for that
+     * scenario lives in OpenEMR's `background_services.running` flag,
+     * which serializes cron invocations of this service.
+     *
+     * INSERT IGNORE keeps the call idempotent under that re-run pattern
+     * (and tolerates a pessimistic re-record from any future retry path)
+     * by silently dropping a duplicate-key collision instead of throwing.
+     * Recurring appointments share `pc_eid` across their occurrences, so
+     * `occurrence_date` is what distinguishes them.
+     */
+    private function recordReminderSent(
+        int $pcEid,
+        int $patientId,
+        string $occurrenceDate,
+        string $templateKey
+    ): void {
         $sql = "INSERT IGNORE INTO oce_sinch_appointment_reminders
-                    (pc_eid, patient_id, sent_at, template_key)
-                VALUES (?, ?, NOW(), ?)";
-        QueryUtils::sqlStatementThrowException($sql, [$pcEid, $patientId, $templateKey]);
+                    (pc_eid, occurrence_date, patient_id, sent_at, template_key)
+                VALUES (?, ?, ?, NOW(), ?)";
+        QueryUtils::sqlStatementThrowException(
+            $sql,
+            [$pcEid, $occurrenceDate, $patientId, $templateKey]
+        );
     }
 
     /**
@@ -253,16 +355,21 @@ class AppointmentReminderService
     }
 
     /**
-     * Build template variables for an appointment
+     * Build template variables for an appointment.
      *
-     * @param array<string, mixed> $appointment
+     * @param array{
+     *     pc_eid: int,
+     *     pc_pid: int,
+     *     pc_eventDate: string,
+     *     pc_startTime: string,
+     *     phone_cell: ?string,
+     *     hipaa_allowsms: ?string
+     * } $appointment
      * @return array<string, string>
      */
     private function buildTemplateVariables(array $appointment): array
     {
-        $date = (string) ($appointment['pc_eventDate'] ?? '');
-        $time = (string) ($appointment['pc_startTime'] ?? '');
-        $rawDatetime = $date . ' ' . $time;
+        $rawDatetime = $appointment['pc_eventDate'] . ' ' . $appointment['pc_startTime'];
 
         try {
             $dt = new \DateTimeImmutable($rawDatetime);

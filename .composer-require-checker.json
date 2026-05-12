@@ -47,6 +47,7 @@
     "attr",
     "text",
     "date",
+    "fetchAllEvents",
     "random_bytes"
   ],
   "php-core-extensions": [

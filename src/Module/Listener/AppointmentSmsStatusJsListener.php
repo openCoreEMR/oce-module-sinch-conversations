@@ -47,8 +47,7 @@ class AppointmentSmsStatusJsListener
     public function onRenderJavascript(AppointmentRenderEvent $event): void
     {
         unset($event); // signature is fixed by the dispatcher; nothing in $event is needed here
-        $webrootValue = OEGlobalsBag::getInstance()->get('webroot');
-        $webroot = is_string($webrootValue) ? $webrootValue : '';
+        $webroot = OEGlobalsBag::getInstance()->getString('webroot');
         $url = $webroot . '/interface/modules/custom_modules/' . Bootstrap::MODULE_NAME . '/public/eligibility.php';
 
         // Embed every dynamic value as JSON so any future webroot change

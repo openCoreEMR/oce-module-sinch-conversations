@@ -360,7 +360,18 @@ class Bootstrap
         return new Service\AppointmentReminderService(
             $this->globalsConfig,
             $this->getTemplateService(),
-            $this->getMessageService()
+            $this->getMessageService(),
+            $this->getUpcomingAppointmentFinder()
         );
+    }
+
+    /**
+     * Get Upcoming Appointment Finder
+     *
+     * Production wraps core OpenEMR's recurrence-aware fetchAllEvents().
+     */
+    public function getUpcomingAppointmentFinder(): Service\UpcomingAppointmentFinder
+    {
+        return new Service\CoreAppointmentFinder();
     }
 }
