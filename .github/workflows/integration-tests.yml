@@ -34,8 +34,15 @@ jobs:
     - name: Install OpenEMR source under tools/openemr
       run: composer install --working-dir=tools/openemr --no-progress --no-interaction --prefer-dist
 
+    - name: Install OpenEMR's own runtime dependencies
+      # The openemr/openemr:flex image bind-mounts tools/openemr/vendor/openemr/openemr
+      # over /var/www/.../openemr. Without this step the bind mount has no vendor/
+      # of its own, login.php fails on the require_once(autoload.php) and the
+      # health check never goes green.
+      run: composer install --working-dir=tools/openemr/vendor/openemr/openemr --no-dev --no-progress --no-interaction --prefer-dist
+
     - name: Bring up dev stack
-      run: docker compose up -d --wait
+      run: docker compose up -d --wait --wait-timeout 600
       env:
         COMPOSE_HTTP_TIMEOUT: '300'
 
