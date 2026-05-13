@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.2.1](https://github.com/openCoreEMR/oce-module-sinch-conversations/compare/1.2.0...1.2.1) (2026-05-13)
+
+
+### Bug Fixes
+
+* **api:** route Sinch API calls to the configured region, not always US ([#150](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/150)) ([36354da](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/36354dadf1a7e7a6f48832ce6863e339d16bb77a))
+* **reminders:** call fetchAppointments, not fetchAllEvents ([#143](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/143)) ([fba9ec5](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/fba9ec560e0b2208883943c05f5e3b531ff39aa9))
+* **reminders:** read pid from fetchAppointments rows, not pc_pid ([#149](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/149)) ([4926035](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/49260356121ca3d2a7fa6c2eee7dc922ca967ee7))
+
+
+### Dependencies
+
+* bump opencoreemr/github-workflows-public/.github/workflows/release-please-reusable.yml ([#141](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/141)) ([718bd4c](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/718bd4caccf8ca43f4ac9a83f7e3f645914b477e))
+
 ## [1.2.0](https://github.com/openCoreEMR/oce-module-sinch-conversations/compare/1.1.2...1.2.0) (2026-05-12)
 
 
