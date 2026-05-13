@@ -166,11 +166,12 @@ class SettingsController
             }
 
             // $hasApiTuple → $secretForValidation !== '' here (the guard
-            // above returned when an API tuple lacked a secret). Region is
-            // already validated by ConfigService::validateSettings before
-            // we reach this point, so tryFrom never returns null when
-            // $apiFieldChanged && $hasApiTuple — but check anyway and skip
-            // the API call if the region is unrecognised.
+            // above returned when an API tuple lacked a secret). Region
+            // hasn't been validated yet — that happens in
+            // ConfigService::saveSettings() further down — so check
+            // tryFrom and skip the API call if the form posted an
+            // unrecognised value (saveSettings will then reject it with a
+            // user-facing error).
             $region = Region::tryFrom($settings['region']);
             try {
                 if ($apiFieldChanged && $hasApiTuple && $region !== null) {
