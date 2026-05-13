@@ -42,11 +42,8 @@ jobs:
     - name: Wait for OpenEMR install to settle
       run: |
         for i in {1..60}; do
-          if docker compose exec -T openemr test -f /var/www/localhost/htdocs/openemr/sites/default/sqlconf.php; then
-            grep -q "config = 1" /var/www/localhost/htdocs/openemr/sites/default/sqlconf.php 2>/dev/null \
-              && break
-            docker compose exec -T openemr grep -q "config = 1" /var/www/localhost/htdocs/openemr/sites/default/sqlconf.php \
-              && break
+          if docker compose exec -T openemr grep -q "config = 1" /var/www/localhost/htdocs/openemr/sites/default/sqlconf.php; then
+            break
           fi
           sleep 5
         done

@@ -42,14 +42,19 @@ class RecordingBootstrap extends Bootstrap
     }
 
     /**
-     * GlobalConfig is private on Bootstrap. We need a handle to construct
-     * the RecordingMessageService with the same config the real one uses.
-     * Reflection here keeps the production class API untouched.
+     * GlobalConfig is private on Bootstrap. Read it via a closure rebound
+     * to Bootstrap's scope — works on every supported PHP version and
+     * keeps the production class API untouched. Reflection's
+     * setAccessible() became a no-op in PHP 8.1, but a bound closure is
+     * the more portable, intent-revealing approach.
      */
     private function getGlobalConfigForTesting(): \OpenCoreEMR\Modules\SinchConversations\GlobalConfig
     {
-        $ref = new \ReflectionClass(Bootstrap::class);
-        $prop = $ref->getProperty('globalsConfig');
-        return $prop->getValue($this);
+        $reader = \Closure::bind(
+            fn(): \OpenCoreEMR\Modules\SinchConversations\GlobalConfig => $this->globalsConfig,
+            $this,
+            Bootstrap::class
+        );
+        return $reader();
     }
 }
