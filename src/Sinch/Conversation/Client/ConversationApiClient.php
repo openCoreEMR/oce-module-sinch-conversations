@@ -20,17 +20,15 @@ use OpenCoreEMR\Modules\SinchConversations\Common\ArrayPath;
 use OpenCoreEMR\Modules\SinchConversations\Common\Json;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Logging\ExceptionContext;
+use OpenCoreEMR\Sinch\Conversation\Config\Region;
 use OpenCoreEMR\Sinch\Conversation\Exception\ApiException;
 use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
 use OpenEMR\Common\Logging\SystemLogger;
 
 class ConversationApiClient
 {
-    private const BASE_URL = 'https://us.conversation.api.sinch.com';
     private const CONSENT_MAX_PAGES = 100;
 
-    /** @var list<string> Sinch Conversations regions this client can talk to */
-    public const SUPPORTED_REGIONS = ['us', 'eu'];
     private readonly Client $httpClient;
     private readonly SystemLogger $logger;
     private ?string $cachedAccessToken = null;
@@ -40,7 +38,7 @@ class ConversationApiClient
         ?Client $httpClient = null
     ) {
         $this->httpClient = $httpClient ?? new Client([
-            'base_uri' => self::BASE_URL,
+            'base_uri' => $config->getSinchApiBaseUrl(),
             'timeout' => 30,
             'http_errors' => false,
         ]);
@@ -497,7 +495,7 @@ class ConversationApiClient
         string $appId,
         string $apiKey,
         string $apiSecret,
-        string $region,
+        Region $region,
     ): void {
         if ($projectId === '') {
             throw new ValidationException('Project ID is required');
@@ -511,16 +509,16 @@ class ConversationApiClient
         if ($apiSecret === '') {
             throw new ValidationException('API Secret is required');
         }
-        if ($region === '') {
-            throw new ValidationException('Region is required');
-        }
 
         $accessToken = $this->requestOAuth2Token($region, $apiKey, $apiSecret);
 
-        // Build the regional URL explicitly. The shared httpClient is bound
-        // to a hardcoded US base_uri, so a relative path would always hit
-        // us.conversation.api.sinch.com regardless of $region.
-        $url = "https://{$region}.conversation.api.sinch.com/v1/projects/{$projectId}/apps/{$appId}";
+        // Build the URL from the SUPPLIED region, not the constructor's
+        // base_uri. The shared httpClient is bound to the *currently
+        // saved* config's region, but credential validation may be
+        // testing a region the operator is about to switch to. An
+        // absolute URL overrides Guzzle's base_uri so we always hit the
+        // region the operator is actually validating.
+        $url = $region->conversationApiBaseUrl() . "/v1/projects/{$projectId}/apps/{$appId}";
 
         try {
             $response = $this->httpClient->get(
@@ -542,25 +540,17 @@ class ConversationApiClient
         $this->handleResponse($response);
     }
 
-    private function requestOAuth2Token(string $region, string $keyId, string $keySecret): string
+    private function requestOAuth2Token(Region $region, string $keyId, string $keySecret): string
     {
         if (empty($keyId) || empty($keySecret)) {
             throw new ApiException("API Key ID and Secret are required for OAuth2 authentication");
-        }
-
-        if (!in_array($region, self::SUPPORTED_REGIONS, true)) {
-            throw new ApiException(sprintf(
-                "Unsupported Sinch region '%s'; supported regions are: %s",
-                $region,
-                implode(', ', self::SUPPORTED_REGIONS),
-            ));
         }
 
         try {
             $this->logger->debug("Requesting OAuth2 token from Sinch");
 
             $response = $this->httpClient->post(
-                "https://{$region}.auth.sinch.com/oauth2/token",
+                $region->authBaseUrl() . '/oauth2/token',
                 [
                     'form_params' => [
                         'grant_type' => 'client_credentials',
@@ -623,7 +613,7 @@ class ConversationApiClient
 
             $response = $this->executeWithRetry(
                 fn(): \Psr\Http\Message\ResponseInterface => $this->httpClient->post(
-                    "https://{$region}.template.api.sinch.com/v2/projects/{$projectId}/templates",
+                    $region->templateApiBaseUrl() . "/v2/projects/{$projectId}/templates",
                     [
                         'headers' => [
                             'Content-Type' => 'application/json',
@@ -655,7 +645,7 @@ class ConversationApiClient
 
         try {
             $response = $this->httpClient->get(
-                "https://{$region}.template.api.sinch.com/v2/projects/{$projectId}/templates",
+                $region->templateApiBaseUrl() . "/v2/projects/{$projectId}/templates",
                 [
                     'headers' => [
                         'Content-Type' => 'application/json',

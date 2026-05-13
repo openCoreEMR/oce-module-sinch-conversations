@@ -24,5 +24,14 @@ interface ConfigInterface
 
     public function getSinchApiSecret(): string;
 
-    public function getSinchRegion(): string;
+    public function getSinchRegion(): Region;
+
+    /**
+     * Resolve the Conversations API base URL for the configured region.
+     *
+     * Implementations MUST return `$this->getSinchRegion()->conversationApiBaseUrl()`;
+     * the indirection exists so callers that already have a config don't
+     * need a second `Region` injection.
+     */
+    public function getSinchApiBaseUrl(): string;
 }

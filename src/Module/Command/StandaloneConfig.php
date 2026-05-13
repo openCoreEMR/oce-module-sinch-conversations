@@ -15,6 +15,7 @@ declare(strict_types=1);
 namespace OpenCoreEMR\Modules\SinchConversations\Command;
 
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
+use OpenCoreEMR\Sinch\Conversation\Config\Region;
 
 /**
  * Configuration adapter for CLI usage without OpenEMR globals
@@ -49,18 +50,13 @@ class StandaloneConfig extends GlobalConfig
         return $this->config['api_secret'] ?? '';
     }
 
-    public function getSinchRegion(): string
+    public function getSinchRegion(): Region
     {
-        return $this->config['region'] ?? 'us';
+        return Region::tryFrom($this->config['region'] ?? '') ?? Region::Us;
     }
 
-    public function getApiBaseUrl(): string
+    public function getSinchApiBaseUrl(): string
     {
-        $region = $this->getSinchRegion();
-        return match ($region) {
-            'us' => 'https://us.conversation.api.sinch.com',
-            'eu' => 'https://eu.conversation.api.sinch.com',
-            default => 'https://us.conversation.api.sinch.com',
-        };
+        return $this->getSinchRegion()->conversationApiBaseUrl();
     }
 }

@@ -17,6 +17,7 @@ namespace OpenCoreEMR\Modules\SinchConversations\Tests\Unit;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockConfigFactory;
 use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockGlobalsAccessor;
+use OpenCoreEMR\Sinch\Conversation\Config\Region;
 use PHPUnit\Framework\TestCase;
 
 class GlobalConfigTest extends TestCase
@@ -104,22 +105,37 @@ class GlobalConfigTest extends TestCase
         $this->assertEquals('test-api-secret', $this->config->getSinchApiSecret());
     }
 
-    public function testGetRegion(): void
+    public function testGetSinchRegionFromConfig(): void
     {
-        $this->assertEquals('us', $this->config->getRegion());
+        $this->assertSame(Region::Us, $this->config->getSinchRegion());
     }
 
-    public function testGetRegionDefault(): void
+    public function testGetSinchRegionDefaultsToUsWhenUnset(): void
     {
         $mockGlobals = new MockGlobalsAccessor([]);
         $config = new GlobalConfig($mockGlobals, new MockConfigFactory());
 
-        $this->assertEquals('us', $config->getRegion());
+        $this->assertSame(Region::Us, $config->getSinchRegion());
     }
 
-    public function testGetSinchRegion(): void
+    public function testGetSinchRegionDefaultsToUsForUnknownString(): void
     {
-        $this->assertEquals('us', $this->config->getSinchRegion());
+        $mockGlobals = new MockGlobalsAccessor([
+            GlobalConfig::CONFIG_OPTION_REGION => 'asia',
+        ]);
+        $config = new GlobalConfig($mockGlobals, new MockConfigFactory());
+
+        $this->assertSame(Region::Us, $config->getSinchRegion());
+    }
+
+    public function testGetSinchRegionEu(): void
+    {
+        $mockGlobals = new MockGlobalsAccessor([
+            GlobalConfig::CONFIG_OPTION_REGION => 'eu',
+        ]);
+        $config = new GlobalConfig($mockGlobals, new MockConfigFactory());
+
+        $this->assertSame(Region::Eu, $config->getSinchRegion());
     }
 
     public function testGetDefaultChannel(): void
@@ -166,22 +182,22 @@ class GlobalConfigTest extends TestCase
         $this->assertEquals('https://example.com/portal', $config->getPortalUrl());
     }
 
-    public function testGetApiBaseUrlUs(): void
+    public function testGetSinchApiBaseUrlUs(): void
     {
-        $this->assertEquals('https://us.conversation.api.sinch.com', $this->config->getApiBaseUrl());
+        $this->assertEquals('https://us.conversation.api.sinch.com', $this->config->getSinchApiBaseUrl());
     }
 
-    public function testGetApiBaseUrlEu(): void
+    public function testGetSinchApiBaseUrlEu(): void
     {
         $mockGlobals = new MockGlobalsAccessor([
             GlobalConfig::CONFIG_OPTION_REGION => 'eu',
         ]);
         $config = new GlobalConfig($mockGlobals, new MockConfigFactory());
 
-        $this->assertEquals('https://eu.conversation.api.sinch.com', $config->getApiBaseUrl());
+        $this->assertEquals('https://eu.conversation.api.sinch.com', $config->getSinchApiBaseUrl());
     }
 
-    public function testGetApiBaseUrlUnknownRegion(): void
+    public function testGetSinchApiBaseUrlUnknownRegion(): void
     {
         $mockGlobals = new MockGlobalsAccessor([
             GlobalConfig::CONFIG_OPTION_REGION => 'unknown',
@@ -189,7 +205,7 @@ class GlobalConfigTest extends TestCase
         $config = new GlobalConfig($mockGlobals, new MockConfigFactory());
 
         // Should default to US
-        $this->assertEquals('https://us.conversation.api.sinch.com', $config->getApiBaseUrl());
+        $this->assertEquals('https://us.conversation.api.sinch.com', $config->getSinchApiBaseUrl());
     }
 
     // --- Webhook config tests ---
