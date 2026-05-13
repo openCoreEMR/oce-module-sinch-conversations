@@ -3,10 +3,15 @@
 /**
  * Default UpcomingAppointmentFinder backed by core OpenEMR
  *
- * Wraps `library/appointments.inc.php::fetchAllEvents()`, which expands
- * `pc_recurrtype` / `pc_recurrspec` into per-occurrence rows. Production
- * uses this; unit tests inject a stub instead so they don't have to load
- * the procedural library or wire up the kernel event dispatcher.
+ * Wraps `library/appointments.inc.php::fetchAppointments()`, which (via
+ * the shared `fetchEvents()` helper) expands `pc_recurrtype` /
+ * `pc_recurrspec` into per-occurrence rows AND filters to events with a
+ * patient (`pc_pid != ''`). The sibling `fetchAllEvents()` returns
+ * provider-availability blocks ("In Office" / "Out Of Office" calendar
+ * events with no patient) and is used only by `getAvailableSlots()` —
+ * not what we want here. Production uses this; unit tests inject a stub
+ * instead so they don't have to load the procedural library or wire up
+ * the kernel event dispatcher.
  *
  * @package   OpenCoreEMR
  * @link      https://opencoreemr.com
@@ -43,13 +48,17 @@ class CoreAppointmentFinder implements UpcomingAppointmentFinder
         require_once $fileroot . '/library/appointments.inc.php';
 
         $windowEnd = $now->modify(sprintf('+%d hours', $windowHours));
-        // fetchAllEvents filters by date (Y-m-d) inclusive on both ends,
+        // fetchAppointments filters by date (Y-m-d) inclusive on both ends,
         // so a window that crosses midnight already pulls in the trailing
         // calendar day. We re-check the precise time bound in PHP below.
         $fromDate = $now->format('Y-m-d');
         $toDate = $windowEnd->format('Y-m-d');
 
-        $events = \fetchAllEvents($fromDate, $toDate);
+        // All optional args default to null/false, which makes
+        // fetchAppointments return every patient appointment in the
+        // window across all providers/facilities. The pc_pid != '' guard
+        // lives inside fetchAppointments itself.
+        $events = \fetchAppointments($fromDate, $toDate);
         if (!is_array($events)) {
             return [];
         }

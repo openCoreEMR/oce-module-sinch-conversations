@@ -1,0 +1,163 @@
+<?php
+
+/**
+ * @package   OpenCoreEMR
+ * @link      https://opencoreemr.com
+ * @author    Michael A. Smith <michael@opencoreemr.com>
+ * @copyright Copyright (c) 2026 OpenCoreEMR Inc
+ * @license   GNU General Public License 3
+ */
+
+declare(strict_types=1);
+
+namespace OpenCoreEMR\Modules\SinchConversations\Tests\Unit\Service;
+
+use OpenCoreEMR\Modules\SinchConversations\Service\CoreAppointmentFinder;
+use OpenEMR\Core\OEGlobalsBag;
+use PHPUnit\Framework\TestCase;
+
+class CoreAppointmentFinderTest extends TestCase
+{
+    private const FIXTURE_ROOT = __DIR__ . '/../../fixtures/CoreAppointmentFinder';
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        OEGlobalsBag::reset();
+        $GLOBALS['fileroot'] = self::FIXTURE_ROOT;
+        $GLOBALS['__test_fetch_appointments_calls'] = [];
+        $GLOBALS['__test_fetch_appointments_return'] = [];
+    }
+
+    protected function tearDown(): void
+    {
+        unset(
+            $GLOBALS['fileroot'],
+            $GLOBALS['__test_fetch_appointments_calls'],
+            $GLOBALS['__test_fetch_appointments_return'],
+        );
+        OEGlobalsBag::reset();
+        parent::tearDown();
+    }
+
+    public function testCallsFetchAppointmentsWithDateWindowBounds(): void
+    {
+        $now = new \DateTimeImmutable('2026-05-13 09:00:00');
+
+        (new CoreAppointmentFinder())->findUpcoming(10, $now);
+
+        $this->assertCount(1, $GLOBALS['__test_fetch_appointments_calls']);
+        $this->assertSame(
+            ['from_date' => '2026-05-13', 'to_date' => '2026-05-13'],
+            $GLOBALS['__test_fetch_appointments_calls'][0],
+        );
+    }
+
+    public function testReturnsPatientOccurrencesInsideWindow(): void
+    {
+        $now = new \DateTimeImmutable('2026-05-13 09:00:00');
+        $GLOBALS['__test_fetch_appointments_return'] = [
+            $this->event(pcEid: 65, pcPid: 5, date: '2026-05-13', time: '14:00:00', phone: '+15102551233', sms: 'YES'),
+            $this->event(pcEid: 70, pcPid: 14, date: '2026-05-13', time: '11:00:00', phone: '+14123704170', sms: 'YES'),
+        ];
+
+        $result = (new CoreAppointmentFinder())->findUpcoming(10, $now);
+
+        $this->assertCount(2, $result);
+        $this->assertSame(65, $result[0]['pc_eid']);
+        $this->assertSame(5, $result[0]['pc_pid']);
+        $this->assertSame('14:00:00', $result[0]['pc_startTime']);
+        $this->assertSame('+15102551233', $result[0]['phone_cell']);
+        $this->assertSame('YES', $result[0]['hipaa_allowsms']);
+        $this->assertSame(14, $result[1]['pc_pid']);
+    }
+
+    /**
+     * Regression guard for the 1.2.0 → 1.2.x bug where the finder called
+     * fetchAllEvents (which returns availability blocks with no patient).
+     * The fixture's fetchAllEvents throws; this test confirms findUpcoming
+     * doesn't trigger it even when the row shape includes nullable patient
+     * fields.
+     */
+    public function testRejectsRowsWithoutPatientId(): void
+    {
+        $now = new \DateTimeImmutable('2026-05-13 09:00:00');
+        $GLOBALS['__test_fetch_appointments_return'] = [
+            // Patient appointment — should appear.
+            $this->event(pcEid: 65, pcPid: 5, date: '2026-05-13', time: '14:00:00'),
+            // Availability-style row that snuck through somehow (pc_pid empty).
+            // The finder's positive-int guard must drop it without error.
+            $this->event(pcEid: 7, pcPid: null, date: '2026-05-13', time: '10:00:00'),
+        ];
+
+        $result = (new CoreAppointmentFinder())->findUpcoming(10, $now);
+
+        $this->assertCount(1, $result);
+        $this->assertSame(5, $result[0]['pc_pid']);
+    }
+
+    public function testFiltersOutOccurrencesOutsideTheTimeWindow(): void
+    {
+        $now = new \DateTimeImmutable('2026-05-13 09:00:00');
+        $GLOBALS['__test_fetch_appointments_return'] = [
+            // Already past at $now — drop.
+            $this->event(pcEid: 1, pcPid: 5, date: '2026-05-13', time: '08:00:00'),
+            // Inside window.
+            $this->event(pcEid: 2, pcPid: 5, date: '2026-05-13', time: '14:00:00'),
+            // Beyond +10h boundary (19:01 > 19:00).
+            $this->event(pcEid: 3, pcPid: 5, date: '2026-05-13', time: '19:01:00'),
+        ];
+
+        $result = (new CoreAppointmentFinder())->findUpcoming(10, $now);
+
+        $this->assertCount(1, $result);
+        $this->assertSame(2, $result[0]['pc_eid']);
+    }
+
+    public function testSkipsCancelledAppointments(): void
+    {
+        $now = new \DateTimeImmutable('2026-05-13 09:00:00');
+        $GLOBALS['__test_fetch_appointments_return'] = [
+            $this->event(pcEid: 1, pcPid: 5, date: '2026-05-13', time: '14:00:00', status: 'x'),
+            $this->event(pcEid: 2, pcPid: 5, date: '2026-05-13', time: '15:00:00', status: '-'),
+        ];
+
+        $result = (new CoreAppointmentFinder())->findUpcoming(10, $now);
+
+        $this->assertCount(1, $result);
+        $this->assertSame(2, $result[0]['pc_eid']);
+    }
+
+    public function testReturnsEmptyWhenFilerootMissing(): void
+    {
+        unset($GLOBALS['fileroot']);
+
+        $result = (new CoreAppointmentFinder())->findUpcoming(10, new \DateTimeImmutable());
+
+        $this->assertSame([], $result);
+        $this->assertSame([], $GLOBALS['__test_fetch_appointments_calls']);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function event(
+        int $pcEid,
+        ?int $pcPid,
+        string $date,
+        string $time,
+        ?string $phone = null,
+        ?string $sms = null,
+        string $status = '-',
+    ): array {
+        return [
+            'pc_eid' => $pcEid,
+            'pc_pid' => $pcPid,
+            'pc_eventDate' => $date,
+            'pc_startTime' => $time,
+            'pc_apptstatus' => $status,
+            'phone_cell' => $phone,
+            'hipaa_allowsms' => $sms,
+        ];
+    }
+}
