@@ -17,6 +17,7 @@ namespace OpenCoreEMR\Modules\SinchConversations\Tests\Unit;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockConfigFactory;
 use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockGlobalsAccessor;
+use OpenCoreEMR\Sinch\Conversation\Config\Region;
 use PHPUnit\Framework\TestCase;
 
 class GlobalConfigTest extends TestCase
@@ -104,22 +105,37 @@ class GlobalConfigTest extends TestCase
         $this->assertEquals('test-api-secret', $this->config->getSinchApiSecret());
     }
 
-    public function testGetRegion(): void
+    public function testGetSinchRegionFromConfig(): void
     {
-        $this->assertEquals('us', $this->config->getRegion());
+        $this->assertSame(Region::Us, $this->config->getSinchRegion());
     }
 
-    public function testGetRegionDefault(): void
+    public function testGetSinchRegionDefaultsToUsWhenUnset(): void
     {
         $mockGlobals = new MockGlobalsAccessor([]);
         $config = new GlobalConfig($mockGlobals, new MockConfigFactory());
 
-        $this->assertEquals('us', $config->getRegion());
+        $this->assertSame(Region::Us, $config->getSinchRegion());
     }
 
-    public function testGetSinchRegion(): void
+    public function testGetSinchRegionDefaultsToUsForUnknownString(): void
     {
-        $this->assertEquals('us', $this->config->getSinchRegion());
+        $mockGlobals = new MockGlobalsAccessor([
+            GlobalConfig::CONFIG_OPTION_REGION => 'asia',
+        ]);
+        $config = new GlobalConfig($mockGlobals, new MockConfigFactory());
+
+        $this->assertSame(Region::Us, $config->getSinchRegion());
+    }
+
+    public function testGetSinchRegionEu(): void
+    {
+        $mockGlobals = new MockGlobalsAccessor([
+            GlobalConfig::CONFIG_OPTION_REGION => 'eu',
+        ]);
+        $config = new GlobalConfig($mockGlobals, new MockConfigFactory());
+
+        $this->assertSame(Region::Eu, $config->getSinchRegion());
     }
 
     public function testGetDefaultChannel(): void

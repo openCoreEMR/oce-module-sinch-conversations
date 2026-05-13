@@ -16,6 +16,7 @@ namespace OpenCoreEMR\Modules\SinchConversations;
 
 use OpenCoreEMR\ModuleConfig\ConfigAccessorInterface;
 use OpenCoreEMR\ModuleConfig\ConfigFactory;
+use OpenCoreEMR\Sinch\Conversation\Config\Region;
 use OpenEMR\Common\Crypto\CryptoGen;
 use Symfony\Component\HttpFoundation\IpUtils;
 
@@ -105,14 +106,11 @@ class GlobalConfig
         return $this->getApiSecret();
     }
 
-    public function getRegion(): string
+    public function getSinchRegion(): Region
     {
-        return $this->configAccessor->getString(self::CONFIG_OPTION_REGION, 'us');
-    }
-
-    public function getSinchRegion(): string
-    {
-        return $this->getRegion();
+        return Region::tryFrom(
+            $this->configAccessor->getString(self::CONFIG_OPTION_REGION, '')
+        ) ?? Region::Us;
     }
 
     public function getDefaultChannel(): string
@@ -174,11 +172,7 @@ class GlobalConfig
      */
     public function getSinchApiBaseUrl(): string
     {
-        $region = $this->getRegion();
-        return match ($region) {
-            'eu' => 'https://eu.conversation.api.sinch.com',
-            default => 'https://us.conversation.api.sinch.com',
-        };
+        return $this->getSinchRegion()->conversationApiBaseUrl();
     }
 
     /**

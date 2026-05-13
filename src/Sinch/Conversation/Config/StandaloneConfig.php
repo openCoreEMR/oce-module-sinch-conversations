@@ -43,17 +43,13 @@ class StandaloneConfig implements ConfigInterface
         return $this->config['api_secret'] ?? '';
     }
 
-    public function getSinchRegion(): string
+    public function getSinchRegion(): Region
     {
-        return $this->config['region'] ?? 'us';
+        return Region::tryFrom($this->config['region'] ?? '') ?? Region::Us;
     }
 
     public function getSinchApiBaseUrl(): string
     {
-        $region = $this->getSinchRegion();
-        return match ($region) {
-            'eu' => 'https://eu.conversation.api.sinch.com',
-            default => 'https://us.conversation.api.sinch.com',
-        };
+        return $this->getSinchRegion()->conversationApiBaseUrl();
     }
 }

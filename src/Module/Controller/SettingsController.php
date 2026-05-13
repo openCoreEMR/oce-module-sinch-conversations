@@ -21,6 +21,7 @@ use OpenCoreEMR\Modules\SinchConversations\Service\ConfigService;
 use OpenCoreEMR\Modules\SinchConversations\Service\TemplateSyncService;
 use OpenCoreEMR\Modules\SinchConversations\SessionAccessor;
 use OpenCoreEMR\Sinch\Conversation\Client\ConversationApiClient;
+use OpenCoreEMR\Sinch\Conversation\Config\Region;
 use OpenCoreEMR\Sinch\Conversation\Exception\AccessDeniedException;
 use OpenCoreEMR\Sinch\Conversation\Exception\ApiException;
 use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
@@ -76,7 +77,7 @@ class SettingsController
             'project_id' => $this->config->getSinchProjectId(),
             'app_id' => $this->config->getSinchAppId(),
             'api_key' => $this->config->getSinchApiKey(),
-            'region' => $this->config->getSinchRegion(),
+            'region' => $this->config->getSinchRegion()->value,
             'default_channel' => $this->config->getDefaultChannel(),
             'clinic_name' => $this->config->getClinicName(),
             'clinic_phone' => $this->config->getClinicPhone(),
@@ -147,7 +148,7 @@ class SettingsController
                 || $settings['project_id'] !== $this->config->getSinchProjectId()
                 || $settings['app_id'] !== $this->config->getSinchAppId()
                 || $settings['api_key'] !== $this->config->getSinchApiKey()
-                || $settings['region'] !== $this->config->getSinchRegion();
+                || $settings['region'] !== $this->config->getSinchRegion()->value;
             $hasApiTuple = $settings['project_id'] !== ''
                 && $settings['app_id'] !== ''
                 && $settings['api_key'] !== '';
@@ -165,17 +166,20 @@ class SettingsController
             }
 
             // $hasApiTuple → $secretForValidation !== '' here (the guard
-            // above returned when an API tuple lacked a secret).
-            $hasFullApiConfig = $hasApiTuple
-                && in_array($settings['region'], ConversationApiClient::SUPPORTED_REGIONS, true);
+            // above returned when an API tuple lacked a secret). Region is
+            // already validated by ConfigService::validateSettings before
+            // we reach this point, so tryFrom never returns null when
+            // $apiFieldChanged && $hasApiTuple — but check anyway and skip
+            // the API call if the region is unrecognised.
+            $region = Region::tryFrom($settings['region']);
             try {
-                if ($apiFieldChanged && $hasFullApiConfig) {
+                if ($apiFieldChanged && $hasApiTuple && $region !== null) {
                     $this->apiClient->validateCredentials(
                         $settings['project_id'],
                         $settings['app_id'],
                         $settings['api_key'],
                         $secretForValidation,
-                        $settings['region'],
+                        $region,
                     );
                 }
             } catch (ValidationException | ApiException $e) {

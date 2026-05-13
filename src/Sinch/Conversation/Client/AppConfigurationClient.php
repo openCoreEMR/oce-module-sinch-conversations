@@ -60,7 +60,7 @@ class AppConfigurationClient
         }
 
         $authClient = new Client([
-            'base_uri' => "https://{$region}.auth.sinch.com",
+            'base_uri' => $region->authBaseUrl(),
             'timeout' => 30,
             'http_errors' => false,
         ]);

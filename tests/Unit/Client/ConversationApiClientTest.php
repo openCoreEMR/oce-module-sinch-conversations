@@ -21,6 +21,7 @@ use GuzzleHttp\Middleware;
 use GuzzleHttp\Psr7\Response;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Sinch\Conversation\Client\ConversationApiClient;
+use OpenCoreEMR\Sinch\Conversation\Config\Region;
 use OpenCoreEMR\Sinch\Conversation\Exception\ApiException;
 use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -45,7 +46,7 @@ class ConversationApiClientTest extends TestCase
         $this->mockConfig->method('getSinchAppId')->willReturn(self::APP_ID);
         $this->mockConfig->method('getSinchApiKey')->willReturn(self::API_KEY);
         $this->mockConfig->method('getSinchApiSecret')->willReturn(self::API_SECRET);
-        $this->mockConfig->method('getSinchRegion')->willReturn('us');
+        $this->mockConfig->method('getSinchRegion')->willReturn(Region::Us);
 
         $this->requestHistory = [];
     }
@@ -240,7 +241,7 @@ class ConversationApiClientTest extends TestCase
         $mockConfig->method('getSinchProjectId')->willReturn('');
         $mockConfig->method('getSinchApiKey')->willReturn(self::API_KEY);
         $mockConfig->method('getSinchApiSecret')->willReturn(self::API_SECRET);
-        $mockConfig->method('getSinchRegion')->willReturn('us');
+        $mockConfig->method('getSinchRegion')->willReturn(Region::Us);
 
         $client = $this->createClientWithConfig($mockConfig, []);
 
@@ -258,7 +259,7 @@ class ConversationApiClientTest extends TestCase
             new Response(200, [], '{"id": "test-app", "display_name": "Test App"}'),
         ]);
 
-        $client->validateCredentials('proj-x', 'app-x', 'key-x', 'secret-x', 'us');
+        $client->validateCredentials('proj-x', 'app-x', 'key-x', 'secret-x', Region::Us);
 
         $this->assertCount(2, $this->requestHistory);
         $this->assertStringContainsString(
@@ -286,7 +287,7 @@ class ConversationApiClientTest extends TestCase
 
         $this->expectException(ApiException::class);
         $this->expectExceptionMessage('Bad credentials');
-        $client->validateCredentials('proj-x', 'app-x', 'bad-key', 'bad-secret', 'us');
+        $client->validateCredentials('proj-x', 'app-x', 'bad-key', 'bad-secret', Region::Us);
     }
 
     public function testValidateCredentialsThrowsOnAppLookupFailure(): void
@@ -300,7 +301,7 @@ class ConversationApiClientTest extends TestCase
 
         $this->expectException(ApiException::class);
         $this->expectExceptionMessage('App not found');
-        $client->validateCredentials('proj-x', 'missing-app', 'key-x', 'secret-x', 'us');
+        $client->validateCredentials('proj-x', 'missing-app', 'key-x', 'secret-x', Region::Us);
     }
 
     public function testValidateCredentialsThrowsOnEmptyProjectId(): void
@@ -309,7 +310,7 @@ class ConversationApiClientTest extends TestCase
 
         $this->expectException(ValidationException::class);
         $this->expectExceptionMessage('Project ID is required');
-        $client->validateCredentials('', 'app-x', 'key-x', 'secret-x', 'us');
+        $client->validateCredentials('', 'app-x', 'key-x', 'secret-x', Region::Us);
     }
 
     public function testValidateCredentialsThrowsOnEmptyAppId(): void
@@ -318,7 +319,7 @@ class ConversationApiClientTest extends TestCase
 
         $this->expectException(ValidationException::class);
         $this->expectExceptionMessage('App ID is required');
-        $client->validateCredentials('proj-x', '', 'key-x', 'secret-x', 'us');
+        $client->validateCredentials('proj-x', '', 'key-x', 'secret-x', Region::Us);
     }
 
     public function testValidateCredentialsThrowsOnEmptySecret(): void
@@ -327,7 +328,7 @@ class ConversationApiClientTest extends TestCase
 
         $this->expectException(ValidationException::class);
         $this->expectExceptionMessage('API Secret is required');
-        $client->validateCredentials('proj-x', 'app-x', 'key-x', '', 'us');
+        $client->validateCredentials('proj-x', 'app-x', 'key-x', '', Region::Us);
     }
 
     // --- handleResponse error tests ---
@@ -481,7 +482,7 @@ class ConversationApiClientTest extends TestCase
         $mockConfig = $this->createMock(GlobalConfig::class);
         $mockConfig->method('getSinchApiKey')->willReturn('');
         $mockConfig->method('getSinchApiSecret')->willReturn('');
-        $mockConfig->method('getSinchRegion')->willReturn('us');
+        $mockConfig->method('getSinchRegion')->willReturn(Region::Us);
 
         $client = $this->createClientWithConfig($mockConfig, [], false);
 

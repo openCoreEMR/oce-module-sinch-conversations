@@ -22,6 +22,7 @@ use OpenCoreEMR\Modules\SinchConversations\SessionAccessor;
 use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockConfigFactory;
 use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockGlobalsAccessor;
 use OpenCoreEMR\Sinch\Conversation\Client\ConversationApiClient;
+use OpenCoreEMR\Sinch\Conversation\Config\Region;
 use OpenCoreEMR\Sinch\Conversation\Exception\AccessDeniedException;
 use OpenCoreEMR\Sinch\Conversation\Exception\ApiException;
 use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
@@ -172,7 +173,7 @@ class SettingsControllerTest extends TestCase
 
         $this->apiClient->expects($this->once())
             ->method('validateCredentials')
-            ->with('new-proj', 'new-app', 'new-key', 'new-secret', 'eu');
+            ->with('new-proj', 'new-app', 'new-key', 'new-secret', Region::Eu);
         $this->configService->expects($this->once())->method('saveSettings');
         $this->session->expects($this->once())
             ->method('setFlash')
@@ -291,7 +292,7 @@ class SettingsControllerTest extends TestCase
         // (decoded value of base64('secret-1') from setUp).
         $this->apiClient->expects($this->once())
             ->method('validateCredentials')
-            ->with('proj-1', 'app-1', 'rotated-key', $this->anything(), 'us');
+            ->with('proj-1', 'app-1', 'rotated-key', $this->anything(), Region::Us);
         $this->configService->expects($this->once())->method('saveSettings');
 
         $this->controller->dispatch('save');
