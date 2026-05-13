@@ -49,6 +49,10 @@ final class AppointmentReminderCronTest extends IntegrationTestCase
         // The reminder template needs a clinic_name variable, and the
         // module-enabled gate reads its own toggle from globals.
         $GLOBALS['oce_sinch_conversations_enabled'] = '1';
+        // GlobalConfig::getClinicName() reads this; without it the
+        // template's required-variable check fails. Locally a populated
+        // .env supplies it; CI never does, so set it explicitly.
+        $GLOBALS['oce_sinch_conversations_clinic_name'] = 'Integration Test Clinic';
     }
 
     public function testOneOffAppointmentInWindowSendsOneReminder(): void

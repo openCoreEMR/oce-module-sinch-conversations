@@ -71,8 +71,8 @@ class CoreAppointmentFinderTest extends TestCase
     {
         $now = new \DateTimeImmutable('2026-05-13 09:00:00');
         $GLOBALS['__test_fetch_appointments_return'] = [
-            $this->event(pcEid: 65, pcPid: 5, date: '2026-05-13', time: '14:00:00', phone: '+15102551233', sms: 'YES'),
-            $this->event(pcEid: 70, pcPid: 14, date: '2026-05-13', time: '11:00:00', phone: '+14123704170', sms: 'YES'),
+            $this->event(pcEid: 65, patientId: 5, date: '2026-05-13', time: '14:00:00', phone: '+15102551233', sms: 'YES'),
+            $this->event(pcEid: 70, patientId: 14, date: '2026-05-13', time: '11:00:00', phone: '+14123704170', sms: 'YES'),
         ];
 
         $result = (new CoreAppointmentFinder())->findUpcoming(10, $now);
@@ -90,24 +90,26 @@ class CoreAppointmentFinderTest extends TestCase
      * Defence in depth against the 1.2.0 bug. If fetchAppointments ever
      * starts returning rows without a patient (a core change, a future
      * caller passing custom WHERE clauses, etc.), the finder's positive-int
-     * pc_pid guard must drop them rather than emit a malformed occurrence.
-     * The throwing fetchAllEvents fixture catches the wrong-function half
-     * of the original bug; this test catches the wrong-shape half.
+     * patient-id guard must drop them rather than emit a malformed
+     * occurrence. The throwing fetchAllEvents fixture catches the
+     * wrong-function half of the original bug; this test catches the
+     * wrong-shape half.
      */
     public function testRejectsRowsWithoutPatientId(): void
     {
         $now = new \DateTimeImmutable('2026-05-13 09:00:00');
         $GLOBALS['__test_fetch_appointments_return'] = [
             // Patient appointment — should appear.
-            $this->event(pcEid: 65, pcPid: 5, date: '2026-05-13', time: '14:00:00'),
+            $this->event(pcEid: 65, patientId: 5, date: '2026-05-13', time: '14:00:00'),
             // Availability-style row matching the OpenEMR mysqli return
-            // shape: pc_pid is the empty string, not null. The asPositiveInt
+            // shape: pid is the empty string, not null, when the
+            // patient_data LEFT JOIN finds no match. The asPositiveInt
             // guard must drop both shapes — the empty string slipping
             // through would mean fetchAppointments-shaped rows where the
             // patient JOIN didn't match are emitted as malformed
             // occurrences. Cover both to keep that exit closed.
-            $this->event(pcEid: 7, pcPid: '', date: '2026-05-13', time: '10:00:00'),
-            $this->event(pcEid: 8, pcPid: null, date: '2026-05-13', time: '10:30:00'),
+            $this->event(pcEid: 7, patientId: '', date: '2026-05-13', time: '10:00:00'),
+            $this->event(pcEid: 8, patientId: null, date: '2026-05-13', time: '10:30:00'),
         ];
 
         $result = (new CoreAppointmentFinder())->findUpcoming(10, $now);
@@ -121,11 +123,11 @@ class CoreAppointmentFinderTest extends TestCase
         $now = new \DateTimeImmutable('2026-05-13 09:00:00');
         $GLOBALS['__test_fetch_appointments_return'] = [
             // Already past at $now — drop.
-            $this->event(pcEid: 1, pcPid: 5, date: '2026-05-13', time: '08:00:00'),
+            $this->event(pcEid: 1, patientId: 5, date: '2026-05-13', time: '08:00:00'),
             // Inside window.
-            $this->event(pcEid: 2, pcPid: 5, date: '2026-05-13', time: '14:00:00'),
+            $this->event(pcEid: 2, patientId: 5, date: '2026-05-13', time: '14:00:00'),
             // Beyond +10h boundary (19:01 > 19:00).
-            $this->event(pcEid: 3, pcPid: 5, date: '2026-05-13', time: '19:01:00'),
+            $this->event(pcEid: 3, patientId: 5, date: '2026-05-13', time: '19:01:00'),
         ];
 
         $result = (new CoreAppointmentFinder())->findUpcoming(10, $now);
@@ -138,8 +140,8 @@ class CoreAppointmentFinderTest extends TestCase
     {
         $now = new \DateTimeImmutable('2026-05-13 09:00:00');
         $GLOBALS['__test_fetch_appointments_return'] = [
-            $this->event(pcEid: 1, pcPid: 5, date: '2026-05-13', time: '14:00:00', status: 'x'),
-            $this->event(pcEid: 2, pcPid: 5, date: '2026-05-13', time: '15:00:00', status: '-'),
+            $this->event(pcEid: 1, patientId: 5, date: '2026-05-13', time: '14:00:00', status: 'x'),
+            $this->event(pcEid: 2, patientId: 5, date: '2026-05-13', time: '15:00:00', status: '-'),
         ];
 
         $result = (new CoreAppointmentFinder())->findUpcoming(10, $now);
@@ -159,17 +161,18 @@ class CoreAppointmentFinderTest extends TestCase
     }
 
     /**
-     * @param int|string|null $pcPid Mirrors the production seam: the row
+     * @param int|string|null $patientId Mirrors the production seam: the row
      *     comes back from fetchAppointments via OpenEMR's mysqli driver,
      *     which historically returns numeric columns as numeric strings
      *     and produces an empty string when the patient_data LEFT JOIN
      *     finds no match. Tests pass each variant to exercise the
-     *     finder's asPositiveInt guard.
+     *     finder's asPositiveInt guard. The key is `pid` (from `p.pid`
+     *     in the SELECT) — not `pc_pid`. See #145.
      * @return array<string, mixed>
      */
     private function event(
         int $pcEid,
-        int|string|null $pcPid,
+        int|string|null $patientId,
         string $date,
         string $time,
         ?string $phone = null,
@@ -178,7 +181,7 @@ class CoreAppointmentFinderTest extends TestCase
     ): array {
         return [
             'pc_eid' => $pcEid,
-            'pc_pid' => $pcPid,
+            'pid' => $patientId,
             'pc_eventDate' => $date,
             'pc_startTime' => $time,
             'pc_apptstatus' => $status,
