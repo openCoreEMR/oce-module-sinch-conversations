@@ -32,6 +32,8 @@ declare(strict_types=1);
 
 namespace OpenCoreEMR\Modules\SinchConversations\Tests\Integration;
 
+use PHPUnit\Framework\Attributes\Depends;
+
 final class AppointmentReminderCronTest extends IntegrationTestCase
 {
     private const WINDOW_HOURS = 48;
@@ -103,12 +105,13 @@ final class AppointmentReminderCronTest extends IntegrationTestCase
     }
 
     /**
-     * This passes vacuously while #145 drops every appointment. Once #145
-     * is fixed it becomes the real cancelled-status assertion, and the
-     * @depends ensures it only runs when the basic-send path also works
-     * (so a green here actually means "we excluded this one", not "we
-     * dropped everything").
+     * Depends on the basic-send path so a green here actually means "we
+     * excluded the cancelled one", not "the finder returned nothing".
+     * While #145 drops every event the basic-send test fails, this test
+     * is skipped, and the suite reports "4 fail + 1 skip" instead of "4
+     * fail + 1 vacuous green".
      */
+    #[Depends('testOneOffAppointmentInWindowSendsOneReminder')]
     public function testCancelledAppointmentExcluded(): void
     {
         $now = new \DateTimeImmutable('2026-06-01 09:00:00');
