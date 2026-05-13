@@ -48,7 +48,7 @@ parameters:
                 - src/Module/Console/Command/AbstractModuleCommand.php
 
         # OpenEMR global functions not available for static analysis
-        - '#Function (xl|xlt|xla|xlj|text|attr|fetchAllEvents) not found#'
+        - '#Function (xl|xlt|xla|xlj|text|attr|fetchAppointments) not found#'
 
         # Never-read properties are intentional (event handlers, etc.)
         - '#Property .+ is never read, only written#'
