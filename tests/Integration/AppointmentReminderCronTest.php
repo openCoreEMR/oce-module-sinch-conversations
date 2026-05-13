@@ -3,12 +3,16 @@
 /**
  * End-to-end integration tests for the appointment reminder cron.
  *
- * Each test creates real patient + appointment rows via the actual OpenEMR
- * data paths, then invokes oce_sinch_run_appointment_reminders()'s service
+ * Each test inserts patient + appointment rows via the prefix-tagged
+ * fixture managers (direct SQL into patient_data /
+ * openemr_postcalendar_events), then invokes the real reminder service
  * graph (with MessageService swapped for a recording fake) and asserts on
- * the captured sends. The unit suite covers the pure-PHP logic; this suite
- * covers the seam between the module and core OpenEMR's procedural
- * appointments library — the seam where #137 and #143 lived.
+ * the captured sends. The fixture rows are deliberately shaped to match
+ * what the OpenEMR UI / form handlers write, so core's procedural
+ * appointments library expands and returns them the same way it would in
+ * production. The unit suite covers the pure-PHP logic; this suite covers
+ * the seam between the module and that procedural library — the seam
+ * where #137 and #143 lived.
  *
  * @package   OpenCoreEMR
  * @link      https://opencoreemr.com

@@ -25,10 +25,11 @@ require_once __DIR__ . '/../../vendor/autoload.php';
 
 $openemrRoot = '/var/www/localhost/htdocs/openemr';
 if (!is_dir($openemrRoot)) {
-    fwrite(STDERR, "Integration tests must run inside the openemr container.\n"
-        . "Expected OpenEMR at {$openemrRoot} but the directory is missing.\n"
-        . "Run via: task test:integration\n");
-    exit(1);
+    throw new RuntimeException(
+        "Integration tests must run inside the openemr container."
+        . " Expected OpenEMR at {$openemrRoot} but the directory is missing."
+        . " Run via: task test:integration"
+    );
 }
 
 // OpenEMR's session-bootstrapped globals. interface/globals.php starts a
@@ -48,8 +49,8 @@ $tableCheck = sqlQuery(
     . "WHERE table_schema = DATABASE() AND table_name = 'oce_sinch_appointment_reminders'"
 );
 if ((int) ($tableCheck['c'] ?? 0) === 0) {
-    fwrite(STDERR, "Module table oce_sinch_appointment_reminders is missing.\n"
-        . "Enable the module first:\n"
-        . "    task module:install-enable\n");
-    exit(1);
+    throw new RuntimeException(
+        "Module table oce_sinch_appointment_reminders is missing."
+        . " Enable the module first: task module:install-enable"
+    );
 }

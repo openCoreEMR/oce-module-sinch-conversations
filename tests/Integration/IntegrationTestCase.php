@@ -3,11 +3,13 @@
 /**
  * Base TestCase for the integration suite.
  *
- * Provides helpers that drive real OpenEMR code paths (PatientService /
- * AppointmentFixtureManager, the actual cron entry function) and a tearDown
- * that scrubs both OpenEMR-owned fixture rows (by prefix) and module-owned
- * rows (by tracked id). The result: tests can run repeatedly against the
- * dev database without leaking state.
+ * Inserts patient/appointment fixture rows directly into patient_data and
+ * openemr_postcalendar_events via QueryUtils (the upstream BaseFixtureManager
+ * pattern), then exercises the real reminder pipeline — including core
+ * OpenEMR's procedural fetchAllEvents/fetchAppointments — against those
+ * rows. Both setUp and tearDown scrub OpenEMR-owned fixture rows by prefix
+ * and module-owned rows by tracked patient id, so a previous interrupted
+ * run cannot pollute this one.
  *
  * @package   OpenCoreEMR
  * @link      https://opencoreemr.com
@@ -40,10 +42,13 @@ abstract class IntegrationTestCase extends TestCase
         $this->patients = new PatientFixtureManager();
         $this->appointments = new AppointmentFixtureManager();
 
-        // Scrub leftover module-owned rows from any prior interrupted run
-        // so a previous failure doesn't pollute this one. We can't track ids
-        // for rows we didn't insert, so we delete by patient prefix join.
+        // A prior run may have crashed mid-test, leaving fixture rows on
+        // disk. Scrub everything before inserting fresh fixtures so this
+        // run is deterministic. Order matters: module rows reference
+        // patient ids, so they must go before the patients themselves.
         $this->purgeModuleRowsForFixturePatients();
+        $this->appointments->removeFixtures();
+        $this->patients->removeFixtures();
     }
 
     protected function tearDown(): void

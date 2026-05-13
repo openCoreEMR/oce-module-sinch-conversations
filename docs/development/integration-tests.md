@@ -2,6 +2,8 @@
 
 A separate suite from `tests/Unit`. Boots OpenEMR's real autoloader and runs against the live MariaDB inside the dev container. Catches the "wrong core function called" / "fixture diverges from production schema" class of bug that pure-PHP unit tests cannot — the class of bug that produced #137 and #143.
 
+**Fixture strategy (important):** patient and appointment rows are inserted directly into `patient_data` and `openemr_postcalendar_events` via `QueryUtils`, *not* through `PatientService::insert()` or any other public OpenEMR service. The fixture managers shape the rows to match what the real OpenEMR form handlers write (including `pc_recurrtype` / `pc_recurrspec` for recurring events, which `AppointmentService::insert()` itself does not populate), so core's procedural appointments library — `fetchAllEvents` / `fetchAppointments` — expands and returns them the same way it would in production. The "real OpenEMR" part of this suite is the *read* side of the seam (the procedural fetch + the actual reminder pipeline + the actual Bootstrap container), not the write side.
+
 ## Layout
 
 ```

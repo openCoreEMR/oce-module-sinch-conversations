@@ -41,12 +41,19 @@ jobs:
 
     - name: Wait for OpenEMR install to settle
       run: |
+        ready=false
         for i in {1..60}; do
           if docker compose exec -T openemr grep -qF "config = 1" /var/www/localhost/htdocs/openemr/sites/default/sqlconf.php; then
+            ready=true
             break
           fi
           sleep 5
         done
+        if [ "$ready" != "true" ]; then
+          echo "::error::OpenEMR did not finish installing within 5 minutes"
+          docker compose logs openemr
+          exit 1
+        fi
 
     - name: Register and enable module
       run: task module:install-enable
