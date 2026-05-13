@@ -100,9 +100,14 @@ class CoreAppointmentFinderTest extends TestCase
         $GLOBALS['__test_fetch_appointments_return'] = [
             // Patient appointment — should appear.
             $this->event(pcEid: 65, pcPid: 5, date: '2026-05-13', time: '14:00:00'),
-            // Availability-style row that snuck through somehow (pc_pid empty).
-            // The finder's positive-int guard must drop it without error.
-            $this->event(pcEid: 7, pcPid: null, date: '2026-05-13', time: '10:00:00'),
+            // Availability-style row matching the OpenEMR mysqli return
+            // shape: pc_pid is the empty string, not null. The asPositiveInt
+            // guard must drop both shapes — the empty string slipping
+            // through would mean fetchAppointments-shaped rows where the
+            // patient JOIN didn't match are emitted as malformed
+            // occurrences. Cover both to keep that exit closed.
+            $this->event(pcEid: 7, pcPid: '', date: '2026-05-13', time: '10:00:00'),
+            $this->event(pcEid: 8, pcPid: null, date: '2026-05-13', time: '10:30:00'),
         ];
 
         $result = (new CoreAppointmentFinder())->findUpcoming(10, $now);
@@ -154,11 +159,17 @@ class CoreAppointmentFinderTest extends TestCase
     }
 
     /**
+     * @param int|string|null $pcPid Mirrors the production seam: the row
+     *     comes back from fetchAppointments via OpenEMR's mysqli driver,
+     *     which historically returns numeric columns as numeric strings
+     *     and produces an empty string when the patient_data LEFT JOIN
+     *     finds no match. Tests pass each variant to exercise the
+     *     finder's asPositiveInt guard.
      * @return array<string, mixed>
      */
     private function event(
         int $pcEid,
-        ?int $pcPid,
+        int|string|null $pcPid,
         string $date,
         string $time,
         ?string $phone = null,
