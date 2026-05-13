@@ -16,6 +16,20 @@ use OpenCoreEMR\Modules\SinchConversations\Service\CoreAppointmentFinder;
 use OpenEMR\Core\OEGlobalsBag;
 use PHPUnit\Framework\TestCase;
 
+/**
+ * Tests for CoreAppointmentFinder.
+ *
+ * The fixture at tests/fixtures/CoreAppointmentFinder/library/appointments.inc.php
+ * stubs out the two relevant globals from core OpenEMR's appointments library:
+ *
+ *  - fetchAppointments() — controllable via $GLOBALS, returns canned event rows
+ *  - fetchAllEvents()    — throws RuntimeException
+ *
+ * The throwing fetchAllEvents() stub is the file-wide regression guard for
+ * the 1.2.0 bug where the finder called the wrong core helper and silently
+ * dispatched zero reminders. If a future change re-wires that call, every
+ * test in this file fails loudly instead of the cron going quiet.
+ */
 class CoreAppointmentFinderTest extends TestCase
 {
     private const FIXTURE_ROOT = __DIR__ . '/../../fixtures/CoreAppointmentFinder';
@@ -73,11 +87,12 @@ class CoreAppointmentFinderTest extends TestCase
     }
 
     /**
-     * Regression guard for the 1.2.0 → 1.2.x bug where the finder called
-     * fetchAllEvents (which returns availability blocks with no patient).
-     * The fixture's fetchAllEvents throws; this test confirms findUpcoming
-     * doesn't trigger it even when the row shape includes nullable patient
-     * fields.
+     * Defence in depth against the 1.2.0 bug. If fetchAppointments ever
+     * starts returning rows without a patient (a core change, a future
+     * caller passing custom WHERE clauses, etc.), the finder's positive-int
+     * pc_pid guard must drop them rather than emit a malformed occurrence.
+     * The throwing fetchAllEvents fixture catches the wrong-function half
+     * of the original bug; this test catches the wrong-shape half.
      */
     public function testRejectsRowsWithoutPatientId(): void
     {
