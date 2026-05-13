@@ -74,7 +74,13 @@ class CoreAppointmentFinder implements UpcomingAppointmentFinder
             // columns as native ints when configured, but historically as
             // numeric strings — accept both for the integer columns,
             // reject anything else.
-            $pcPid = self::asPositiveInt($event['pc_pid'] ?? null);
+            //
+            // The patient id column is `pid` in the row returned by
+            // fetchAppointments — it comes from the `patient_data p` LEFT
+            // JOIN's SELECT (`p.pid`). The events table column is
+            // `e.pc_pid` but the SELECT list does not expose it, so reading
+            // `pc_pid` from the row drops every event silently. See #145.
+            $pcPid = self::asPositiveInt($event['pid'] ?? null);
             if ($pcPid === null) {
                 continue;
             }

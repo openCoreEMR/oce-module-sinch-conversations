@@ -49,6 +49,12 @@ abstract class IntegrationTestCase extends TestCase
         $this->purgeModuleRowsForFixturePatients();
         $this->appointments->removeFixtures();
         $this->patients->removeFixtures();
+
+        // The reminder template lives in oce_sinch_message_templates and
+        // is normally populated by TemplateSyncService against Sinch.
+        // Tests can't reach Sinch, so seed the no-portal variant directly.
+        // Idempotent (UNIQUE template_key + INSERT IGNORE).
+        $this->seedAppointmentReminderTemplate();
     }
 
     protected function tearDown(): void
@@ -130,5 +136,20 @@ abstract class IntegrationTestCase extends TestCase
             "DELETE FROM oce_sinch_patient_consent WHERE patient_id IN ({$placeholders})",
             $ids
         );
+    }
+
+    private function seedAppointmentReminderTemplate(): void
+    {
+        $sql = "INSERT IGNORE INTO oce_sinch_message_templates
+                    (template_key, template_name, category, communication_type,
+                     body, required_variables, compliance_confidence,
+                     sinch_approved, active)
+                VALUES (?, ?, 'appointments', 'individual', ?, ?, 100, TRUE, TRUE)";
+        QueryUtils::sqlStatementThrowException($sql, [
+            'appointment_reminder_no_portal',
+            'Appointment reminder (no portal)',
+            '{{ clinic_name }}: Reminder of your appointment {{ appt_time }}. {{ opt_out }}',
+            '["clinic_name","appt_time","opt_out"]',
+        ]);
     }
 }
