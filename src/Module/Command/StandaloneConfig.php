@@ -54,11 +54,10 @@ class StandaloneConfig extends GlobalConfig
         return $this->config['region'] ?? 'us';
     }
 
-    public function getApiBaseUrl(): string
+    public function getSinchApiBaseUrl(): string
     {
         $region = $this->getSinchRegion();
         return match ($region) {
-            'us' => 'https://us.conversation.api.sinch.com',
             'eu' => 'https://eu.conversation.api.sinch.com',
             default => 'https://us.conversation.api.sinch.com',
         };

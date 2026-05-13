@@ -26,7 +26,6 @@ use OpenCoreEMR\Sinch\Conversation\Exception\ApiException;
 
 class AppConfigurationClient
 {
-    private const BASE_URL = 'https://us.conversation.api.sinch.com';
     private const CONSENT_MAX_PAGES = 100;
     private readonly Client $httpClient;
     private ?string $cachedAccessToken = null;
@@ -34,7 +33,7 @@ class AppConfigurationClient
     public function __construct(private readonly ConfigInterface $config)
     {
         $this->httpClient = new Client([
-            'base_uri' => self::BASE_URL,
+            'base_uri' => $config->getSinchApiBaseUrl(),
             'timeout' => 30,
             'http_errors' => false,
         ]);

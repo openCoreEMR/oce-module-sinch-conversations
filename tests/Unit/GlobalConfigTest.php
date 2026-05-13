@@ -168,7 +168,7 @@ class GlobalConfigTest extends TestCase
 
     public function testGetApiBaseUrlUs(): void
     {
-        $this->assertEquals('https://us.conversation.api.sinch.com', $this->config->getApiBaseUrl());
+        $this->assertEquals('https://us.conversation.api.sinch.com', $this->config->getSinchApiBaseUrl());
     }
 
     public function testGetApiBaseUrlEu(): void
@@ -178,7 +178,7 @@ class GlobalConfigTest extends TestCase
         ]);
         $config = new GlobalConfig($mockGlobals, new MockConfigFactory());
 
-        $this->assertEquals('https://eu.conversation.api.sinch.com', $config->getApiBaseUrl());
+        $this->assertEquals('https://eu.conversation.api.sinch.com', $config->getSinchApiBaseUrl());
     }
 
     public function testGetApiBaseUrlUnknownRegion(): void
@@ -189,7 +189,7 @@ class GlobalConfigTest extends TestCase
         $config = new GlobalConfig($mockGlobals, new MockConfigFactory());
 
         // Should default to US
-        $this->assertEquals('https://us.conversation.api.sinch.com', $config->getApiBaseUrl());
+        $this->assertEquals('https://us.conversation.api.sinch.com', $config->getSinchApiBaseUrl());
     }
 
     // --- Webhook config tests ---

@@ -25,4 +25,13 @@ interface ConfigInterface
     public function getSinchApiSecret(): string;
 
     public function getSinchRegion(): string;
+
+    /**
+     * Resolve the Conversations API base URL for the configured region.
+     *
+     * Implementations MUST return the regional host (e.g.
+     * `https://eu.conversation.api.sinch.com` for `eu`); clients use this
+     * for every API call so EU customers don't silently hit the US host.
+     */
+    public function getSinchApiBaseUrl(): string;
 }

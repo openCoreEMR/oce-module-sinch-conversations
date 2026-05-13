@@ -166,13 +166,16 @@ class GlobalConfig
     }
 
     /**
-     * Get the base URL for the Sinch Conversations API
+     * Get the base URL for the Sinch Conversations API.
+     *
+     * Name matches `OpenCoreEMR\Sinch\Conversation\Config\ConfigInterface`
+     * so clients that depend on the interface and clients that depend on
+     * the concrete `GlobalConfig` use the same vocabulary.
      */
-    public function getApiBaseUrl(): string
+    public function getSinchApiBaseUrl(): string
     {
         $region = $this->getRegion();
         return match ($region) {
-            'us' => 'https://us.conversation.api.sinch.com',
             'eu' => 'https://eu.conversation.api.sinch.com',
             default => 'https://us.conversation.api.sinch.com',
         };

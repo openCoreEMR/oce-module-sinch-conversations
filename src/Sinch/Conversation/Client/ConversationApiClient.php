@@ -26,7 +26,6 @@ use OpenEMR\Common\Logging\SystemLogger;
 
 class ConversationApiClient
 {
-    private const BASE_URL = 'https://us.conversation.api.sinch.com';
     private const CONSENT_MAX_PAGES = 100;
 
     /** @var list<string> Sinch Conversations regions this client can talk to */
@@ -40,7 +39,7 @@ class ConversationApiClient
         ?Client $httpClient = null
     ) {
         $this->httpClient = $httpClient ?? new Client([
-            'base_uri' => self::BASE_URL,
+            'base_uri' => $config->getSinchApiBaseUrl(),
             'timeout' => 30,
             'http_errors' => false,
         ]);
@@ -517,9 +516,12 @@ class ConversationApiClient
 
         $accessToken = $this->requestOAuth2Token($region, $apiKey, $apiSecret);
 
-        // Build the regional URL explicitly. The shared httpClient is bound
-        // to a hardcoded US base_uri, so a relative path would always hit
-        // us.conversation.api.sinch.com regardless of $region.
+        // Build the URL with the SUPPLIED region, not the constructor's
+        // base_uri. The shared httpClient is bound to the *currently
+        // saved* config's region, but credential validation may be
+        // testing a region the operator is about to switch to. An
+        // absolute URL overrides Guzzle's base_uri so we always hit the
+        // region the operator is actually validating.
         $url = "https://{$region}.conversation.api.sinch.com/v1/projects/{$projectId}/apps/{$appId}";
 
         try {
