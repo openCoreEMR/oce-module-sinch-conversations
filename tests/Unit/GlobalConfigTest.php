@@ -182,12 +182,12 @@ class GlobalConfigTest extends TestCase
         $this->assertEquals('https://example.com/portal', $config->getPortalUrl());
     }
 
-    public function testGetApiBaseUrlUs(): void
+    public function testGetSinchApiBaseUrlUs(): void
     {
         $this->assertEquals('https://us.conversation.api.sinch.com', $this->config->getSinchApiBaseUrl());
     }
 
-    public function testGetApiBaseUrlEu(): void
+    public function testGetSinchApiBaseUrlEu(): void
     {
         $mockGlobals = new MockGlobalsAccessor([
             GlobalConfig::CONFIG_OPTION_REGION => 'eu',
@@ -197,7 +197,7 @@ class GlobalConfigTest extends TestCase
         $this->assertEquals('https://eu.conversation.api.sinch.com', $config->getSinchApiBaseUrl());
     }
 
-    public function testGetApiBaseUrlUnknownRegion(): void
+    public function testGetSinchApiBaseUrlUnknownRegion(): void
     {
         $mockGlobals = new MockGlobalsAccessor([
             GlobalConfig::CONFIG_OPTION_REGION => 'unknown',
