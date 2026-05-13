@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+PHPUnit configuration for the integration test suite.
+
+Unlike phpunit.xml, this configuration loads OpenEMR's real autoloader and
+globals (see tests/Integration/bootstrap.php) and runs against a live
+MariaDB. It must be invoked from inside the openemr container:
+
+    docker compose exec -T openemr \
+        php interface/modules/custom_modules/oce-module-sinch-conversations/vendor/bin/phpunit \
+        -c interface/modules/custom_modules/oce-module-sinch-conversations/phpunit.integration.xml
+
+The `task test:integration` target wraps this. Coverage is intentionally
+disabled — coverage reporting stays on the unit suite (phpunit.xml).
+-->
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="tests/Integration/bootstrap.php"
+         colors="true"
+         cacheDirectory=".phpunit.integration.cache"
+         displayDetailsOnTestsThatTriggerWarnings="true"
+         displayDetailsOnTestsThatTriggerDeprecations="true"
+         displayDetailsOnTestsThatTriggerNotices="true"
+         displayDetailsOnTestsThatTriggerErrors="true"
+         stderr="true"
+         beStrictAboutOutputDuringTests="false">
+    <testsuites>
+        <testsuite name="Integration">
+            <directory>tests/Integration</directory>
+        </testsuite>
+    </testsuites>
+</phpunit>
