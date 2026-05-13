@@ -368,7 +368,7 @@ class Bootstrap
     /**
      * Get Upcoming Appointment Finder
      *
-     * Production wraps core OpenEMR's recurrence-aware fetchAllEvents().
+     * Production wraps core OpenEMR's recurrence-aware fetchAppointments().
      */
     public function getUpcomingAppointmentFinder(): Service\UpcomingAppointmentFinder
     {

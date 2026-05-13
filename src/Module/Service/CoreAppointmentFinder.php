@@ -3,10 +3,15 @@
 /**
  * Default UpcomingAppointmentFinder backed by core OpenEMR
  *
- * Wraps `library/appointments.inc.php::fetchAllEvents()`, which expands
- * `pc_recurrtype` / `pc_recurrspec` into per-occurrence rows. Production
+ * Wraps `library/appointments.inc.php::fetchAppointments()`, which
+ * expands `pc_recurrtype` / `pc_recurrspec` into per-occurrence rows and
+ * scopes results to patient appointments (`e.pc_pid != ''`). Production
  * uses this; unit tests inject a stub instead so they don't have to load
  * the procedural library or wire up the kernel event dispatcher.
+ *
+ * Why not fetchAllEvents: it returns provider availability blocks
+ * alongside patient appointments, so reminders fanned out to events with
+ * no patient attached. See #143.
  *
  * @package   OpenCoreEMR
  * @link      https://opencoreemr.com
@@ -43,13 +48,14 @@ class CoreAppointmentFinder implements UpcomingAppointmentFinder
         require_once $fileroot . '/library/appointments.inc.php';
 
         $windowEnd = $now->modify(sprintf('+%d hours', $windowHours));
-        // fetchAllEvents filters by date (Y-m-d) inclusive on both ends,
-        // so a window that crosses midnight already pulls in the trailing
-        // calendar day. We re-check the precise time bound in PHP below.
+        // fetchAppointments filters by date (Y-m-d) inclusive on both
+        // ends, so a window that crosses midnight already pulls in the
+        // trailing calendar day. We re-check the precise time bound in
+        // PHP below.
         $fromDate = $now->format('Y-m-d');
         $toDate = $windowEnd->format('Y-m-d');
 
-        $events = \fetchAllEvents($fromDate, $toDate);
+        $events = \fetchAppointments($fromDate, $toDate);
         if (!is_array($events)) {
             return [];
         }
