@@ -95,6 +95,9 @@ task dev:start
 # Run all code quality checks
 task check
 
+# Run end-to-end integration tests (requires dev stack + module enabled)
+task test:integration
+
 # Clean up module tables
 task module:cleanup
 ```

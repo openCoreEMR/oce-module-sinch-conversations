@@ -24,5 +24,6 @@ compose.override.yml
 
 # PHPUnit
 .phpunit.cache/
+.phpunit.integration.cache/
 htmlcov/
 coverage-report/

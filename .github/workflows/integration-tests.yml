@@ -1,0 +1,73 @@
+name: Integration Tests
+
+on:
+  push:
+    branches:
+    - main
+  pull_request:
+    branches:
+    - main
+
+jobs:
+  integration:
+    name: End-to-end integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.2'
+        coverage: none
+
+    - name: Install Task
+      uses: arduino/setup-task@v2
+      with:
+        version: 3.x
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Install module composer deps
+      run: composer install --no-progress --no-interaction --prefer-dist
+
+    - name: Install OpenEMR source under tools/openemr
+      run: composer install --working-dir=tools/openemr --no-progress --no-interaction --prefer-dist
+
+    - name: Install OpenEMR's own runtime dependencies
+      # The openemr/openemr:flex image bind-mounts tools/openemr/vendor/openemr/openemr
+      # over /var/www/.../openemr. Without this step the bind mount has no vendor/
+      # of its own, login.php fails on the require_once(autoload.php) and the
+      # health check never goes green.
+      run: composer install --working-dir=tools/openemr/vendor/openemr/openemr --no-dev --no-progress --no-interaction --prefer-dist
+
+    - name: Bring up dev stack
+      run: docker compose up -d --wait --wait-timeout 600
+      env:
+        COMPOSE_HTTP_TIMEOUT: '300'
+
+    - name: Wait for OpenEMR install to settle
+      run: |
+        ready=false
+        for i in {1..60}; do
+          if docker compose exec -T openemr grep -qF "config = 1" /var/www/localhost/htdocs/openemr/sites/default/sqlconf.php; then
+            ready=true
+            break
+          fi
+          sleep 5
+        done
+        if [ "$ready" != "true" ]; then
+          echo "::error::OpenEMR did not finish installing within 5 minutes"
+          docker compose logs openemr
+          exit 1
+        fi
+
+    - name: Register and enable module
+      run: task module:install-enable
+
+    - name: Run integration suite
+      run: task test:integration
+
+    - name: Dump openemr logs on failure
+      if: failure()
+      run: docker compose logs openemr
