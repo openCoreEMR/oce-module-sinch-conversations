@@ -14,6 +14,13 @@
  * the seam between the module and that procedural library — the seam
  * where #137 and #143 lived.
  *
+ * Until #143 (fetchAllEvents vs fetchAppointments) and #145 (pc_pid vs
+ * pid) are fixed, every scenario except the cancelled-appointment one
+ * fails: every event is dropped at the finder, so the reminder service
+ * never calls sendToPatient. That red CI status IS the harness's value —
+ * the reminder cron is broken in production today and the suite makes
+ * that visible until the bugs are fixed.
+ *
  * @package   OpenCoreEMR
  * @link      https://opencoreemr.com
  * @author    Michael A. Smith <michael@opencoreemr.com>
@@ -24,6 +31,8 @@
 declare(strict_types=1);
 
 namespace OpenCoreEMR\Modules\SinchConversations\Tests\Integration;
+
+use PHPUnit\Framework\Attributes\Depends;
 
 final class AppointmentReminderCronTest extends IntegrationTestCase
 {
@@ -42,15 +51,8 @@ final class AppointmentReminderCronTest extends IntegrationTestCase
         $GLOBALS['oce_sinch_conversations_enabled'] = '1';
     }
 
-    /**
-     * Skip until #145 (CoreAppointmentFinder reads non-existent `pc_pid`)
-     * is fixed. The harness exercise behind this assertion works — running
-     * it against a worktree with the #145 one-character fix produces a
-     * passing assert. See #145 for the bug detail.
-     */
     public function testOneOffAppointmentInWindowSendsOneReminder(): void
     {
-        $this->markTestIncomplete('Blocked on #145 (pc_pid vs pid in CoreAppointmentFinder)');
         $now = new \DateTimeImmutable('2026-06-01 09:00:00');
         $appointmentTime = $now->modify('+12 hours');
 
@@ -69,14 +71,14 @@ final class AppointmentReminderCronTest extends IntegrationTestCase
     }
 
     /**
-     * Defends against #137 (recurring-expansion bug) AND exposes #143
+     * Defends against #137 (recurring-expansion bug) and exposes #143
      * (CoreAppointmentFinder calling fetchAllEvents instead of
-     * fetchAppointments). Currently also blocked on #145; once both
-     * #143 and #145 land, this assertion runs.
+     * fetchAppointments). With a 48h window and a daily-recurring
+     * appointment whose first occurrence is 12h after $now, exactly two
+     * future occurrences fall inside the window.
      */
     public function testRecurringAppointmentExpandsToOneSendPerOccurrence(): void
     {
-        $this->markTestIncomplete('Blocked on #143 (fetchAllEvents vs fetchAppointments) and #145 (pc_pid vs pid)');
         $now = new \DateTimeImmutable('2026-06-01 09:00:00');
         $seriesStart = $now->modify('+12 hours');           // tonight
         $seriesEnd = $now->modify('+10 days');               // far future
@@ -103,14 +105,15 @@ final class AppointmentReminderCronTest extends IntegrationTestCase
     }
 
     /**
-     * This passes on main today only because EVERY appointment is dropped
-     * (#145), so an excluded one is indistinguishable from an included one.
-     * Once #145 lands the test becomes meaningful — until then it's a
-     * vacuous green and we mark it incomplete to be honest about that.
+     * Depends on the basic-send path so a green here actually means "we
+     * excluded the cancelled one", not "the finder returned nothing".
+     * While #145 drops every event the basic-send test fails, this test
+     * is skipped, and the suite reports "4 fail + 1 skip" instead of "4
+     * fail + 1 vacuous green".
      */
+    #[Depends('testOneOffAppointmentInWindowSendsOneReminder')]
     public function testCancelledAppointmentExcluded(): void
     {
-        $this->markTestIncomplete('Blocked on #145; assertion is vacuous until the finder returns rows');
         $now = new \DateTimeImmutable('2026-06-01 09:00:00');
         $pid = $this->patients->insert([
             'phone_cell' => '+15555553333',
@@ -127,7 +130,6 @@ final class AppointmentReminderCronTest extends IntegrationTestCase
 
     public function testHipaaAllowsmsNoSkipsSend(): void
     {
-        $this->markTestIncomplete('Blocked on #145 (pc_pid vs pid in CoreAppointmentFinder)');
         $now = new \DateTimeImmutable('2026-06-01 09:00:00');
         $pid = $this->patients->insert([
             'phone_cell' => '+15555554444',
@@ -144,7 +146,6 @@ final class AppointmentReminderCronTest extends IntegrationTestCase
 
     public function testDedupAcrossRuns(): void
     {
-        $this->markTestIncomplete('Blocked on #145 (pc_pid vs pid in CoreAppointmentFinder)');
         $now = new \DateTimeImmutable('2026-06-01 09:00:00');
         $pid = $this->patients->insert([
             'phone_cell' => '+15555555555',
