@@ -160,6 +160,26 @@ class Bootstrap
     }
 
     /**
+     * Get App Configuration Client instance
+     */
+    public function getAppConfigurationClient(): \OpenCoreEMR\Sinch\Conversation\Client\AppConfigurationClient
+    {
+        return new \OpenCoreEMR\Sinch\Conversation\Client\AppConfigurationClient($this->globalsConfig);
+    }
+
+    /**
+     * Get Webhook Provisioning Service
+     */
+    public function getWebhookProvisioningService(): Service\WebhookProvisioningService
+    {
+        return new Service\WebhookProvisioningService(
+            $this->globalsConfig,
+            $this->getAppConfigurationClient(),
+            $this->getConfigService()
+        );
+    }
+
+    /**
      * Get Message Polling Service
      */
     public function getMessagePollingService(): Service\MessagePollingService
@@ -346,6 +366,7 @@ class Bootstrap
             $this->getConfigService(),
             $this->getConversationApiClient(),
             $this->getTemplateSyncService(),
+            $this->getWebhookProvisioningService(),
             $this->session,
             $this->twig,
             $this->logger

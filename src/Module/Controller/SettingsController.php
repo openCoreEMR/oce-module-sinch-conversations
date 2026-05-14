@@ -19,11 +19,13 @@ use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Logging\ExceptionContext;
 use OpenCoreEMR\Modules\SinchConversations\Service\ConfigService;
 use OpenCoreEMR\Modules\SinchConversations\Service\TemplateSyncService;
+use OpenCoreEMR\Modules\SinchConversations\Service\WebhookProvisioningService;
 use OpenCoreEMR\Modules\SinchConversations\SessionAccessor;
 use OpenCoreEMR\Sinch\Conversation\Client\ConversationApiClient;
 use OpenCoreEMR\Sinch\Conversation\Config\Region;
 use OpenCoreEMR\Sinch\Conversation\Exception\AccessDeniedException;
 use OpenCoreEMR\Sinch\Conversation\Exception\ApiException;
+use OpenCoreEMR\Sinch\Conversation\Exception\ExceptionInterface;
 use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
 use OpenEMR\Common\Csrf\CsrfUtils;
 use Psr\Log\LoggerInterface;
@@ -40,6 +42,7 @@ class SettingsController
         private readonly ConfigService $configService,
         private readonly ConversationApiClient $apiClient,
         private readonly TemplateSyncService $templateSyncService,
+        private readonly WebhookProvisioningService $webhookProvisioningService,
         private readonly SessionAccessor $session,
         private readonly Environment $twig,
         private readonly LoggerInterface $logger
@@ -61,6 +64,10 @@ class SettingsController
             'test' => $this->handleTest($request),
             'test-sms' => $this->handleTestSms($request),
             'sync-templates' => $this->handleSyncTemplates($request),
+            'webhook-status' => $this->handleWebhookStatus($request),
+            'webhook-provision' => $this->handleWebhookProvision($request),
+            'webhook-update' => $this->handleWebhookUpdate($request),
+            'webhook-remove' => $this->handleWebhookRemove($request),
             'show', 'default' => $this->showSettings(),
             default => $this->showSettings(),
         };
@@ -83,11 +90,15 @@ class SettingsController
             'clinic_phone' => $this->config->getClinicPhone(),
         ];
 
+        $webhookStatus = $this->safeWebhookStatus();
+
         $content = $this->twig->render('settings/config.html.twig', [
             'settings' => $settings,
             'is_external_config' => $this->config->isExternalConfigMode(),
             'success_message' => $this->session->getFlash('settings_message'),
             'csrf_token' => CsrfUtils::collectCsrfToken(),
+            'webhook_status' => $webhookStatus,
+            'webhook_target_url' => $this->config->getWebhookTargetUrl(),
         ]);
 
         $response = new Response($content);
@@ -445,6 +456,262 @@ class SettingsController
                 'success' => false,
                 'message' => "Template sync failed (ref: $errorId). Check logs for details.",
             ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * Return current webhook provisioning status as JSON.
+     */
+    private function handleWebhookStatus(Request $request): Response
+    {
+        if (!CsrfUtils::verifyCsrfToken($request->query->get('csrf_token', ''))) {
+            throw new AccessDeniedException("CSRF token verification failed");
+        }
+
+        $credentialError = $this->validateApiCredentialsConfigured();
+        if ($credentialError !== null) {
+            return $credentialError;
+        }
+
+        try {
+            $status = $this->webhookProvisioningService->getStatus();
+            return new JsonResponse([
+                'success' => true,
+                'status' => $status,
+            ]);
+        } catch (ExceptionInterface $e) {
+            $this->logger->warning('Webhook status fetch rejected', [
+                'exception' => ExceptionContext::fromThrowable($e),
+            ]);
+            return new JsonResponse([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], $e->getStatusCode());
+        } catch (\Throwable $e) {
+            $errorId = ErrorId::generate();
+            $this->logger->error('Failed to fetch webhook status', [
+                'errorId' => $errorId,
+                'exception' => ExceptionContext::fromThrowable($e),
+            ]);
+            return new JsonResponse([
+                'success' => false,
+                'message' => "Failed to fetch webhook status (ref: $errorId). Check logs for details.",
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * Provision a new webhook for this tenant on Sinch.
+     */
+    private function handleWebhookProvision(Request $request): Response
+    {
+        if (!$request->isMethod('POST')) {
+            return new JsonResponse([
+                'success' => false,
+                'message' => 'Invalid request method',
+            ], Response::HTTP_METHOD_NOT_ALLOWED);
+        }
+
+        if (!CsrfUtils::verifyCsrfToken($request->request->get('csrf_token', ''))) {
+            throw new AccessDeniedException("CSRF token verification failed");
+        }
+
+        $credentialError = $this->validateApiCredentialsConfigured();
+        if ($credentialError !== null) {
+            return $credentialError;
+        }
+
+        try {
+            $webhook = $this->webhookProvisioningService->provision();
+            $this->logger->info('Webhook provisioned', ['webhook_id' => $webhook['id'] ?? null]);
+            return new JsonResponse([
+                'success' => true,
+                'message' => 'Webhook provisioned successfully.',
+                'webhook' => $webhook,
+            ]);
+        } catch (ExceptionInterface $e) {
+            $this->logger->warning('Webhook provision rejected', [
+                'exception' => ExceptionContext::fromThrowable($e),
+            ]);
+            return new JsonResponse([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], $e->getStatusCode());
+        } catch (\Throwable $e) {
+            $errorId = ErrorId::generate();
+            $this->logger->error('Webhook provision failed', [
+                'errorId' => $errorId,
+                'exception' => ExceptionContext::fromThrowable($e),
+            ]);
+            return new JsonResponse([
+                'success' => false,
+                'message' => "Webhook provision failed (ref: $errorId). Check logs for details.",
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * Update the existing webhook (rotate secret, fix triggers).
+     */
+    private function handleWebhookUpdate(Request $request): Response
+    {
+        if (!$request->isMethod('POST')) {
+            return new JsonResponse([
+                'success' => false,
+                'message' => 'Invalid request method',
+            ], Response::HTTP_METHOD_NOT_ALLOWED);
+        }
+
+        if (!CsrfUtils::verifyCsrfToken($request->request->get('csrf_token', ''))) {
+            throw new AccessDeniedException("CSRF token verification failed");
+        }
+
+        $credentialError = $this->validateApiCredentialsConfigured();
+        if ($credentialError !== null) {
+            return $credentialError;
+        }
+
+        try {
+            $webhook = $this->webhookProvisioningService->update();
+            $this->logger->info('Webhook updated', ['webhook_id' => $webhook['id'] ?? null]);
+            return new JsonResponse([
+                'success' => true,
+                'message' => 'Webhook updated successfully.',
+                'webhook' => $webhook,
+            ]);
+        } catch (ExceptionInterface $e) {
+            $this->logger->warning('Webhook update rejected', [
+                'exception' => ExceptionContext::fromThrowable($e),
+            ]);
+            return new JsonResponse([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], $e->getStatusCode());
+        } catch (\Throwable $e) {
+            $errorId = ErrorId::generate();
+            $this->logger->error('Webhook update failed', [
+                'errorId' => $errorId,
+                'exception' => ExceptionContext::fromThrowable($e),
+            ]);
+            return new JsonResponse([
+                'success' => false,
+                'message' => "Webhook update failed (ref: $errorId). Check logs for details.",
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * Remove the existing webhook from Sinch and clear the local secret.
+     */
+    private function handleWebhookRemove(Request $request): Response
+    {
+        if (!$request->isMethod('POST')) {
+            return new JsonResponse([
+                'success' => false,
+                'message' => 'Invalid request method',
+            ], Response::HTTP_METHOD_NOT_ALLOWED);
+        }
+
+        if (!CsrfUtils::verifyCsrfToken($request->request->get('csrf_token', ''))) {
+            throw new AccessDeniedException("CSRF token verification failed");
+        }
+
+        $credentialError = $this->validateApiCredentialsConfigured();
+        if ($credentialError !== null) {
+            return $credentialError;
+        }
+
+        try {
+            $deleted = $this->webhookProvisioningService->remove();
+            $message = $deleted
+                ? 'Webhook removed successfully.'
+                : 'No webhook was registered; local secret cleared.';
+            $this->logger->info('Webhook remove completed', ['deleted' => $deleted]);
+            return new JsonResponse([
+                'success' => true,
+                'message' => $message,
+            ]);
+        } catch (ExceptionInterface $e) {
+            $this->logger->warning('Webhook remove rejected', [
+                'exception' => ExceptionContext::fromThrowable($e),
+            ]);
+            return new JsonResponse([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], $e->getStatusCode());
+        } catch (\Throwable $e) {
+            $errorId = ErrorId::generate();
+            $this->logger->error('Webhook remove failed', [
+                'errorId' => $errorId,
+                'exception' => ExceptionContext::fromThrowable($e),
+            ]);
+            return new JsonResponse([
+                'success' => false,
+                'message' => "Webhook remove failed (ref: $errorId). Check logs for details.",
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * Validate that the four core API credentials are configured. Returns a JSON
+     * error response if anything is missing, or null on success.
+     */
+    private function validateApiCredentialsConfigured(): ?JsonResponse
+    {
+        if (
+            $this->config->getSinchProjectId() === ''
+            || $this->config->getSinchAppId() === ''
+            || $this->config->getSinchApiKey() === ''
+            || $this->config->getSinchApiSecret() === ''
+        ) {
+            return new JsonResponse([
+                'success' => false,
+                'message' => 'Sinch API credentials are incomplete. ' .
+                    'Please configure Project ID, App ID, API Key, and API Secret.',
+            ], Response::HTTP_BAD_REQUEST);
+        }
+        return null;
+    }
+
+    /**
+     * Fetch webhook status for the settings page, swallowing API failures so the
+     * page still renders. Returns a not_configured-shaped status on any error.
+     *
+     * @return array<string, mixed>
+     */
+    private function safeWebhookStatus(): array
+    {
+        $defaults = [
+            'state' => WebhookProvisioningService::STATE_NOT_CONFIGURED,
+            'webhook' => null,
+            'triggers_match' => false,
+            'total_webhooks' => 0,
+            'target_url' => $this->config->getWebhookTargetUrl(),
+            'required_triggers' => WebhookProvisioningService::REQUIRED_TRIGGERS,
+            'max_webhooks' => WebhookProvisioningService::MAX_WEBHOOKS,
+            'error' => null,
+        ];
+
+        if (
+            $this->config->getSinchProjectId() === ''
+            || $this->config->getSinchAppId() === ''
+            || $this->config->getSinchApiKey() === ''
+            || $this->config->getSinchApiSecret() === ''
+        ) {
+            $defaults['error'] = 'credentials_missing';
+            return $defaults;
+        }
+
+        try {
+            return $this->webhookProvisioningService->getStatus();
+        } catch (\Throwable $e) {
+            $errorId = ErrorId::generate();
+            $this->logger->warning('Webhook status fetch failed on settings page', [
+                'errorId' => $errorId,
+                'exception' => ExceptionContext::fromThrowable($e),
+            ]);
+            $defaults['error'] = "fetch_failed:$errorId";
+            return $defaults;
         }
     }
 

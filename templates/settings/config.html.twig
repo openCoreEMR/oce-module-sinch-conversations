@@ -243,6 +243,99 @@
         <div id="test-sms-result" class="mt-3" style="display: none;">
             <div class="alert" role="alert" id="test-sms-alert"></div>
         </div>
+
+        {# Webhook Configuration #}
+        <div class="section-header mt-4">
+            <h3>{{ 'Webhook Configuration'|xlt }}</h3>
+            <p class="help-text">
+                {{ 'Manage the Sinch webhook that delivers inbound messages and opt-in/opt-out events to this OpenEMR instance.'|xlt }}
+            </p>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">{{ 'Webhook Target URL'|xlt }}</label>
+            <input
+                type="text"
+                class="form-control"
+                value="{{ webhook_target_url|attr }}"
+                readonly
+            >
+            <div class="help-text">
+                {% if webhook_target_url == '' %}
+                    {{ 'Site address (qualified_site_addr) is not configured in OpenEMR globals; cannot build webhook URL.'|xlt }}
+                {% else %}
+                    {{ 'Built from the OpenEMR site address. Webhook will register against this URL.'|xlt }}
+                {% endif %}
+            </div>
+        </div>
+
+        <div id="webhook-status-display" class="mt-3">
+            {% if webhook_status.error == 'credentials_missing' %}
+                <div class="alert alert-secondary" role="alert">
+                    {{ 'Configure and save Sinch API credentials above before managing the webhook.'|xlt }}
+                </div>
+            {% elseif webhook_status.error starts with 'fetch_failed' %}
+                <div class="alert alert-danger" role="alert">
+                    {{ 'Failed to fetch webhook status from Sinch. See server logs.'|xlt }}
+                    <code>{{ webhook_status.error|text }}</code>
+                </div>
+            {% elseif webhook_status.state == 'not_configured' %}
+                <div class="alert alert-warning" role="alert">
+                    {{ 'Webhook URL cannot be built without a configured site address.'|xlt }}
+                </div>
+            {% elseif webhook_status.state == 'not_provisioned' %}
+                <div class="alert alert-warning" role="alert">
+                    <strong>{{ 'Not provisioned.'|xlt }}</strong>
+                    {{ 'No webhook is registered for this OpenEMR instance.'|xlt }}
+                    <div class="mt-2">
+                        {{ '%d of %d webhook slots used on this Sinch app.'|xlt|format(webhook_status.total_webhooks, webhook_status.max_webhooks) }}
+                    </div>
+                </div>
+            {% elseif webhook_status.state == 'active' %}
+                <div class="alert alert-success" role="alert">
+                    <strong>{{ 'Active.'|xlt }}</strong>
+                    {{ 'Webhook is registered and configured with the required triggers.'|xlt }}
+                    <div class="mt-2">
+                        <strong>{{ 'Webhook ID:'|xlt }}</strong> <code>{{ webhook_status.webhook.id|text }}</code><br>
+                        <strong>{{ 'Triggers:'|xlt }}</strong> {{ webhook_status.webhook.triggers|join(', ')|text }}<br>
+                        {{ '%d of %d webhook slots used on this Sinch app.'|xlt|format(webhook_status.total_webhooks, webhook_status.max_webhooks) }}
+                    </div>
+                </div>
+            {% elseif webhook_status.state == 'needs_update' %}
+                <div class="alert alert-warning" role="alert">
+                    <strong>{{ 'Needs update.'|xlt }}</strong>
+                    {{ 'Webhook is registered but its triggers do not match the current required set.'|xlt }}
+                    <div class="mt-2">
+                        <strong>{{ 'Webhook ID:'|xlt }}</strong> <code>{{ webhook_status.webhook.id|text }}</code><br>
+                        <strong>{{ 'Current triggers:'|xlt }}</strong> {{ webhook_status.webhook.triggers|join(', ')|text }}<br>
+                        <strong>{{ 'Required triggers:'|xlt }}</strong> {{ webhook_status.required_triggers|join(', ')|text }}
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+
+        <div class="d-flex gap-2 mt-3">
+            <button type="button" class="btn btn-secondary" id="webhook-refresh-btn">
+                {{ 'Refresh Status'|xlt }}
+            </button>
+            {% if webhook_status.state == 'not_provisioned' %}
+                <button type="button" class="btn btn-primary" id="webhook-provision-btn">
+                    {{ 'Provision Webhook'|xlt }}
+                </button>
+            {% endif %}
+            {% if webhook_status.state == 'active' or webhook_status.state == 'needs_update' %}
+                <button type="button" class="btn btn-warning" id="webhook-update-btn">
+                    {{ 'Update Webhook (rotate secret)'|xlt }}
+                </button>
+                <button type="button" class="btn btn-danger" id="webhook-remove-btn">
+                    {{ 'Remove Webhook'|xlt }}
+                </button>
+            {% endif %}
+        </div>
+
+        <div id="webhook-result" class="mt-3" style="display: none;">
+            <div class="alert" role="alert" id="webhook-alert"></div>
+        </div>
     </div>
 
     <script src="{{ webroot }}/public/assets/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
@@ -393,6 +486,108 @@
                     btn.textContent = {{ 'Send Test SMS'|xlj }};
                 });
         });
+
+        // Webhook provisioning controls
+        (function() {
+            const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+            const resultDiv = document.getElementById('webhook-result');
+            const alertDiv = document.getElementById('webhook-alert');
+
+            function showResult(success, message) {
+                resultDiv.style.display = 'block';
+                alertDiv.className = 'alert ' + (success ? 'alert-success' : 'alert-danger');
+                alertDiv.textContent = message;
+            }
+
+            function postAction(action, btn, busyLabel, originalLabel, confirmMessage) {
+                if (confirmMessage && !window.confirm(confirmMessage)) {
+                    return;
+                }
+                btn.disabled = true;
+                btn.textContent = busyLabel;
+                const formData = new FormData();
+                formData.append('csrf_token', csrfToken);
+                fetch('?action=' + action, { method: 'POST', body: formData })
+                    .then(response => response.json())
+                    .then(data => {
+                        showResult(data.success, data.message || '');
+                        if (data.success) {
+                            window.setTimeout(() => window.location.reload(), 800);
+                        }
+                    })
+                    .catch(error => {
+                        showResult(false, '{{ 'Webhook action failed: '|xlj }}' + error.message);
+                    })
+                    .finally(() => {
+                        btn.disabled = false;
+                        btn.textContent = originalLabel;
+                    });
+            }
+
+            const refreshBtn = document.getElementById('webhook-refresh-btn');
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', function() {
+                    const btn = this;
+                    btn.disabled = true;
+                    btn.textContent = {{ 'Refreshing...'|xlj }};
+                    fetch('?action=webhook-status&csrf_token=' + encodeURIComponent(csrfToken))
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                window.location.reload();
+                            } else {
+                                showResult(false, data.message || '{{ 'Failed to refresh status'|xlj }}');
+                                btn.disabled = false;
+                                btn.textContent = {{ 'Refresh Status'|xlj }};
+                            }
+                        })
+                        .catch(error => {
+                            showResult(false, '{{ 'Failed to refresh status: '|xlj }}' + error.message);
+                            btn.disabled = false;
+                            btn.textContent = {{ 'Refresh Status'|xlj }};
+                        });
+                });
+            }
+
+            const provisionBtn = document.getElementById('webhook-provision-btn');
+            if (provisionBtn) {
+                provisionBtn.addEventListener('click', function() {
+                    postAction(
+                        'webhook-provision',
+                        this,
+                        {{ 'Provisioning...'|xlj }},
+                        {{ 'Provision Webhook'|xlj }},
+                        null
+                    );
+                });
+            }
+
+            const updateBtn = document.getElementById('webhook-update-btn');
+            if (updateBtn) {
+                updateBtn.addEventListener('click', function() {
+                    postAction(
+                        'webhook-update',
+                        this,
+                        {{ 'Updating...'|xlj }},
+                        {{ 'Update Webhook (rotate secret)'|xlj }},
+                        {{ 'This will rotate the webhook secret. Continue?'|xlj }}
+                    );
+                });
+            }
+
+            const removeBtn = document.getElementById('webhook-remove-btn');
+            if (removeBtn) {
+                removeBtn.addEventListener('click', function() {
+                    postAction(
+                        'webhook-remove',
+                        this,
+                        {{ 'Removing...'|xlj }},
+                        {{ 'Remove Webhook'|xlj }},
+                        {{ 'This will delete the webhook from Sinch. Continue?'|xlj }}
+                    );
+                });
+            }
+        })();
     </script>
 </body>
 </html>

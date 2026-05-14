@@ -27,7 +27,15 @@ $logger = new SystemLogger();
 $action = (string)($_GET['action'] ?? $_POST['action'] ?? 'show');
 
 // Actions that expect JSON responses
-$jsonActions = ['test', 'test-sms', 'sync-templates'];
+$jsonActions = [
+    'test',
+    'test-sms',
+    'sync-templates',
+    'webhook-status',
+    'webhook-provision',
+    'webhook-update',
+    'webhook-remove',
+];
 $expectsJson = in_array($action, $jsonActions, true);
 
 try {

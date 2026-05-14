@@ -21,7 +21,7 @@ use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
 use OpenCoreEMR\Modules\SinchConversations\Common\ArrayPath;
 use OpenCoreEMR\Modules\SinchConversations\Common\Json;
-use OpenCoreEMR\Sinch\Conversation\Config\ConfigInterface;
+use OpenCoreEMR\Sinch\Conversation\Config\SinchCredentialsInterface;
 use OpenCoreEMR\Sinch\Conversation\Exception\ApiException;
 
 class AppConfigurationClient
@@ -30,7 +30,7 @@ class AppConfigurationClient
     private readonly Client $httpClient;
     private ?string $cachedAccessToken = null;
 
-    public function __construct(private readonly ConfigInterface $config)
+    public function __construct(private readonly SinchCredentialsInterface $config)
     {
         $this->httpClient = new Client([
             'base_uri' => $config->getSinchApiBaseUrl(),
@@ -235,12 +235,14 @@ class AppConfigurationClient
             throw new ApiException("App ID is required");
         }
 
+        $body = $webhookData + ['app_id' => $appId, 'target_type' => 'HTTP'];
+
         try {
             $response = $this->httpClient->post(
-                "/v1/projects/{$projectId}/apps/{$appId}/webhooks",
+                "/v1/projects/{$projectId}/webhooks",
                 [
                     'headers' => $this->getHeaders(),
-                    'json' => $webhookData,
+                    'json' => $body,
                 ]
             );
 
@@ -270,7 +272,7 @@ class AppConfigurationClient
 
         try {
             $response = $this->httpClient->patch(
-                "/v1/projects/{$projectId}/apps/{$appId}/webhooks/{$webhookId}",
+                "/v1/projects/{$projectId}/webhooks/{$webhookId}",
                 [
                     'headers' => $this->getHeaders(),
                     'json' => $webhookData,
@@ -302,7 +304,7 @@ class AppConfigurationClient
 
         try {
             $response = $this->httpClient->delete(
-                "/v1/projects/{$projectId}/apps/{$appId}/webhooks/{$webhookId}",
+                "/v1/projects/{$projectId}/webhooks/{$webhookId}",
                 [
                     'headers' => $this->getHeaders(),
                 ]

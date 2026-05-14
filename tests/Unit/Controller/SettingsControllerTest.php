@@ -18,6 +18,7 @@ use OpenCoreEMR\Modules\SinchConversations\Controller\SettingsController;
 use OpenCoreEMR\Modules\SinchConversations\GlobalConfig;
 use OpenCoreEMR\Modules\SinchConversations\Service\ConfigService;
 use OpenCoreEMR\Modules\SinchConversations\Service\TemplateSyncService;
+use OpenCoreEMR\Modules\SinchConversations\Service\WebhookProvisioningService;
 use OpenCoreEMR\Modules\SinchConversations\SessionAccessor;
 use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockConfigFactory;
 use OpenCoreEMR\Modules\SinchConversations\Tests\Mocks\MockGlobalsAccessor;
@@ -43,6 +44,7 @@ class SettingsControllerTest extends TestCase
     private ConfigService&MockObject $configService;
     private ConversationApiClient&MockObject $apiClient;
     private TemplateSyncService&MockObject $syncService;
+    private WebhookProvisioningService&MockObject $webhookProvisioningService;
     private SessionAccessor&MockObject $session;
     private Environment $twig;
     private SettingsController $controller;
@@ -78,6 +80,7 @@ class SettingsControllerTest extends TestCase
         $this->configService = $this->createMock(ConfigService::class);
         $this->apiClient = $this->createMock(ConversationApiClient::class);
         $this->syncService = $this->createMock(TemplateSyncService::class);
+        $this->webhookProvisioningService = $this->createMock(WebhookProvisioningService::class);
         $this->session = $this->createMock(SessionAccessor::class);
 
         $loader = new ArrayLoader([
@@ -90,6 +93,7 @@ class SettingsControllerTest extends TestCase
             $this->configService,
             $this->apiClient,
             $this->syncService,
+            $this->webhookProvisioningService,
             $this->session,
             $this->twig,
             new SystemLogger()
@@ -249,6 +253,7 @@ class SettingsControllerTest extends TestCase
             $this->configService,
             $this->apiClient,
             $this->syncService,
+            $this->webhookProvisioningService,
             $this->session,
             $this->twig,
             new SystemLogger()
@@ -320,6 +325,7 @@ class SettingsControllerTest extends TestCase
                 $this->configService,
                 $this->apiClient,
                 $this->syncService,
+                $this->webhookProvisioningService,
                 $this->session,
                 $this->twig,
                 new SystemLogger()
@@ -446,6 +452,7 @@ class SettingsControllerTest extends TestCase
             $this->configService,
             $this->apiClient,
             $this->syncService,
+            $this->webhookProvisioningService,
             $this->session,
             $this->twig,
             new SystemLogger()
@@ -599,6 +606,7 @@ class SettingsControllerTest extends TestCase
             $this->configService,
             $this->apiClient,
             $this->syncService,
+            $this->webhookProvisioningService,
             $this->session,
             $this->twig,
             new SystemLogger()
