@@ -25,6 +25,7 @@ use OpenCoreEMR\Sinch\Conversation\Client\ConversationApiClient;
 use OpenCoreEMR\Sinch\Conversation\Config\Region;
 use OpenCoreEMR\Sinch\Conversation\Exception\AccessDeniedException;
 use OpenCoreEMR\Sinch\Conversation\Exception\ApiException;
+use OpenCoreEMR\Sinch\Conversation\Exception\ExceptionInterface;
 use OpenCoreEMR\Sinch\Conversation\Exception\ValidationException;
 use OpenEMR\Common\Csrf\CsrfUtils;
 use Psr\Log\LoggerInterface;
@@ -478,11 +479,19 @@ class SettingsController
                 'success' => true,
                 'status' => $status,
             ]);
+        } catch (ExceptionInterface $e) {
+            $this->logger->warning('Webhook status fetch rejected', [
+                'exception' => ExceptionContext::fromThrowable($e),
+            ]);
+            return new JsonResponse([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], $e->getStatusCode());
         } catch (\Throwable $e) {
             $errorId = ErrorId::generate();
             $this->logger->error('Failed to fetch webhook status', [
                 'errorId' => $errorId,
-                'exception' => $e,
+                'exception' => ExceptionContext::fromThrowable($e),
             ]);
             return new JsonResponse([
                 'success' => false,
@@ -520,16 +529,19 @@ class SettingsController
                 'message' => 'Webhook provisioned successfully.',
                 'webhook' => $webhook,
             ]);
-        } catch (ValidationException $e) {
+        } catch (ExceptionInterface $e) {
+            $this->logger->warning('Webhook provision rejected', [
+                'exception' => ExceptionContext::fromThrowable($e),
+            ]);
             return new JsonResponse([
                 'success' => false,
                 'message' => $e->getMessage(),
-            ], Response::HTTP_BAD_REQUEST);
+            ], $e->getStatusCode());
         } catch (\Throwable $e) {
             $errorId = ErrorId::generate();
             $this->logger->error('Webhook provision failed', [
                 'errorId' => $errorId,
-                'exception' => $e,
+                'exception' => ExceptionContext::fromThrowable($e),
             ]);
             return new JsonResponse([
                 'success' => false,
@@ -567,16 +579,19 @@ class SettingsController
                 'message' => 'Webhook updated successfully.',
                 'webhook' => $webhook,
             ]);
-        } catch (ValidationException $e) {
+        } catch (ExceptionInterface $e) {
+            $this->logger->warning('Webhook update rejected', [
+                'exception' => ExceptionContext::fromThrowable($e),
+            ]);
             return new JsonResponse([
                 'success' => false,
                 'message' => $e->getMessage(),
-            ], Response::HTTP_BAD_REQUEST);
+            ], $e->getStatusCode());
         } catch (\Throwable $e) {
             $errorId = ErrorId::generate();
             $this->logger->error('Webhook update failed', [
                 'errorId' => $errorId,
-                'exception' => $e,
+                'exception' => ExceptionContext::fromThrowable($e),
             ]);
             return new JsonResponse([
                 'success' => false,
@@ -616,11 +631,19 @@ class SettingsController
                 'success' => true,
                 'message' => $message,
             ]);
+        } catch (ExceptionInterface $e) {
+            $this->logger->warning('Webhook remove rejected', [
+                'exception' => ExceptionContext::fromThrowable($e),
+            ]);
+            return new JsonResponse([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], $e->getStatusCode());
         } catch (\Throwable $e) {
             $errorId = ErrorId::generate();
             $this->logger->error('Webhook remove failed', [
                 'errorId' => $errorId,
-                'exception' => $e,
+                'exception' => ExceptionContext::fromThrowable($e),
             ]);
             return new JsonResponse([
                 'success' => false,
@@ -685,7 +708,7 @@ class SettingsController
             $errorId = ErrorId::generate();
             $this->logger->warning('Webhook status fetch failed on settings page', [
                 'errorId' => $errorId,
-                'exception' => $e,
+                'exception' => ExceptionContext::fromThrowable($e),
             ]);
             $defaults['error'] = "fetch_failed:$errorId";
             return $defaults;

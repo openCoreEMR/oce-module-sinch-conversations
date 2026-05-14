@@ -253,6 +253,7 @@ class SettingsControllerTest extends TestCase
             $this->configService,
             $this->apiClient,
             $this->syncService,
+            $this->webhookProvisioningService,
             $this->session,
             $this->twig,
             new SystemLogger()

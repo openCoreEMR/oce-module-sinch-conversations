@@ -10,7 +10,7 @@
  * @package   OpenCoreEMR
  * @link      https://opencoreemr.com
  * @author    Michael A. Smith <michael@opencoreemr.com>
- * @copyright Copyright (c) 2025 OpenCoreEMR Inc
+ * @copyright Copyright (c) 2026 OpenCoreEMR Inc
  * @license   GNU General Public License 3
  */
 
@@ -212,10 +212,11 @@ class WebhookProvisioningService
     }
 
     /**
-     * Determine whether a webhook target URL belongs to this OpenEMR tenant.
+     * Determine whether a webhook target URL belongs to this OpenEMR installation.
      *
-     * Compares the host component of the target URL with the host of this
-     * tenant's qualified site address (case-insensitive).
+     * Matches on host (case-insensitive) AND the module's webhook path suffix.
+     * The path check prevents claiming a manually-configured webhook that
+     * happens to share our hostname but points to a different endpoint.
      */
     private function isOurWebhook(string $target): bool
     {
@@ -226,12 +227,17 @@ class WebhookProvisioningService
 
         $ourHost = parse_url($siteAddr, PHP_URL_HOST);
         $targetHost = parse_url($target, PHP_URL_HOST);
+        $targetPath = parse_url($target, PHP_URL_PATH);
 
-        if (!is_string($ourHost) || !is_string($targetHost)) {
+        if (!is_string($ourHost) || !is_string($targetHost) || !is_string($targetPath)) {
             return false;
         }
 
-        return strcasecmp($ourHost, $targetHost) === 0;
+        if (strcasecmp($ourHost, $targetHost) !== 0) {
+            return false;
+        }
+
+        return str_ends_with($targetPath, GlobalConfig::WEBHOOK_PATH);
     }
 
     /**
