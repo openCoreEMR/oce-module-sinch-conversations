@@ -13,3 +13,12 @@ jobs:
     uses: openCoreEMR/github-workflows-public/.github/workflows/php-tests.yml@0.0.4
     with:
       coverage-php-version: '8.2'
+
+  publish-coverage:
+    needs: test
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: openCoreEMR/github-workflows-internal/.github/workflows/publish-coverage.yml@main
+    with:
+      artifact-name: coverage-report
