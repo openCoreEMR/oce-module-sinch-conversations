@@ -11,10 +11,6 @@ on:
   pull_request:
     branches:
     - main
-    paths:
-    - '**.php'
-    - composer.json
-    - .github/workflows/php-syntax-check.yml
 
 jobs:
   php-syntax-check:

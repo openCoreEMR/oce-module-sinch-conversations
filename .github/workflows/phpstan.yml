@@ -17,16 +17,6 @@ on:
   pull_request:
     branches:
     - main
-    paths:
-    - '**.php'
-    - phpstan.neon
-    - phpstan.neon.dist
-    - phpstan-baseline.neon
-    - composer.json
-    - composer.lock
-    - tools/openemr/composer.json
-    - tools/openemr/composer.lock
-    - .github/workflows/phpstan.yml
 
 jobs:
   phpstan:

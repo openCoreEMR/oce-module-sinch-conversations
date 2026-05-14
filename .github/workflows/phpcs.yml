@@ -14,13 +14,6 @@ on:
   pull_request:
     branches:
     - main
-    paths:
-    - '**.php'
-    - .phpcs.xml*
-    - phpcs.xml*
-    - composer.json
-    - composer.lock
-    - .github/workflows/phpcs.yml
 
 jobs:
   phpcs:
