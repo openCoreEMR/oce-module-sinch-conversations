@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.3.0](https://github.com/openCoreEMR/oce-module-sinch-conversations/compare/1.2.1...1.3.0) (2026-05-15)
+
+
+### Features
+
+* automate Sinch webhook provisioning from settings page ([#105](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/105)) ([027be53](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/027be53b38a540ba1f965abe7dcb54e60b2fbb45))
+
+
+### Dependencies
+
+* bump actions/checkout from 4 to 6 ([#152](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/152)) ([9c66ede](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/9c66ede7698d88668d518a07538e8a5b3f62ce72))
+* bump openCoreEMR/github-workflows-public/.github/workflows/conventional-pr-title.yml ([#159](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/159)) ([4be1f8e](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/4be1f8e3137e177189b09a1f39ad9ddb79730e35))
+* bump openCoreEMR/github-workflows-public/.github/workflows/php-composer-script.yml ([#158](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/158)) ([9971acc](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/9971acc4263a3a8a9f780e0ffb57fae5b93e923d))
+* bump openCoreEMR/github-workflows-public/.github/workflows/php-tests.yml ([#157](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/157)) ([f966b0e](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/f966b0e46f29eb9f7e89380fecf2b28ec5fe5127))
+* bump opencoreemr/github-workflows-public/.github/workflows/release-please-reusable.yml ([#160](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/160)) ([dfe3cb4](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/dfe3cb4b540fa8b43c0c449ebef2c4e234836746))
+
 ## [1.2.1](https://github.com/openCoreEMR/oce-module-sinch-conversations/compare/1.2.0...1.2.1) (2026-05-13)
 
 
