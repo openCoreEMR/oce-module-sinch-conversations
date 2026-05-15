@@ -14,7 +14,7 @@ declare(strict_types=1);
 
 // Default version when not in a git repository
 // This is automatically updated by release-please
-const DEFAULT_VERSION = '1.2.1'; // x-release-please-version
+const DEFAULT_VERSION = '1.3.0'; // x-release-please-version
 
 // Calculate and unpack version information into global variables that OpenEMR expects
 [$v_major, $v_minor, $v_patch, $v_tag, $v_database] = (function (
