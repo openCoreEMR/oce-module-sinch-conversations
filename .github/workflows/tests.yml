@@ -10,6 +10,6 @@ on:
 
 jobs:
   test:
-    uses: openCoreEMR/github-workflows-public/.github/workflows/php-tests.yml@0.0.4
+    uses: openCoreEMR/github-workflows-public/.github/workflows/php-tests.yml@0.0.5
     with:
       coverage-php-version: '8.2'
