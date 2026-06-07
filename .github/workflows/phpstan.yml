@@ -24,3 +24,4 @@ jobs:
     with:
       name: Run PHPStan
       run: composer phpstan
+      php-version: '8.5'

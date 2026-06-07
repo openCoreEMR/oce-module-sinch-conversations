@@ -21,3 +21,4 @@ jobs:
     with:
       name: Run PHP CodeSniffer
       run: composer phpcs
+      php-version: '8.5'

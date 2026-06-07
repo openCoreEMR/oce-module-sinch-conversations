@@ -17,3 +17,4 @@ jobs:
     with:
       name: Normalize composer.json (check)
       run: composer normalize --dry-run
+      php-version: '8.5'
