@@ -103,7 +103,7 @@ class ConsentCheckCommand extends Command
         // Check 3: Send to Opted-Out Number (Refutation Condition 5)
         if (is_string($phone) && $phone !== '' && $testSend) {
             $results[] = $this->checkSendToOptedOut($io, $output, $apiClient, $phone);
-        } elseif (is_string($phone) && $phone !== '' && !$testSend) {
+        } elseif (is_string($phone) && $phone !== '') {
             $results[] = [
                 'check' => 'Send to Opted-Out',
                 'condition' => 'RC-5: Platform blocks opted-out sends',
