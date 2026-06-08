@@ -27,7 +27,7 @@
     <rule ref="PSR12"/>
 
     <!-- PHP version compatibility -->
-    <config name="testVersion" value="8.2-"/>
+    <config name="testVersion" value="8.5-"/>
 
     <!-- Additional rules -->
     <rule ref="Generic.Arrays.DisallowLongArraySyntax"/>
