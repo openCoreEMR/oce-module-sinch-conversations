@@ -21,3 +21,4 @@ jobs:
       name: Run Composer Require Checker
       run: composer require-checker
       php-tools: composer:v2, composer-require-checker
+      php-version: '8.5'

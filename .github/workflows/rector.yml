@@ -20,3 +20,4 @@ jobs:
     with:
       name: Run Rector (dry-run)
       run: composer rector
+      php-version: '8.5'

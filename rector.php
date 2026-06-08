@@ -52,7 +52,7 @@ return RectorConfig::configure()
         maxNumberOfProcess: 12,
         jobSize: 12
     )
-    ->withPhpVersion(PhpVersion::PHP_82)
+    ->withPhpVersion(PhpVersion::PHP_85)
     ->withRules([
         AddParamBasedOnParentClassMethodRector::class,
         ChangeSwitchToMatchRector::class,

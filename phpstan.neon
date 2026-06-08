@@ -14,7 +14,7 @@ parameters:
         - version.php
 
     # PHP version
-    phpVersion: 80200
+    phpVersion: 80500
 
     # OpenEMR source lives in the tooling sub-vendor (see tools/openemr/README.md
     # and issue #118). Load its autoloader so PHPStan can resolve OpenEMR\… types.
