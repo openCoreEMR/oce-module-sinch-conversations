@@ -13,8 +13,11 @@ on:
 
 jobs:
   composer-normalize:
+    strategy:
+      matrix:
+        php-version: ['8.5']
     uses: openCoreEMR/github-workflows-public/.github/workflows/php-composer-script.yml@1.0.0
     with:
       name: Normalize composer.json (check)
       run: composer normalize --dry-run
-      php-version: '8.5'
+      php-version: ${{ matrix.php-version }}

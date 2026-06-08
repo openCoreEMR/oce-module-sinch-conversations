@@ -13,8 +13,12 @@ on:
 
 jobs:
   composer-validate:
+    strategy:
+      matrix:
+        php-version: ['8.5']
     uses: openCoreEMR/github-workflows-public/.github/workflows/php-composer-script.yml@1.0.0
     with:
       name: Validate composer.json
       run: composer validate --strict
       install-deps: false
+      php-version: ${{ matrix.php-version }}

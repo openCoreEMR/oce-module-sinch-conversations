@@ -17,8 +17,11 @@ on:
 
 jobs:
   phpcs:
+    strategy:
+      matrix:
+        php-version: ['8.5']
     uses: openCoreEMR/github-workflows-public/.github/workflows/php-composer-script.yml@1.0.0
     with:
       name: Run PHP CodeSniffer
       run: composer phpcs
-      php-version: '8.5'
+      php-version: ${{ matrix.php-version }}
