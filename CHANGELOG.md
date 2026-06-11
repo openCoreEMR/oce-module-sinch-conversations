@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.2](https://github.com/openCoreEMR/oce-module-sinch-conversations/compare/1.3.1...1.3.2) (2026-06-11)
+
+
+### Bug Fixes
+
+* lower php floor to &gt;=8.4 so consumers on platform.php 8.4 can resolve ([#186](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/186)) ([7f00f1c](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/7f00f1c641f5058e82432c81f60b25f5c3250c35))
+
 ## [1.3.1](https://github.com/openCoreEMR/oce-module-sinch-conversations/compare/1.3.0...1.3.1) (2026-06-11)
 
 
