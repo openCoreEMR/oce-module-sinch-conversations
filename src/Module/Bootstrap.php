@@ -44,7 +44,7 @@ class Bootstrap
 
     public function __construct(
         private readonly EventDispatcherInterface $eventDispatcher,
-        private readonly Kernel $kernel = new Kernel(),
+        ?Kernel $kernel = null,
         ?ConfigAccessorInterface $configAccessor = null,
         ?ConfigFactory $configFactory = null,
     ) {
@@ -58,7 +58,7 @@ class Bootstrap
         $this->session = new SessionAccessor();
 
         $templatePath = \dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . "templates" . DIRECTORY_SEPARATOR;
-        $twig = new TwigContainer($templatePath, $this->kernel);
+        $twig = new TwigContainer($templatePath, $kernel);
         $this->twig = $twig->getTwig();
 
         $this->logger = new SystemLogger();
