@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.3.1](https://github.com/openCoreEMR/oce-module-sinch-conversations/compare/1.3.0...1.3.1) (2026-06-11)
+
+
+### Bug Fixes
+
+* **bootstrap:** resolve Kernel projectDir throw on oce-810 ([#184](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/184)) ([b0e2efa](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/b0e2efa1f465d1db55b1b3db180712e4fd7c395c))
+* **csrf:** pass SessionInterface to CsrfUtils for oce-810 ([#185](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/185)) ([097d416](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/097d416ef74dc540204e778633bb7c5c2aa18b6f))
+* **deps:** bump guzzlehttp/guzzle from 7.11.0 to 7.11.1 ([#183](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/183)) ([aff4e48](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/aff4e48b980c88d0891af19da165a24a0909a645))
+* drop redundant !$testSend condition in ConsentCheckCommand ([#179](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/179)) ([8eb7804](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/8eb78044a4261e3432cc6526c29ce2d44e686f73))
+
+
+### Dependencies
+
+* bump openCoreEMR/github-workflows-public/.github/workflows/conventional-pr-title.yml ([#169](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/169)) ([a703f55](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/a703f556c769a4bddaefc1f525c0c774cadbe982))
+* bump openCoreEMR/github-workflows-public/.github/workflows/php-composer-script.yml ([#167](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/167)) ([2748741](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/27487413e9863458d3745612b2a6545880892225))
+* bump openCoreEMR/github-workflows-public/.github/workflows/php-tests.yml ([#168](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/168)) ([a787512](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/a787512587e618d3c10077ebf65beecfd39e0fa0))
+* bump opencoreemr/github-workflows-public/.github/workflows/release-please-reusable.yml ([#170](https://github.com/openCoreEMR/oce-module-sinch-conversations/issues/170)) ([e6f0b85](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/e6f0b85817271a6313424622dce674f2e4a6b53a))
+
 ## [1.3.0](https://github.com/openCoreEMR/oce-module-sinch-conversations/compare/1.2.1...1.3.0) (2026-05-15)
 
 
