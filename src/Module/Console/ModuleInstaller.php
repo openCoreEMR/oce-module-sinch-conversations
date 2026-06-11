@@ -108,6 +108,9 @@ class ModuleInstaller
         ]);
 
         $moduleId = QueryUtils::querySingleRow("SELECT mod_id FROM modules WHERE mod_directory = ?", [$moduleName]);
+        if (!is_array($moduleId)) {
+            throw new \RuntimeException("Module row not found immediately after insert: $moduleName");
+        }
         QueryUtils::sqlStatementThrowException(
             "INSERT INTO module_acl_sections VALUES (?, ?, 0, ?, ?)",
             [$moduleId['mod_id'], $name, strtolower($moduleName), $moduleId['mod_id']]

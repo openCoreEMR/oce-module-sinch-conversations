@@ -18,6 +18,7 @@ use OpenCoreEMR\ModuleConfig\ConfigAccessorInterface;
 use OpenCoreEMR\ModuleConfig\ConfigFactory;
 use OpenCoreEMR\ModuleConfig\GlobalsRegistrar;
 use OpenEMR\Common\Logging\SystemLogger;
+use OpenEMR\Common\Session\SessionWrapperFactory;
 use OpenEMR\Common\Twig\TwigContainer;
 use OpenCoreEMR\Modules\SinchConversations\Listener\AppointmentSmsStatusJsListener;
 use OpenCoreEMR\Modules\SinchConversations\Listener\AppointmentSmsStatusListener;
@@ -41,6 +42,7 @@ class Bootstrap
     private readonly \Twig\Environment $twig;
     private readonly SystemLogger $logger;
     private ?EligibilityAlertRenderer $eligibilityAlertRenderer = null;
+    private ?\Symfony\Component\HttpFoundation\Session\SessionInterface $csrfSession = null;
 
     public function __construct(
         private readonly EventDispatcherInterface $eventDispatcher,
@@ -260,6 +262,19 @@ class Bootstrap
     }
 
     /**
+     * Get the request's active Symfony session for CSRF token operations.
+     *
+     * CsrfUtils on oce-810 requires a real SessionInterface (it reads
+     * 'csrf_private_key' from the session), so resolve the active session
+     * established by globals.php rather than the module's $_SESSION wrapper.
+     * Memoized so every controller shares one session instance per request.
+     */
+    public function getCsrfSession(): \Symfony\Component\HttpFoundation\Session\SessionInterface
+    {
+        return $this->csrfSession ??= SessionWrapperFactory::getInstance()->getActiveSession();
+    }
+
+    /**
      * Get Eligibility Controller
      */
     public function getEligibilityController(): Controller\EligibilityController
@@ -292,6 +307,7 @@ class Bootstrap
             $this->globalsConfig,
             $this->getMessagePollingService(),
             $this->session,
+            $this->getCsrfSession(),
             $this->twig,
             $this->logger
         );
@@ -307,6 +323,7 @@ class Bootstrap
             $this->getMessagePollingService(),
             $this->getMessageService(),
             $this->session,
+            $this->getCsrfSession(),
             $this->twig,
             $this->logger
         );
@@ -368,6 +385,7 @@ class Bootstrap
             $this->getTemplateSyncService(),
             $this->getWebhookProvisioningService(),
             $this->session,
+            $this->getCsrfSession(),
             $this->twig,
             $this->logger
         );

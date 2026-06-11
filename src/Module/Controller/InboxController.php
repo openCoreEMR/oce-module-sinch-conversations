@@ -26,6 +26,7 @@ use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\Session\SessionInterface;
 use Twig\Environment;
 
 class InboxController
@@ -34,6 +35,7 @@ class InboxController
         private readonly GlobalConfig $config,
         private readonly MessagePollingService $pollingService,
         private readonly SessionAccessor $session,
+        private readonly SessionInterface $csrfSession,
         private readonly Environment $twig,
         private readonly LoggerInterface $logger
     ) {
@@ -77,15 +79,16 @@ class InboxController
         $conversations = QueryUtils::fetchRecords($sql, []);
 
         foreach ($conversations as &$conversation) {
-            $conversation['patient_name'] = trim(
-                ($conversation['fname'] ?? '') . ' ' . ($conversation['lname'] ?? '')
-            ) ?: 'Unknown';
+            $fname = is_string($conversation['fname'] ?? null) ? $conversation['fname'] : '';
+            $lname = is_string($conversation['lname'] ?? null) ? $conversation['lname'] : '';
+            $conversation['patient_name'] = trim($fname . ' ' . $lname) ?: 'Unknown';
         }
+        unset($conversation);
 
         $content = $this->twig->render('inbox/list.html.twig', [
             'conversations' => $conversations,
             'success_message' => $this->session->getFlash('inbox_message'),
-            'csrf_token' => CsrfUtils::collectCsrfToken(),
+            'csrf_token' => CsrfUtils::collectCsrfToken($this->csrfSession),
         ]);
 
         $response = new Response($content);
@@ -101,7 +104,7 @@ class InboxController
      */
     private function handleRefresh(Request $request): Response
     {
-        if (!CsrfUtils::verifyCsrfToken($request->query->get('csrf_token', ''))) {
+        if (!CsrfUtils::verifyCsrfToken($request->query->get('csrf_token', ''), $this->csrfSession)) {
             throw new AccessDeniedException("CSRF token verification failed");
         }
 

@@ -1,17 +1,17 @@
 {
   "name": "opencoreemr/oce-module-sinch-conversations-tools-openemr",
-  "description": "OpenEMR source tree for static analysis (PHPStan) and the local Docker bind mount. Not a runtime dependency of the module \u2014 see issue #118.",
+  "description": "OpenEMR source tree for static analysis (PHPStan) and the e2e Docker bind mount. Pinned to the public upstream openemr/openemr v8_1_0 release tag (8.1 line) so analysis resolves the 8.1 APIs the module targets (e.g. CsrfUtils' required SessionInterface) and the e2e stack boots a stable released core. Public clone, no credentials needed. Not a runtime dependency of the module \u2014 see issue #118.",
   "type": "project",
   "license": "GPL-3.0-or-later",
   "require": {
-    "openemr/openemr": ">=8.0.0 || 8.1.0.x-dev || dev-master"
+    "openemr/openemr": "8.1.0"
   },
   "repositories": [
     {
       "type": "package",
       "package": {
         "name": "openemr/openemr",
-        "version": "8.0.0",
+        "version": "8.1.0",
         "autoload": {
           "psr-4": {
             "OpenEMR\\": "src/"
@@ -20,41 +20,7 @@
         "source": {
           "type": "git",
           "url": "https://github.com/openemr/openemr.git",
-          "reference": "v8_0_0"
-        }
-      }
-    },
-    {
-      "type": "package",
-      "package": {
-        "name": "openemr/openemr",
-        "version": "8.1.0.x-dev",
-        "autoload": {
-          "psr-4": {
-            "OpenEMR\\": "src/"
-          }
-        },
-        "source": {
-          "type": "git",
-          "url": "https://github.com/openemr/openemr.git",
-          "reference": "rel-810"
-        }
-      }
-    },
-    {
-      "type": "package",
-      "package": {
-        "name": "openemr/openemr",
-        "version": "dev-master",
-        "autoload": {
-          "psr-4": {
-            "OpenEMR\\": "src/"
-          }
-        },
-        "source": {
-          "type": "git",
-          "url": "https://github.com/openemr/openemr.git",
-          "reference": "master"
+          "reference": "v8_1_0"
         }
       }
     }

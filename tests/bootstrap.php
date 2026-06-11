@@ -31,6 +31,7 @@ require_once __DIR__ . '/Mocks/MockSystemLogger.php';
 require_once __DIR__ . '/Mocks/MockQueryUtils.php';
 require_once __DIR__ . '/Mocks/MockCryptoGen.php';
 require_once __DIR__ . '/Mocks/MockCsrfUtils.php';
+require_once __DIR__ . '/Mocks/MockSessionWrapperFactory.php';
 require_once __DIR__ . '/Mocks/MockModulesClassLoader.php';
 require_once __DIR__ . '/Mocks/MockOEGlobalsBag.php';
 require_once __DIR__ . '/Mocks/MockGlobalsInitializedEvent.php';

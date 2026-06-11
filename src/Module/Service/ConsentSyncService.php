@@ -200,9 +200,9 @@ class ConsentSyncService
         $sql = "SELECT DISTINCT patient_id FROM oce_sinch_patient_consent WHERE phone_number = ?";
         $results = QueryUtils::fetchRecords($sql, [$phoneNumber]);
 
-        return array_values(array_map(
+        return array_map(
             static fn(array $row): int => (int) $row['patient_id'],
             $results
-        ));
+        );
     }
 }

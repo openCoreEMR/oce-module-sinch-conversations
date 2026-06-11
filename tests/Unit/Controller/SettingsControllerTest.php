@@ -35,6 +35,7 @@ use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\Session\SessionInterface;
 use Twig\Environment;
 use Twig\Loader\ArrayLoader;
 
@@ -46,6 +47,7 @@ class SettingsControllerTest extends TestCase
     private TemplateSyncService&MockObject $syncService;
     private WebhookProvisioningService&MockObject $webhookProvisioningService;
     private SessionAccessor&MockObject $session;
+    private SessionInterface&MockObject $csrfSession;
     private Environment $twig;
     private SettingsController $controller;
 
@@ -82,6 +84,7 @@ class SettingsControllerTest extends TestCase
         $this->syncService = $this->createMock(TemplateSyncService::class);
         $this->webhookProvisioningService = $this->createMock(WebhookProvisioningService::class);
         $this->session = $this->createMock(SessionAccessor::class);
+        $this->csrfSession = $this->createMock(SessionInterface::class);
 
         $loader = new ArrayLoader([
             'settings/config.html.twig' => '<html>{{ settings.project_id }}|{{ success_message }}|ext:{{ is_external_config ? "yes" : "no" }}</html>',
@@ -95,6 +98,7 @@ class SettingsControllerTest extends TestCase
             $this->syncService,
             $this->webhookProvisioningService,
             $this->session,
+            $this->csrfSession,
             $this->twig,
             new SystemLogger()
         );
@@ -255,6 +259,7 @@ class SettingsControllerTest extends TestCase
             $this->syncService,
             $this->webhookProvisioningService,
             $this->session,
+            $this->csrfSession,
             $this->twig,
             new SystemLogger()
         );
@@ -327,6 +332,7 @@ class SettingsControllerTest extends TestCase
                 $this->syncService,
                 $this->webhookProvisioningService,
                 $this->session,
+                $this->csrfSession,
                 $this->twig,
                 new SystemLogger()
             );
@@ -454,6 +460,7 @@ class SettingsControllerTest extends TestCase
             $this->syncService,
             $this->webhookProvisioningService,
             $this->session,
+            $this->csrfSession,
             $this->twig,
             new SystemLogger()
         );
@@ -608,6 +615,7 @@ class SettingsControllerTest extends TestCase
             $this->syncService,
             $this->webhookProvisioningService,
             $this->session,
+            $this->csrfSession,
             $this->twig,
             new SystemLogger()
         );

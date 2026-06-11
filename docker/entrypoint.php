@@ -110,8 +110,11 @@ if (!$isConfigured && !$databaseExists) {
     $GLOBALS['OE_SITES_BASE'] = '/var/www/localhost/htdocs/openemr/sites';
     $GLOBALS['OE_SITE_DIR'] = $GLOBALS['OE_SITES_BASE'] . '/default';
 
-    // Run the installer
-    $installer = new Installer($installSettings);
+    // Run the installer. OpenEMR 8.1's Installer::__construct requires a
+    // PSR-3 logger as its second argument (8.0 took only the settings array);
+    // NullLogger keeps this bare dev entrypoint free of the Monolog/globals
+    // bootstrapping that SystemLogger would pull in.
+    $installer = new Installer($installSettings, new \Psr\Log\NullLogger());
     if (!$installer->quick_install()) {
         echo "ERROR: " . $installer->error_message . "\n";
         exit(1);
