@@ -81,15 +81,11 @@ services:
       mysql:
         condition: service_healthy
     healthcheck:
-      # The 8.1 source tree takes longer to auto-install than 8.0 did; give the
-      # installer ~15 min of headroom before the container is declared unhealthy.
-      # start_period only suppresses the unhealthy verdict during startup — a
-      # fast local install still reports healthy the instant a check passes.
       test: [CMD, curl, -f, http://localhost/interface/login/login.php]
-      start_period: 600s
+      start_period: 300s
       interval: 30s
       timeout: 10s
-      retries: 10
+      retries: 5
 
   phpmyadmin:
     restart: unless-stopped

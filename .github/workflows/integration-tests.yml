@@ -42,11 +42,7 @@ jobs:
       run: composer install --working-dir=tools/openemr/vendor/openemr/openemr --no-dev --no-progress --no-interaction --prefer-dist
 
     - name: Bring up dev stack
-      # 900s matches the openemr service healthcheck budget in compose.yml
-      # (start_period 600s + retries 10 x interval 30s); the 8.1 source installs
-      # slower than 8.0, so 600s was too tight and the container reported
-      # unhealthy mid-install.
-      run: docker compose up -d --wait --wait-timeout 900
+      run: docker compose up -d --wait --wait-timeout 600
       env:
         COMPOSE_HTTP_TIMEOUT: '300'
 
