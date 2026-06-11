@@ -33,6 +33,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\Session\SessionInterface;
 use Twig\Environment;
 
 class SettingsController
@@ -44,6 +45,7 @@ class SettingsController
         private readonly TemplateSyncService $templateSyncService,
         private readonly WebhookProvisioningService $webhookProvisioningService,
         private readonly SessionAccessor $session,
+        private readonly SessionInterface $csrfSession,
         private readonly Environment $twig,
         private readonly LoggerInterface $logger
     ) {
@@ -96,7 +98,7 @@ class SettingsController
             'settings' => $settings,
             'is_external_config' => $this->config->isExternalConfigMode(),
             'success_message' => $this->session->getFlash('settings_message'),
-            'csrf_token' => CsrfUtils::collectCsrfToken(),
+            'csrf_token' => CsrfUtils::collectCsrfToken($this->csrfSession),
             'webhook_status' => $webhookStatus,
             'webhook_target_url' => $this->config->getWebhookTargetUrl(),
         ]);
@@ -118,7 +120,7 @@ class SettingsController
             return $this->redirect($request);
         }
 
-        if (!CsrfUtils::verifyCsrfToken($request->request->get('csrf_token', ''))) {
+        if (!CsrfUtils::verifyCsrfToken($request->request->get('csrf_token', ''), $this->csrfSession)) {
             throw new AccessDeniedException("CSRF token verification failed");
         }
 
@@ -233,7 +235,7 @@ class SettingsController
      */
     private function handleTest(Request $request): Response
     {
-        if (!CsrfUtils::verifyCsrfToken($request->query->get('csrf_token', ''))) {
+        if (!CsrfUtils::verifyCsrfToken($request->query->get('csrf_token', ''), $this->csrfSession)) {
             throw new AccessDeniedException("CSRF token verification failed");
         }
 
@@ -316,7 +318,7 @@ class SettingsController
             ], Response::HTTP_METHOD_NOT_ALLOWED);
         }
 
-        if (!CsrfUtils::verifyCsrfToken($request->request->get('csrf_token', ''))) {
+        if (!CsrfUtils::verifyCsrfToken($request->request->get('csrf_token', ''), $this->csrfSession)) {
             throw new AccessDeniedException("CSRF token verification failed");
         }
 
@@ -400,7 +402,7 @@ class SettingsController
      */
     private function handleSyncTemplates(Request $request): Response
     {
-        if (!CsrfUtils::verifyCsrfToken($request->query->get('csrf_token', ''))) {
+        if (!CsrfUtils::verifyCsrfToken($request->query->get('csrf_token', ''), $this->csrfSession)) {
             throw new AccessDeniedException("CSRF token verification failed");
         }
 
@@ -464,7 +466,7 @@ class SettingsController
      */
     private function handleWebhookStatus(Request $request): Response
     {
-        if (!CsrfUtils::verifyCsrfToken($request->query->get('csrf_token', ''))) {
+        if (!CsrfUtils::verifyCsrfToken($request->query->get('csrf_token', ''), $this->csrfSession)) {
             throw new AccessDeniedException("CSRF token verification failed");
         }
 
@@ -512,7 +514,7 @@ class SettingsController
             ], Response::HTTP_METHOD_NOT_ALLOWED);
         }
 
-        if (!CsrfUtils::verifyCsrfToken($request->request->get('csrf_token', ''))) {
+        if (!CsrfUtils::verifyCsrfToken($request->request->get('csrf_token', ''), $this->csrfSession)) {
             throw new AccessDeniedException("CSRF token verification failed");
         }
 
@@ -562,7 +564,7 @@ class SettingsController
             ], Response::HTTP_METHOD_NOT_ALLOWED);
         }
 
-        if (!CsrfUtils::verifyCsrfToken($request->request->get('csrf_token', ''))) {
+        if (!CsrfUtils::verifyCsrfToken($request->request->get('csrf_token', ''), $this->csrfSession)) {
             throw new AccessDeniedException("CSRF token verification failed");
         }
 
@@ -612,7 +614,7 @@ class SettingsController
             ], Response::HTTP_METHOD_NOT_ALLOWED);
         }
 
-        if (!CsrfUtils::verifyCsrfToken($request->request->get('csrf_token', ''))) {
+        if (!CsrfUtils::verifyCsrfToken($request->request->get('csrf_token', ''), $this->csrfSession)) {
             throw new AccessDeniedException("CSRF token verification failed");
         }
 

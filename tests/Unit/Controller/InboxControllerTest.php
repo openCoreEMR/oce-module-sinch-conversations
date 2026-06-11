@@ -28,6 +28,7 @@ use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\Session\SessionInterface;
 use Twig\Environment;
 use Twig\Loader\ArrayLoader;
 
@@ -36,6 +37,7 @@ class InboxControllerTest extends TestCase
     private GlobalConfig $config;
     private MessagePollingService&MockObject $pollingService;
     private SessionAccessor&MockObject $session;
+    private SessionInterface&MockObject $csrfSession;
     private Environment $twig;
     private InboxController $controller;
 
@@ -73,6 +75,7 @@ class InboxControllerTest extends TestCase
         $this->config = new GlobalConfig($mockGlobals, new MockConfigFactory());
         $this->pollingService = $this->createMock(MessagePollingService::class);
         $this->session = $this->createMock(SessionAccessor::class);
+        $this->csrfSession = $this->createMock(SessionInterface::class);
 
         // Create a simple Twig environment for testing
         $loader = new ArrayLoader([
@@ -85,6 +88,7 @@ class InboxControllerTest extends TestCase
             $this->config,
             $this->pollingService,
             $this->session,
+            $this->csrfSession,
             $this->twig,
             new SystemLogger()
         );

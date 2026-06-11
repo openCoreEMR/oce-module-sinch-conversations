@@ -22,6 +22,7 @@
     "OpenEMR\\Common\\Crypto\\CryptoGen",
     "OpenEMR\\Common\\Database\\QueryUtils",
     "OpenEMR\\Common\\Logging\\SystemLogger",
+    "OpenEMR\\Common\\Session\\SessionWrapperFactory",
     "OpenEMR\\Common\\Twig\\TwigContainer",
     "OpenEMR\\Core\\Kernel",
     "OpenEMR\\Core\\ModulesClassLoader",

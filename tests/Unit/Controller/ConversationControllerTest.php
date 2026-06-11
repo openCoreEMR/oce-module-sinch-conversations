@@ -30,6 +30,7 @@ use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\Session\SessionInterface;
 use Twig\Environment;
 use Twig\Loader\ArrayLoader;
 
@@ -39,6 +40,7 @@ class ConversationControllerTest extends TestCase
     private MessagePollingService&MockObject $pollingService;
     private MessageService&MockObject $messageService;
     private SessionAccessor&MockObject $session;
+    private SessionInterface&MockObject $csrfSession;
     private Environment $twig;
     private ConversationController $controller;
 
@@ -66,6 +68,7 @@ class ConversationControllerTest extends TestCase
         $this->pollingService = $this->createMock(MessagePollingService::class);
         $this->messageService = $this->createMock(MessageService::class);
         $this->session = $this->createMock(SessionAccessor::class);
+        $this->csrfSession = $this->createMock(SessionInterface::class);
 
         $loader = new ArrayLoader([
             'conversation/thread.html.twig' => '<html>{{ messages|length }} messages|{{ conversation.conversation_id }}</html>',
@@ -77,6 +80,7 @@ class ConversationControllerTest extends TestCase
             $this->pollingService,
             $this->messageService,
             $this->session,
+            $this->csrfSession,
             $this->twig,
             new SystemLogger()
         );

@@ -642,7 +642,7 @@ class WebhookController
             $sql = "SELECT patient_id FROM oce_sinch_contacts WHERE channel_identity = ? ORDER BY patient_id ASC";
             $results = QueryUtils::fetchRecords($sql, [$normalized]);
             if ($results !== []) {
-                return array_values(array_map(static fn(array $row): int => (int) $row['patient_id'], $results));
+                return array_map(static fn(array $row): int => (int) $row['patient_id'], $results);
             }
         }
 
@@ -727,13 +727,13 @@ class WebhookController
             return [];
         }
 
-        return array_values(array_map(
+        return array_map(
             static fn(array $row): array => [
                 'patient_id' => (int) $row['patient_id'],
                 'phone_number' => $normalized,
             ],
             $contacts
-        ));
+        );
     }
 
     /**

@@ -29,6 +29,7 @@ use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\Session\SessionInterface;
 use Twig\Environment;
 
 class ConversationController
@@ -38,6 +39,7 @@ class ConversationController
         private readonly MessagePollingService $pollingService,
         private readonly MessageService $messageService,
         private readonly SessionAccessor $session,
+        private readonly SessionInterface $csrfSession,
         private readonly Environment $twig,
         private readonly LoggerInterface $logger
     ) {
@@ -97,7 +99,7 @@ class ConversationController
             'conversation' => $conversation,
             'patient' => $patient,
             'messages' => $messages,
-            'csrf_token' => CsrfUtils::collectCsrfToken(),
+            'csrf_token' => CsrfUtils::collectCsrfToken($this->csrfSession),
         ]);
 
         $response = new Response($content);
@@ -117,7 +119,7 @@ class ConversationController
             return $this->redirect($request);
         }
 
-        if (!CsrfUtils::verifyCsrfToken($request->request->get('csrf_token', ''))) {
+        if (!CsrfUtils::verifyCsrfToken($request->request->get('csrf_token', ''), $this->csrfSession)) {
             throw new AccessDeniedException("CSRF token verification failed");
         }
 
