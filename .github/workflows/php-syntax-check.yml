@@ -17,7 +17,7 @@ jobs:
     strategy:
       matrix:
         php-version: ['8.5']
-    uses: openCoreEMR/github-workflows-public/.github/workflows/php-composer-script.yml@1.0.0
+    uses: openCoreEMR/github-workflows-public/.github/workflows/php-composer-script.yml@1.0.2
     with:
       name: PHP Syntax Check
       run: composer php-lint
