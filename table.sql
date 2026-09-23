@@ -128,12 +128,28 @@ CREATE TABLE IF NOT EXISTS `oce_sinch_keyword_responses` (
   INDEX `idx_active` (`active`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Insert default keyword responses
+-- Insert default keyword responses. One guard per keyword: this script runs
+-- again on every deploy that changes module SQL, and an unguarded INSERT fails
+-- on idx_keyword, which stops the script before anything below it runs.
+#IfNotRow oce_sinch_keyword_responses keyword STOP
 INSERT INTO `oce_sinch_keyword_responses` (`keyword`, `response_template`, `active`) VALUES
-('STOP', '{{ clinic_name }}: You have been unsubscribed from our text notifications. You will not receive further messages. Reply START to re-subscribe or call {{ phone }} for assistance.', TRUE),
-('START', '{{ clinic_name }}: You have been re-subscribed to text notifications. Reply HELP for help. Reply STOP to unsubscribe.', TRUE),
-('UNSTOP', '{{ clinic_name }}: You have been re-subscribed to text notifications. Reply HELP for help. Reply STOP to unsubscribe.', TRUE),
+('STOP', '{{ clinic_name }}: You have been unsubscribed from our text notifications. You will not receive further messages. Reply START to re-subscribe or call {{ phone }} for assistance.', TRUE);
+#EndIf
+
+#IfNotRow oce_sinch_keyword_responses keyword START
+INSERT INTO `oce_sinch_keyword_responses` (`keyword`, `response_template`, `active`) VALUES
+('START', '{{ clinic_name }}: You have been re-subscribed to text notifications. Reply HELP for help. Reply STOP to unsubscribe.', TRUE);
+#EndIf
+
+#IfNotRow oce_sinch_keyword_responses keyword UNSTOP
+INSERT INTO `oce_sinch_keyword_responses` (`keyword`, `response_template`, `active`) VALUES
+('UNSTOP', '{{ clinic_name }}: You have been re-subscribed to text notifications. Reply HELP for help. Reply STOP to unsubscribe.', TRUE);
+#EndIf
+
+#IfNotRow oce_sinch_keyword_responses keyword HELP
+INSERT INTO `oce_sinch_keyword_responses` (`keyword`, `response_template`, `active`) VALUES
 ('HELP', '{{ clinic_name }}: Text notifications from {{ clinic_name }}. For assistance, call {{ phone }}. Msg&Data rates may apply. Reply STOP to unsubscribe.', TRUE);
+#EndIf
 
 -- Table to store Sinch service configuration
 CREATE TABLE IF NOT EXISTS `oce_sinch_services` (
