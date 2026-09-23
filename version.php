@@ -12,11 +12,11 @@
 
 declare(strict_types=1);
 
-// Default version when not in a git repository
-// This is automatically updated by release-please
-const DEFAULT_VERSION = '1.3.2'; // x-release-please-version
-
-// Calculate and unpack version information into global variables that OpenEMR expects
+// Calculate and unpack version information into global variables that OpenEMR expects.
+// The argument on the last line is the version to use outside a git repository;
+// release-please updates it. It is a literal rather than a global const because
+// the module installer includes every module's version.php in one process, and
+// a second const declaration keeps the first module's value.
 [$v_major, $v_minor, $v_patch, $v_tag, $v_database] = (function (
     string $defaultVersion
 ): array {
@@ -85,6 +85,6 @@ const DEFAULT_VERSION = '1.3.2'; // x-release-please-version
         return [$v_major, $v_minor, $v_patch, '', 1];
     }
 
-    // Fallback if DEFAULT_VERSION is malformed
+    // Fallback if the default version is malformed
     return ['1', '0', '0', '', 1];
-})(DEFAULT_VERSION);
+})('1.3.2'); // x-release-please-version
