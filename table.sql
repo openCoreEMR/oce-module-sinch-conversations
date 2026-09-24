@@ -128,9 +128,9 @@ CREATE TABLE IF NOT EXISTS `oce_sinch_keyword_responses` (
   INDEX `idx_active` (`active`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Insert default keyword responses. One guard per keyword: this script runs
--- again on every deploy that changes module SQL, and an unguarded INSERT fails
--- on idx_keyword, which stops the script before anything below it runs.
+-- Insert default keyword responses. One guard per keyword: this script also
+-- runs against modules that are already installed, and an unguarded INSERT
+-- fails on idx_keyword, which stops the script before anything below it runs.
 #IfNotRow oce_sinch_keyword_responses keyword STOP
 INSERT INTO `oce_sinch_keyword_responses` (`keyword`, `response_template`, `active`) VALUES
 ('STOP', '{{ clinic_name }}: You have been unsubscribed from our text notifications. You will not receive further messages. Reply START to re-subscribe or call {{ phone }} for assistance.', TRUE);

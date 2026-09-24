@@ -5,8 +5,8 @@
  *
  * Earlier versions used UNIQUE KEY (pc_eid). That blocks all but the first
  * occurrence of a recurring appointment from ever sending an SMS reminder.
- * The new key is (pc_eid, occurrence_date). Module installers run table.sql
- * on install only, so existing tenants need an in-place upgrade.
+ * The new key is (pc_eid, occurrence_date). table.sql only creates tables
+ * that are missing, so existing tenants need an in-place upgrade.
  *
  * The migration is invoked from two places:
  *
