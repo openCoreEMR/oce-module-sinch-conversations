@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.3.3](https://github.com/openCoreEMR/oce-module-sinch-conversations/compare/1.3.2...1.3.3) (2026-09-24)
+
+
+### Bug Fixes
+
+* **sql:** guard each default keyword response insert ([206b859](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/206b8599a0d245c3ce55041457b2c0a8c3ea7243))
+* **version:** pass the default version as a literal, not a global const ([323fc12](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/323fc12e2e5e57430c011fd7b048b24354b28941))
+
+
+### Documentation
+
+* state when table.sql re-runs without claiming deploy wiring ([577530e](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/577530e594c8ead3c17b9dffac16c7e5a5a26afb))
+
 ## [1.3.2](https://github.com/openCoreEMR/oce-module-sinch-conversations/compare/1.3.1...1.3.2) (2026-06-11)
 
 

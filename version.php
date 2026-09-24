@@ -87,4 +87,4 @@ declare(strict_types=1);
 
     // Fallback if the default version is malformed
     return ['1', '0', '0', '', 1];
-})('1.3.2'); // x-release-please-version
+})('1.3.3'); // x-release-please-version
