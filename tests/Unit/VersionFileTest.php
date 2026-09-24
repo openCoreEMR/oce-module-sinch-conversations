@@ -16,10 +16,7 @@ use PHPUnit\Framework\TestCase;
 
 class VersionFileTest extends TestCase
 {
-    /**
-     * The module installer includes every module's version.php in one
-     * process, so a second include must neither warn nor change the result.
-     */
+    /** See the header comment in version.php for why this must hold. */
     public function testIncludesTwiceInOneProcess(): void
     {
         $warnings = [];
