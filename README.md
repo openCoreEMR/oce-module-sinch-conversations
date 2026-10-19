@@ -592,7 +592,7 @@ This module follows OpenEMR's modern architecture:
 - **Custom exceptions** for error handling
 - **QueryUtils** for all database operations
 
-See [`CLAUDE.md`](./CLAUDE.md) for complete architecture guide.
+See [`AGENTS.md`](./AGENTS.md) for complete architecture guide.
 
 ## Documentation
 
@@ -600,7 +600,7 @@ See [`CLAUDE.md`](./CLAUDE.md) for complete architecture guide.
 - [`POLLING-ARCHITECTURE.md`](./POLLING-ARCHITECTURE.md) - Polling implementation details
 - [`PHI-ANALYSIS.md`](./PHI-ANALYSIS.md) - PHI-free development approach
 - [`copilot-breakdown.md`](./copilot-breakdown.md) - Feature roadmap and implementation phases
-- [`CLAUDE.md`](./CLAUDE.md) - Module architecture patterns
+- [`AGENTS.md`](./AGENTS.md) - Module architecture patterns
 
 ## Support
 
@@ -628,7 +628,7 @@ For legal/compliance advice:
 
 This is a complex project with strict compliance requirements. Contributions should:
 
-- ✅ Follow OpenEMR module architecture patterns (see `CLAUDE.md`)
+- ✅ Follow OpenEMR module architecture patterns (see `AGENTS.md`)
 - ✅ Pass all pre-commit checks (PHPCS, PHPStan, Rector)
 - ✅ Include proper error handling with custom exceptions
 - ✅ Use Symfony Request/Response objects

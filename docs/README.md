@@ -1,6 +1,6 @@
 # Sinch Conversations Module Documentation
 
-This directory contains detailed documentation for the Sinch Conversations module. For a quick overview and index, see [CLAUDE.md](../CLAUDE.md) in the project root.
+This directory contains detailed documentation for the Sinch Conversations module. For a quick overview and index, see [AGENTS.md](../AGENTS.md) in the project root.
 
 ## Directory Structure
 
