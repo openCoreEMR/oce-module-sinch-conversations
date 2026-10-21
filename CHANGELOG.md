@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.3.4](https://github.com/openCoreEMR/oce-module-sinch-conversations/compare/1.3.3...1.3.4) (2026-10-21)
+
+
+### Documentation
+
+* export-ignore AGENTS.md and CLAUDE.md in .gitattributes ([2ca7eb9](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/2ca7eb9dccaa246cd6d8a323fbb7285b08ed1590))
+* move agent instructions to AGENTS.md ([51afe3f](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/51afe3fd78bf0d03b4931c7b1faf1586b44695c9))
+* move agent instructions to AGENTS.md ([59ba621](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/59ba621677388c12731f4b0444275029ccc599ae))
+
 ## [1.3.3](https://github.com/openCoreEMR/oce-module-sinch-conversations/compare/1.3.2...1.3.3) (2026-09-24)
 
 
