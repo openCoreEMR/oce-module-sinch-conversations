@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use Rector\Caching\ValueObject\Storage\FileCacheStorage;
 use Rector\CodeQuality\Rector\ClassMethod\OptionalParametersAfterRequiredRector;
-use Rector\CodeQuality\Rector\If_\SimplifyIfElseToTernaryRector;
 use Rector\CodingStyle\Rector\FuncCall\ConsistentImplodeRector;
 use Rector\Config\RectorConfig;
 use Rector\DeadCode\Rector\StaticCall\RemoveParentCallWithoutParentRector;
@@ -69,7 +68,6 @@ return RectorConfig::configure()
         RemoveParentCallWithoutParentRector::class,
         RemoveUnusedVariableInCatchRector::class,
         ReturnNeverTypeRector::class,
-        SimplifyIfElseToTernaryRector::class,
         StrContainsRector::class,
         StrEndsWithRector::class,
         StrStartsWithRector::class,
