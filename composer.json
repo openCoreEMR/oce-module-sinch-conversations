@@ -33,7 +33,7 @@
     "ext-date": "*",
     "ext-filter": "*",
     "ext-json": "*",
-    "guzzlehttp/guzzle": "^7.0",
+    "guzzlehttp/guzzle": "^8.3",
     "opencoreemr/oce-lib-module-config": "^0.9",
     "openemr/oe-module-installer-plugin": "^0.1.5",
     "psr/http-message": "^1.1 || ^2.0",
