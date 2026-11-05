@@ -23,9 +23,27 @@ updates:
   commit-message:
     prefix: fix(deps)
     prefix-development: chore(deps-dev)
+  groups:
+    # Collapse routine minor/patch bumps into a single PR each so a batch of
+    # Symfony/Twig/etc. releases no longer opens five separate PRs. Major bumps
+    # stay ungrouped (individual PRs) since they warrant per-package review.
+    production:
+      dependency-type: production
+      update-types:
+      - minor
+      - patch
+    development:
+      dependency-type: development
+      update-types:
+      - minor
+      - patch
   ignore:
   # OpenEMR pins symfony/* at ^7.3; ignore Symfony 8 until upstream moves.
   - dependency-name: symfony/*
+    versions:
+    - '>=8.0'
+  # OpenEMR requires guzzlehttp/guzzle ^7.10; ignore Guzzle 8 until upstream moves.
+  - dependency-name: guzzlehttp/guzzle
     versions:
     - '>=8.0'
 
