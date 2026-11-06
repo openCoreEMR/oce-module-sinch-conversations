@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.3.4](https://github.com/openCoreEMR/oce-module-sinch-conversations/compare/1.3.3...1.3.4) (2026-11-06)
+
+
+### Bug Fixes
+
+* **deps:** bump guzzlehttp/guzzle ([7bfae2c](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/7bfae2c1512085692ec852c1ef4a482ab85a8b3d))
+* **deps:** bump guzzlehttp/guzzle from 7.11.1 to 7.16.1 in the production group ([e390fe3](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/e390fe32f19522233c974b966e49e03d61c1e92f))
+* **deps:** bump opencoreemr/oce-lib-module-config from 0.9.0 to 0.9.2 ([0669168](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/06691683e8a9db88aacd88a3464a24bfc9febc2f))
+* **deps:** bump opencoreemr/oce-lib-module-config from 0.9.0 to 0.9.2 ([2171610](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/2171610ca18f8558b42cef5064fdf212d51a1599))
+* **deps:** bump symfony/console from 7.4.13 to 7.4.22 ([7ef24f5](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/7ef24f574a3f16691fd1b95b9370e4e5bb6b008e))
+* **deps:** bump symfony/console from 7.4.13 to 7.4.22 ([235ebfd](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/235ebfd27507b7105eb23ad2b6ba4784961bd6d5))
+* **deps:** bump symfony/console from 7.4.22 to 7.4.23 ([03c9d65](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/03c9d650fceb3b572591b746d8d1c17208470568))
+* **deps:** bump symfony/console from 7.4.22 to 7.4.23 ([2fc7ee7](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/2fc7ee72a40a29cf353571aa0736b02843f26068))
+* **deps:** bump symfony/event-dispatcher from 7.4.9 to 7.4.17 ([bad0e7b](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/bad0e7be2268c1de07828442f2049e1dd4c77d38))
+* **deps:** bump symfony/event-dispatcher from 7.4.9 to 7.4.17 ([ab04281](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/ab042816acec34121adba5281862bea2dea731cd))
+* **deps:** bump symfony/http-foundation from 7.4.13 to 7.4.22 ([fcc9cc9](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/fcc9cc9a42ff4bb28c6014f1f01bd7dd270bd57f))
+* **deps:** bump symfony/http-foundation from 7.4.13 to 7.4.22 ([e5770c5](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/e5770c5fb4ec5b326e153fc5f549d4e54f1fad3f))
+* **deps:** bump symfony/http-foundation from 7.4.22 to 7.4.23 ([233f135](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/233f135a5cab893b1350d11a947db3828112c8f1))
+* **deps:** bump symfony/http-foundation from 7.4.22 to 7.4.23 ([8e1ac75](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/8e1ac750352406e2cad1f70c65fce1c1fee2a4ef))
+* **deps:** bump symfony/yaml from 7.4.13 to 7.4.22 ([31f4c69](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/31f4c69300de9c7a82ebb30d14e845bade585679))
+* **deps:** bump symfony/yaml from 7.4.13 to 7.4.22 ([4ac023d](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/4ac023dfae1a7bf2ce16836748f68c5a908d73a8))
+* **deps:** bump symfony/yaml from 7.4.22 to 7.4.23 ([4a86608](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/4a8660822e8295796e64bb07e8c251771ebd0e0f))
+* **deps:** bump symfony/yaml from 7.4.22 to 7.4.23 ([ec55c7b](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/ec55c7b0d3ce4ec81516deb4c61ee78ba88dcc0e))
+* **deps:** bump twig/twig from 3.27.1 to 3.30.0 ([c1634e1](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/c1634e1ba69efa5b3089d8cead1989b92244f4b6))
+* **deps:** bump twig/twig from 3.27.1 to 3.30.0 ([c7606dc](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/c7606dcc31f95ebbce5868e1f182b1ad52078595))
+
 ## [1.3.3](https://github.com/openCoreEMR/oce-module-sinch-conversations/compare/1.3.2...1.3.3) (2026-09-24)
 
 
