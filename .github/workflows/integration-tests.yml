@@ -56,11 +56,11 @@ jobs:
           ${{ steps.composer-cache.outputs.prefix }}
           ${{ runner.os }}-composer-files-
 
-    - name: Count restored Composer downloads
+    - name: Inventory restored Composer downloads
       id: composer-cache-before
       env:
         dir: ${{ steps.composer-cache.outputs.dir }}
-      run: echo "count=$(find "$dir" -type f | wc -l)" >> "$GITHUB_OUTPUT"
+      run: echo "inventory=$(find "$dir" -type f -printf '%P\n' | LC_ALL=C sort | sha256sum | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
 
     - name: Install module composer deps
       run: composer install --no-progress --no-interaction --prefer-dist
@@ -75,15 +75,15 @@ jobs:
       # health check never goes green.
       run: composer install --working-dir=tools/openemr/vendor/openemr/openemr --no-dev --no-progress --no-interaction --prefer-dist
 
-    - name: Count Composer downloads
+    - name: Inventory Composer downloads
       id: composer-cache-after
       if: ${{ !cancelled() }}
       env:
         dir: ${{ steps.composer-cache.outputs.dir }}
-      run: echo "count=$(find "$dir" -type f | wc -l)" >> "$GITHUB_OUTPUT"
+      run: echo "inventory=$(find "$dir" -type f -printf '%P\n' | LC_ALL=C sort | sha256sum | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
 
     - name: Save Composer downloads
-      if: ${{ !cancelled() && steps.composer-cache-after.outputs.count != steps.composer-cache-before.outputs.count }}
+      if: ${{ !cancelled() && steps.composer-cache-after.outputs.inventory != steps.composer-cache-before.outputs.inventory }}
       uses: actions/cache/save@v6
       with:
         path: ${{ steps.composer-cache.outputs.dir }}
