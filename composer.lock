@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "d1f1b8393f9bb931907ab5dd8f557f58",
+    "content-hash": "6a6215b85558e4bdbe6f3cdd6ff69f24",
     "packages": [
         {
             "name": "guzzlehttp/guzzle",
@@ -2921,28 +2921,28 @@
         },
         {
             "name": "opencoreemr/openemr-phpstan-rules",
-            "version": "0.9.3",
+            "version": "0.10.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/openCoreEMR/openemr-phpstan-rules.git",
-                "reference": "520a85a64a299e6047516003e891c286f49789ad"
+                "reference": "df71d28e0aa4472f13a0f4c7f1d1c8cf4d8b3d88"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/openCoreEMR/openemr-phpstan-rules/zipball/520a85a64a299e6047516003e891c286f49789ad",
-                "reference": "520a85a64a299e6047516003e891c286f49789ad",
+                "url": "https://api.github.com/repos/openCoreEMR/openemr-phpstan-rules/zipball/df71d28e0aa4472f13a0f4c7f1d1c8cf4d8b3d88",
+                "reference": "df71d28e0aa4472f13a0f4c7f1d1c8cf4d8b3d88",
                 "shasum": ""
             },
             "require": {
                 "nikic/php-parser": "^5.0",
-                "php": "^8.2",
+                "php": "^8.4",
                 "phpstan/phpstan": "^2.0",
                 "phpstan/phpstan-deprecation-rules": "^2.0",
                 "spaze/phpstan-disallowed-calls": "^4.0"
             },
             "require-dev": {
                 "ergebnis/composer-normalize": "^2.42",
-                "phpunit/phpunit": "^11.0",
+                "phpunit/phpunit": "^13.4",
                 "rector/rector": "^2.0",
                 "squizlabs/php_codesniffer": "^4.0"
             },
@@ -2978,9 +2978,9 @@
             ],
             "support": {
                 "issues": "https://github.com/openCoreEMR/openemr-phpstan-rules/issues",
-                "source": "https://github.com/openCoreEMR/openemr-phpstan-rules/tree/0.9.3"
+                "source": "https://github.com/openCoreEMR/openemr-phpstan-rules/tree/0.10.0"
             },
-            "time": "2026-10-20T02:27:38+00:00"
+            "time": "2026-11-06T14:12:02+00:00"
         },
         {
             "name": "phar-io/manifest",

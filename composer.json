@@ -47,7 +47,7 @@
   "require-dev": {
     "ergebnis/composer-normalize": "^2.44",
     "maglnet/composer-require-checker": "^4.0",
-    "opencoreemr/openemr-phpstan-rules": "^0.9",
+    "opencoreemr/openemr-phpstan-rules": "^0.10",
     "phpstan/phpstan": "^2.1",
     "phpunit/phpunit": "^13.2",
     "rector/rector": "^2.0",
