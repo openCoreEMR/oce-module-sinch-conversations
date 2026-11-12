@@ -20,6 +20,8 @@ jobs:
       matrix:
         php-version: ['8.5']
     uses: openCoreEMR/github-workflows-public/.github/workflows/php-composer-script.yml@1.2.2
+    permissions:
+      contents: read
     with:
       name: Run Composer Require Checker
       run: composer require-checker
