@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.5](https://github.com/openCoreEMR/oce-module-sinch-conversations/compare/1.3.4...1.3.5) (2026-11-18)
+
+
+### Bug Fixes
+
+* **deps:** bump guzzlehttp/guzzle ([4c632f6](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/4c632f6a617a038daee31dcd5fbc6b0db35c49cc))
+* **deps:** bump guzzlehttp/guzzle ([0514785](https://github.com/openCoreEMR/oce-module-sinch-conversations/commit/0514785ed6b63f3bb33de6a452bb8da906ed1779))
+
 ## [1.3.4](https://github.com/openCoreEMR/oce-module-sinch-conversations/compare/1.3.3...1.3.4) (2026-11-06)
 
 
